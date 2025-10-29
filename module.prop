@@ -1,0 +1,6 @@
+id=ubuntu-chroot
+name=Ubuntu Chroot
+version=v1
+versionCode=1
+author=ravindu644
+description=a Simple WebUI to Install and manage Ubuntu on Android
