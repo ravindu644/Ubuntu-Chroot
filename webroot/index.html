@@ -62,7 +62,13 @@
               <button id="stop-btn" class="btn stop" disabled>Stop</button>
               <button id="restart-btn" class="btn">Restart</button>
             </div>
-            <div style="margin-top:10px;display:flex;justify-content:flex-end">
+            <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:10px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <label for="user-select" class="row-label" style="margin:0">User:</label>
+                <select id="user-select" class="user-select" disabled>
+                  <option value="root">root</option>
+                </select>
+              </div>
               <button id="copy-login" class="btn outline small" title="Copy login command" disabled>Copy login command</button>
             </div>
         </div>

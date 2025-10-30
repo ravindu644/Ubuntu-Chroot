@@ -24,7 +24,8 @@ run
 if [ "$(id -u)" -ne 0 ]; then error "This script must be run as root."; exit 1; fi
 
 usage() {
-    echo "Usage: $SCRIPT_NAME [start|stop|restart|status] [--no-shell]"
+    echo "Usage: $SCRIPT_NAME [start|stop|restart|status] [USER] [--no-shell]"
+    echo "  USER: Username to login as (default: root)"
     echo "  --no-shell: Setup chroot without entering interactive shell (for WebUI)"
     exit 1
 }
@@ -49,11 +50,21 @@ kill_chroot_processes() {
 }
 
 enter_chroot() {
-    log "Entering chroot..."
+    local user="${1:-root}"
+    log "Entering chroot as user: $user"
     exec chroot "$CHROOT_PATH" /bin/bash -c "
         export PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
-        export TERM='xterm-256color'; export HOME='/root'; cd /root
-        [ -x /bin/zsh ] && exec /bin/zsh -l || exec /bin/bash -l
+        export TERM='xterm-256color'
+        if [ '$user' != 'root' ]; then
+            # Switch to specified user
+            export HOME=\"/home/$user\"
+            cd \"/home/$user\" 2>/dev/null || export HOME='/root'
+            exec su - \"$user\" -c '[ -x /bin/zsh ] && exec /bin/zsh -l || exec /bin/bash -l'
+        else
+            export HOME='/root'
+            cd /root
+            [ -x /bin/zsh ] && exec /bin/zsh -l || exec /bin/bash -l
+        fi
     "
 }
 
@@ -214,6 +225,9 @@ start_chroot() {
 
     (setenforce 0 && log "SELinux set to permissive mode") || warn "Failed to set SELinux to permissive mode"
 
+    # Fix sudo issues when running as normal user
+    mount -o remount,suid /data 2>/dev/null && log "Remounted /data with suid" || warn "Failed to remount /data with suid"
+
     log "Setting up system bind mounts..."
 
     advanced_mount "/proc" "$CHROOT_PATH/proc" "proc" "-o rw,nosuid,nodev,noexec,relatime"
@@ -284,23 +298,66 @@ start_chroot() {
 
 case "${1:-start}" in
     start)
+        # Parse arguments: start [user] [--no-shell]
+        local user=""
+        local no_shell=""
+        shift
+        
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --no-shell)
+                    no_shell="--no-shell"
+                    ;;
+                *)
+                    # Assume it's a username if not --no-shell
+                    if [ -z "$user" ]; then
+                        user="$1"
+                    fi
+                    ;;
+            esac
+            shift
+        done
+        
         if is_chroot_running; then
-            if [ "$2" = "--no-shell" ]; then
+            if [ "$no_shell" = "--no-shell" ]; then
                 # WebUI mode - already running, do nothing
                 exit 0
             else
-                # Manual mode - just enter the chroot silently
-                enter_chroot
+                # Manual mode - just enter the chroot with specified user
+                enter_chroot "$user"
             fi
         else
             # Not running - start it
-            start_chroot "$2"
+            start_chroot "$no_shell"
         fi
         ;;
     stop) cleanup_mounts ;;
     restart)
+        # Parse restart arguments: restart [user] [--no-shell]
+        local restart_user=""
+        local restart_no_shell=""
+        shift
+        
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --no-shell)
+                    restart_no_shell="--no-shell"
+                    ;;
+                *)
+                    if [ -z "$restart_user" ]; then
+                        restart_user="$1"
+                    fi
+                    ;;
+            esac
+            shift
+        done
+        
         cleanup_mounts
-        start_chroot "$2"
+        start_chroot "$restart_no_shell"
+        # After restarting, enter as the specified user (if not no-shell mode)
+        if [ "$restart_no_shell" != "--no-shell" ]; then
+            enter_chroot "$restart_user"
+        fi
         ;;
     status) show_status ;;
     *) usage ;;

@@ -17,7 +17,8 @@
     bootToggle: document.getElementById('boot-toggle'),
     themeToggle: document.getElementById('theme-toggle'),
     namespaceWarning: document.getElementById('namespace-warning'),
-    dismissWarning: document.getElementById('dismiss-warning')
+    dismissWarning: document.getElementById('dismiss-warning'),
+    userSelect: document.getElementById('user-select')
   };
 
   // Track running commands to prevent UI blocking
@@ -44,6 +45,44 @@
       const logs = localStorage.getItem('chroot_console_logs');
       if(logs) els.console.innerHTML = logs;
     }catch(e){/* ignore storage errors */}
+  }
+
+  /**
+   * Fetch available users from chroot /etc/passwd
+   */
+  async function fetchUsers(){
+    try{
+      // Use proper root command to read passwd file from chroot - only regular users (UID >= 1000)
+      const cmd = `grep -E ":x:10[0-9][0-9]:" ${CHROOT_PATH_UI}/etc/passwd 2>/dev/null | cut -d: -f1 | head -20`;
+      const out = await runCmdSync(cmd);
+      const users = String(out || '').trim().split('\n').filter(u => u && u.length > 0);
+
+      // Clear existing options except root
+      const select = els.userSelect;
+      select.innerHTML = '<option value="root">root</option>';
+
+      // Add user options
+      users.forEach(user => {
+        if(user.length > 0){
+          const option = document.createElement('option');
+          option.value = user;
+          option.textContent = user;
+          select.appendChild(option);
+        }
+      });
+
+      // Try to restore previously selected user
+      const savedUser = localStorage.getItem('chroot_selected_user');
+      if(savedUser && select.querySelector(`option[value="${savedUser}"]`)){
+        select.value = savedUser;
+      }
+
+      appendConsole(`Found ${users.length} regular user(s) in chroot`, 'info');
+    }catch(e){
+      appendConsole(`Could not fetch users from chroot: ${e.message}`, 'warn');
+      // Keep only root option
+      els.userSelect.innerHTML = '<option value="root">root</option>';
+    }
   }
 
   /**
@@ -130,6 +169,7 @@
       els.startBtn.disabled = disabled;
       els.stopBtn.disabled = disabled;
       els.restartBtn.disabled = disabled;
+      els.userSelect.disabled = disabled;
       const copyBtn = document.getElementById('copy-login'); 
       if(copyBtn) copyBtn.disabled = disabled;
     }catch(e){}
@@ -234,6 +274,17 @@
       
       // Enable copy-login button when running
       try{ document.getElementById('copy-login').disabled = !running; }catch(e){}
+
+      // Handle user select dropdown
+      if(running){
+        els.userSelect.disabled = false;
+        // Fetch users when chroot is running
+        fetchUsers();
+      } else {
+        els.userSelect.disabled = true;
+        // Reset to root when not running
+        els.userSelect.innerHTML = '<option value="root">root</option>';
+      }
     }catch(e){
       updateStatus('unknown');
       if(!(window.cmdExec && typeof cmdExec.execute === 'function')){
@@ -263,15 +314,18 @@
         els.stopBtn.disabled = false;
         els.restartBtn.disabled = false;
         els.startBtn.disabled = true;
+        els.userSelect.disabled = false;
       } else if(state === 'stopped'){
         els.stopBtn.disabled = true;
         els.restartBtn.disabled = true;
         els.startBtn.disabled = false;
+        els.userSelect.disabled = true;
       } else {
         // unknown
         els.stopBtn.disabled = true;
         els.restartBtn.disabled = true;
         els.startBtn.disabled = false;
+        els.userSelect.disabled = true;
       }
     }catch(e){ /* ignore if elements missing */ }
   }
@@ -310,11 +364,15 @@
 
   // copy login command
   function copyLoginCommand(){
+    const selectedUser = els.userSelect.value;
+    // Save selected user
+    try{ localStorage.setItem('chroot_selected_user', selectedUser); }catch(e){}
+
     // Use -M flag to run in global mount namespace (KernelSU)
     // This ensures the script can see existing mounts and detect if chroot is already running
-    const cmd = `su -M -c "sh ${PATH_CHROOT_SH} start"`;
+    const cmd = `su -M -c "sh ${PATH_CHROOT_SH} start ${selectedUser}"`;
     if(navigator.clipboard && navigator.clipboard.writeText){
-      navigator.clipboard.writeText(cmd).then(()=> appendConsole('Login command copied to clipboard'))
+      navigator.clipboard.writeText(cmd).then(()=> appendConsole(`Login command for user '${selectedUser}' copied to clipboard`))
         .catch(()=> appendConsole('Failed to copy to clipboard'));
     } else {
       // fallback
