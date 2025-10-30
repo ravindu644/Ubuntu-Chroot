@@ -1,0 +1,63 @@
+name: Build and Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release Version (e.g., v3.1)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Build Ubuntu RootFS
+        run: |
+          cd Docker
+          chmod +x build.sh
+          ./build.sh
+
+      - name: Prepare Package
+        run: |
+          # Get version
+          VERSION="${{ github.event.inputs.version || github.ref_name }}"
+          DATE=$(date +%Y%m%d)
+          ZIP_NAME="Ubuntu-Chroot-${VERSION}-${DATE}.zip"
+          echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
+
+          # Move the built tarball to repo root
+          mv "Docker/Ubuntu-*.tar.gz" .
+
+          # Clean the repository
+          rm -rf .git .github .gitignore .gitattributes
+          find . -name ".git*" -delete
+
+      - name: Create Zip Archive
+        run: |
+          zip -r -9 "${{ env.ZIP_NAME }}" . -x "Docker/*"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernelsu-module
+          path: ${{ env.ZIP_NAME }}
+
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "${{ env.ZIP_NAME }}"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ github.event.inputs.version || github.ref_name }}
+          name: "Ubuntu Chroot ${{ github.event.inputs.version || github.ref_name }}"
+          body: |
+            Ubuntu Chroot Environment ${{ github.event.inputs.version || github.ref_name }}
+
+            Flashable KernelSU module for Ubuntu ARM64 chroot environment.
