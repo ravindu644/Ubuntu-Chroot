@@ -187,7 +187,7 @@ body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI"
 [data-theme="dark"] .top{border-bottom-color: rgba(255,255,255,0.08)}
 
 /* Warning banner */
-.warning-banner{display:flex;align-items:flex-start;gap:10px;background:linear-gradient(135deg,#dc2626,#ef4444);color:white;padding:12px 14px;border-radius:10px;margin-bottom:8px;box-shadow:0 4px 16px rgba(220,38,38,0.25);animation:slideDown 0.3s ease-out;margin-top:calc(60px + var(--top-inset))}
+.warning-banner{display:flex;align-items:flex-start;gap:10px;background:linear-gradient(135deg,#dc2626,#ef4444);color:white;padding:12px 14px;border-radius:10px;margin-bottom:-30px;box-shadow:0 4px 16px rgba(220,38,38,0.25);animation:slideDown 0.3s ease-out;margin-top:calc(60px + var(--top-inset))}
 .warning-banner svg{margin-top:1px;flex-shrink:0}
 .warning-banner strong{display:block;font-size:14px;margin-bottom:3px;font-weight:600}
 .warning-banner p{margin:0 0 8px 0;font-size:12px;line-height:1.4;opacity:0.92}
