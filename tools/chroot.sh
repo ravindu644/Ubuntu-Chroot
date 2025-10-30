@@ -52,20 +52,26 @@ kill_chroot_processes() {
 enter_chroot() {
     local user="${1:-root}"
     log "Entering chroot as user: $user"
-    exec chroot "$CHROOT_PATH" /bin/bash -c "
-        export PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
-        export TERM='xterm-256color'
-        if [ '$user' != 'root' ]; then
-            # Switch to specified user
-            export HOME=\"/home/$user\"
-            cd \"/home/$user\" 2>/dev/null || export HOME='/root'
-            exec su - \"$user\" -c '[ -x /bin/zsh ] && exec /bin/zsh -l || exec /bin/bash -l'
-        else
+
+    if [ "$user" = "root" ]; then
+        # For root, direct chroot to bash with proper environment
+        exec chroot "$CHROOT_PATH" /bin/bash -c "
+            export PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+            export TERM='xterm-256color'
             export HOME='/root'
             cd /root
-            [ -x /bin/zsh ] && exec /bin/zsh -l || exec /bin/bash -l
-        fi
-    "
+            exec /bin/bash --login
+        "
+    else
+        # For non-root users, use su to switch user with proper environment
+        exec chroot "$CHROOT_PATH" /bin/bash -c "
+            export PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+            export TERM='xterm-256color'
+            export HOME=\"/home/$user\"
+            cd \"/home/$user\" 2>/dev/null || export HOME='/root'
+            exec /bin/su '$user'
+        "
+    fi
 }
 
 apply_internet_fix() {
