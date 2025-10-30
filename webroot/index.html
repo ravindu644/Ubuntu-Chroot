@@ -69,26 +69,26 @@
               <button id="stop-btn" class="btn stop" disabled>Stop</button>
               <button id="restart-btn" class="btn">Restart</button>
             </div>
-            <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:10px">
-              <div style="display:flex;align-items:center;gap:8px">
-                <label for="user-select" class="row-label" style="margin:0">User:</label>
-                <select id="user-select" class="user-select" disabled>
-                  <option value="root">root</option>
-                </select>
+            <div class="section-separator"></div>
+            <div style="margin-top:10px;display:flex;flex-direction:column;gap:12px">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <label for="user-select" class="row-label" style="margin:0">User:</label>
+                  <select id="user-select" class="user-select" disabled>
+                    <option value="root">root</option>
+                  </select>
+                </div>
+                <button id="copy-login" class="btn outline small" title="Copy login command" disabled>Copy login command</button>
               </div>
-              <button id="copy-login" class="btn outline small" title="Copy login command" disabled>Copy login command</button>
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+                <label class="row-label" style="margin:0">Run at boot:</label>
+                <label class="toggle-inline">
+                  <input id="boot-toggle" type="checkbox">
+                  <span>Enable</span>
+                </label>
+              </div>
             </div>
-        </div>
 
-        <div class="row">
-          <label class="row-label">Run at boot</label>
-          <label class="toggle-inline">
-            <input id="boot-toggle" type="checkbox">
-            <span>Enable</span>
-          </label>
-        </div>
-
-  <p class="note">Path: <code id="path-code">/data/local/ubuntu-chroot/rootfs</code></p>
       </section>
 
       <section class="card console-card">

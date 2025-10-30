@@ -2,8 +2,10 @@
 (function(){
   // Use hardcoded paths provided by install.sh
   const PATH_CHROOT_SH = '/data/local/ubuntu-chroot/chroot.sh';
-  let CHROOT_PATH_UI = '/data/local/ubuntu-chroot/rootfs';
-  let BOOT_FILE = '/data/local/ubuntu-chroot/boot-service';
+  const CHROOT_PATH_UI = '/data/local/ubuntu-chroot/rootfs';
+  const BOOT_FILE = '/data/local/ubuntu-chroot/boot-service';
+  const CHROOT_DIR = '/data/local/ubuntu-chroot';
+  const POST_EXEC_SCRIPT = '/data/local/ubuntu-chroot/post_exec.sh';
 
   const els = {
     statusDot: document.getElementById('status-dot'),
@@ -58,6 +60,10 @@
    * Fetch available users from chroot /etc/passwd
    */
   async function fetchUsers(){
+    if(!rootAccessConfirmed){
+      return; // Don't attempt command - root check already printed error
+    }
+    
     try{
       // Use proper root command to read passwd file from chroot - only regular users (UID >= 1000)
       const cmd = `grep -E ":x:10[0-9][0-9]:" ${CHROOT_PATH_UI}/etc/passwd 2>/dev/null | cut -d: -f1 | head -20`;
@@ -122,6 +128,13 @@
    * Note: KernelSU/libsuperuser don't support true streaming
    */
   function runCmdAsync(cmd, onComplete){
+    if(!rootAccessConfirmed){
+      const errorMsg = 'No root execution method available (KernelSU or libsuperuser not detected).';
+      appendConsole(errorMsg, 'err');
+      if(onComplete) onComplete({ success: false, error: errorMsg });
+      return null;
+    }
+    
     if(!window.cmdExec || typeof cmdExec.executeAsync !== 'function'){
       const msg = 'Backend not available (cmdExec missing in page).';
       appendConsole(msg, 'err');
@@ -156,6 +169,10 @@
    * Legacy sync command for simple operations
    */
   async function runCmdSync(cmd){
+    if(!rootAccessConfirmed){
+      throw new Error('No root execution method available (KernelSU or libsuperuser not detected).');
+    }
+    
     if(!window.cmdExec || typeof cmdExec.execute !== 'function'){
       const msg = 'Backend not available (cmdExec missing in page).';
       appendConsole(msg, 'err');
@@ -166,7 +183,10 @@
       const out = await cmdExec.execute(cmd, true);
       return out;
     } catch(err) {
-      appendConsole(String(err), 'err');
+      // Don't print duplicate error if root check already failed
+      if(rootAccessConfirmed) {
+        appendConsole(String(err), 'err');
+      }
       throw err;
     }
   }
@@ -177,8 +197,19 @@
       els.stopBtn.disabled = disabled;
       els.restartBtn.disabled = disabled;
       els.userSelect.disabled = disabled;
-      const copyBtn = document.getElementById('copy-login'); 
+      els.settingsBtn.disabled = disabled;
+      els.settingsBtn.style.opacity = disabled ? '0.5' : '';
+      const copyBtn = document.getElementById('copy-login');
       if(copyBtn) copyBtn.disabled = disabled;
+      // Disable boot toggle when root not available
+      if(els.bootToggle) {
+        els.bootToggle.disabled = disabled;
+        const toggleContainer = els.bootToggle.closest('.toggle-inline');
+        if(toggleContainer) {
+          toggleContainer.style.opacity = disabled ? '0.5' : '';
+          toggleContainer.style.pointerEvents = disabled ? 'none' : '';
+        }
+      }
     }catch(e){}
   }
 
@@ -244,32 +275,35 @@
     // Status refresh will re-enable appropriate buttons
   }
 
-  // Track whether we've already logged a missing-chroot message
-  let _chrootMissingLogged = false;
-
   /**
    * Refresh chroot status (non-blocking)
    */
   async function refreshStatus(){
+    if(!rootAccessConfirmed){
+      updateStatus('unknown');
+      disableAllActions(true);
+      return; // Don't attempt commands - root check already printed error
+    }
+
     try{
       // Check if chroot directory exists
-      if(window.cmdExec && typeof cmdExec.execute === 'function'){
-        try{
-          let exists = await cmdExec.execute(`test -d ${CHROOT_PATH_UI} && echo 1 || echo 0`, true);
+      let exists = await cmdExec.execute(`test -d ${CHROOT_PATH_UI} && echo 1 || echo 0`, true);
 
-          if(String(exists||'').trim() !== '1'){
-            if(!_chrootMissingLogged){ 
-              appendConsole(`⚠ Chroot directory not found at ${CHROOT_PATH_UI}`, 'err'); 
-              _chrootMissingLogged = true; 
-            }
-            updateStatus('stopped');
-            disableAllActions(true);
-            try{ document.getElementById('copy-login').disabled = true; }catch(e){}
-            return;
-          } else {
-            _chrootMissingLogged = false;
-          }
-        }catch(e){ /* ignore and proceed */ }
+      if(String(exists||'').trim() !== '1'){
+        if(!_chrootMissingLogged){
+          appendConsole(`⚠ Chroot directory not found at ${CHROOT_PATH_UI}`, 'err');
+          _chrootMissingLogged = true;
+        }
+        updateStatus('stopped');
+        disableAllActions(true);
+        disableSettingsPopup(true);
+        try{ document.getElementById('copy-login').disabled = true; }catch(e){}
+        return;
+      } else {
+        _chrootMissingLogged = false;
+        // Re-enable actions when chroot exists
+        disableAllActions(false);
+        disableSettingsPopup(false);
       }
 
       // Get status without blocking UI
@@ -278,7 +312,7 @@
       // Check for "Status: RUNNING" from the new detection method
       const running = /Status:\s*RUNNING/i.test(s);
       updateStatus(running ? 'running' : 'stopped');
-      
+
       // Enable copy-login button when running
       try{ document.getElementById('copy-login').disabled = !running; }catch(e){}
 
@@ -294,11 +328,7 @@
       }
     }catch(e){
       updateStatus('unknown');
-      if(!(window.cmdExec && typeof cmdExec.execute === 'function')){
-        disableAllActions(true);
-      } else {
-        disableAllActions(true);
-      }
+      disableAllActions(true);
     }
   }
 
@@ -339,24 +369,31 @@
 
   // boot toggle handlers
   async function writeBootFile(val){
+    if(!rootAccessConfirmed){
+      return; // Silently fail - root check already printed error
+    }
+    
     try{
-      if(!window.cmdExec || typeof cmdExec.execute !== 'function'){
-        appendConsole('Backend not available', 'err');
-        return;
-      }
       // Ensure directory exists and write file
-      const cmd = `mkdir -p /data/local/ubuntu-chroot && echo ${val} > /data/local/ubuntu-chroot/boot-service`;
+      const cmd = `mkdir -p ${CHROOT_DIR} && echo ${val} > ${BOOT_FILE}`;
       await cmdExec.execute(cmd, true);
       appendConsole(`Run-at-boot ${val === 1 ? 'enabled' : 'disabled'}`, 'success');
-    }catch(e){ 
+    }catch(e){
       console.error(e);
-      appendConsole(`✗ Failed to set run-at-boot: ${e}`, 'err');
+      appendConsole(`✗ Failed to set run-at-boot: ${e.message}`, 'err');
+      // Reset toggle on error
+      await readBootFile();
     }
   }
   async function readBootFile(){
+    if(!rootAccessConfirmed){
+      els.bootToggle.checked = false; // Default to disabled
+      return; // Don't attempt command - root check already printed error
+    }
+    
     try{
       if(window.cmdExec && typeof cmdExec.execute === 'function'){
-        const out = await cmdExec.execute(`cat /data/local/ubuntu-chroot/boot-service 2>/dev/null || echo 0`, true);
+        const out = await cmdExec.execute(`cat ${BOOT_FILE} 2>/dev/null || echo 0`, true);
         const v = String(out||'').trim();
         els.bootToggle.checked = v === '1';
         appendConsole('Run-at-boot: '+ (v==='1' ? 'enabled' : 'disabled'));
@@ -364,8 +401,10 @@
         appendConsole('Backend not available', 'err');
         els.bootToggle.checked = false;
       }
-    }catch(e){ 
-      els.bootToggle.checked = false; 
+    }catch(e){
+      console.error(e);
+      appendConsole(`Failed to read boot setting: ${e.message}`, 'err');
+      els.bootToggle.checked = false;
     }
   }
 
@@ -388,10 +427,39 @@
     }
   }
 
+  // Root access flag - set by master check
+  let rootAccessConfirmed = false;
+
+  // Master root detection function - checks backend once and sets UI state
+  async function checkRootAccess(){
+    if(!window.cmdExec || typeof cmdExec.execute !== 'function'){
+      appendConsole('No root bridge detected — running offline. Actions disabled.');
+      disableAllActions(true);
+      disableSettingsPopup(true);
+      return;
+    }
+
+    try{
+      // Test root access with a simple command that requires root
+      await cmdExec.execute('echo "test"', true);
+      // If successful, root is available
+      rootAccessConfirmed = true;
+      disableAllActions(false);
+      disableSettingsPopup(false);
+    }catch(e){
+      // If failed, show the backend error message once
+      rootAccessConfirmed = false;
+      appendConsole(`Failed to detect root execution method: ${e.message}`, 'err');
+      // Then disable all root-dependent UI elements
+      disableAllActions(true);
+      disableSettingsPopup(true);
+    }
+  }
+
   // Settings popup functions
-  function openSettingsPopup(){
+  async function openSettingsPopup(){
     // Load current post-exec script
-    loadPostExecScript();
+    await loadPostExecScript();
     // Show popup with animation
     els.settingsPopup.classList.add('active');
   }
@@ -400,63 +468,350 @@
     els.settingsPopup.classList.remove('active');
   }
 
-  function loadPostExecScript(){
+  async function loadPostExecScript(){
+    if(!rootAccessConfirmed){
+      els.postExecScript.value = '';
+      return;
+    }
     try{
-      const script = localStorage.getItem('chroot_post_exec_script') || '';
-      els.postExecScript.value = script;
+      const script = await runCmdSync(`cat ${POST_EXEC_SCRIPT} 2>/dev/null || echo ''`);
+      els.postExecScript.value = String(script || '').trim();
     }catch(e){
+      appendConsole(`Failed to load post-exec script: ${e.message}`, 'err');
       els.postExecScript.value = '';
     }
   }
 
-  function savePostExecScript(){
+  async function savePostExecScript(){
+    if(!rootAccessConfirmed){
+      appendConsole('Cannot save post-exec script: root access not available', 'err');
+      return;
+    }
     try{
       const script = els.postExecScript.value.trim();
-      localStorage.setItem('chroot_post_exec_script', script);
-      appendConsole('Post-exec script saved', 'success');
+      // Escape single quotes by replacing ' with '
+      const escapedScript = script.replace(/'/g, "'\\''");
+      await runCmdSync(`echo '${escapedScript}' > ${POST_EXEC_SCRIPT}`);
+      appendConsole('Post-exec script saved successfully', 'success');
     }catch(e){
-      appendConsole('Failed to save post-exec script', 'err');
+      appendConsole(`Failed to save post-exec script: ${e.message}`, 'err');
     }
   }
 
-  function clearPostExecScript(){
+  async function clearPostExecScript(){
     els.postExecScript.value = '';
+    if(!rootAccessConfirmed){
+      appendConsole('Cannot clear post-exec script: root access not available', 'err');
+      return;
+    }
     try{
-      localStorage.removeItem('chroot_post_exec_script');
-      appendConsole('Post-exec script cleared', 'info');
+      await runCmdSync(`echo '' > ${POST_EXEC_SCRIPT}`);
+      appendConsole('Post-exec script cleared successfully', 'info');
     }catch(e){
-      appendConsole('Failed to clear post-exec script', 'err');
+      appendConsole(`Failed to clear post-exec script: ${e.message}`, 'err');
     }
   }
 
-  async function uninstallChroot(){
-    // Confirm uninstallation
-    if(!confirm('Are you sure you want to uninstall the chroot environment?\n\nThis will permanently delete all data in the chroot.')){
+  async function uninstallChroot(){ 
+    if(activeCommandId) {
+      appendConsole('⚠ Another command is already running. Please wait...', 'warn');
       return;
     }
 
-    appendConsole('Starting chroot uninstallation...', 'warn');
+    // Custom confirmation dialog with Yes/No buttons
+    const confirmed = await showConfirmDialog(
+      'Uninstall Chroot Environment',
+      'Are you sure you want to uninstall the chroot environment?\n\nThis will permanently delete all data in the chroot and cannot be undone.',
+      'Uninstall',
+      'Cancel'
+    );
 
-    try{
-      // First stop chroot if running
-      appendConsole('Stopping chroot if running...');
-      await runCmdSync(`sh ${PATH_CHROOT_SH} stop`);
+    if(!confirmed){
+      return;
+    }
 
-      // Remove the entire chroot directory
-      appendConsole('Removing chroot files...');
-      await runCmdSync(`rm -rf /data/local/ubuntu-chroot`);
+    // Close settings popup smoothly
+    closeSettingsPopup();
+    
+    // Start uninstall after animations complete
+    setTimeout(() => {
+      appendConsole('Starting chroot uninstallation...', 'warn');
 
-      appendConsole('✅ Chroot uninstalled successfully', 'success');
-      appendConsole('Please refresh the page to see the updated status.', 'info');
+      // Disable settings popup during uninstall
+      disableSettingsPopup(true);
 
-      // Close popup and refresh status
-      closeSettingsPopup();
-      setTimeout(() => refreshStatus(), 1000);
+      // Check if chroot is running
+      (async () => {
+        const statusOutput = await runCmdSync(`sh ${PATH_CHROOT_SH} status`);
+        const isRunning = /Status:\s*RUNNING/i.test(String(statusOutput || ''));
+        
+        if(isRunning){
+          // Show progress for stopping
+          const progressLine = document.createElement('div');
+          progressLine.className = 'progress-indicator';
+          progressLine.textContent = '⏳ Stopping chroot...';
+          els.console.appendChild(progressLine);
+          els.console.scrollTop = els.console.scrollHeight;
+          
+          let dotCount = 0;
+          const progressInterval = setInterval(() => {
+            dotCount = (dotCount + 1) % 4;
+            progressLine.textContent = '⏳ Stopping chroot' + '.'.repeat(dotCount);
+          }, 400);
 
-    }catch(e){
-      appendConsole(`❌ Uninstall failed: ${e.message}`, 'err');
+          runCmdAsync(`sh ${PATH_CHROOT_SH} stop`, (success) => {
+            if(success) {
+              appendConsole('Chroot stopped successfully');
+              progressLine.textContent = '⏳ Removing chroot files...';
+              dotCount = 0;
+              proceedToRemove(progressInterval, progressLine);
+            } else {
+              clearInterval(progressInterval);
+              progressLine.remove();
+              appendConsole('❌ Failed to stop chroot', 'err');
+              disableSettingsPopup(false);
+            }
+          });
+        } else {
+          // Show progress for removing
+          const progressLine = document.createElement('div');
+          progressLine.className = 'progress-indicator';
+          progressLine.textContent = '⏳ Removing chroot files...';
+          els.console.appendChild(progressLine);
+          els.console.scrollTop = els.console.scrollHeight;
+          
+          let dotCount = 0;
+          const progressInterval = setInterval(() => {
+            dotCount = (dotCount + 1) % 4;
+            progressLine.textContent = '⏳ Removing chroot files' + '.'.repeat(dotCount);
+          }, 400);
+          
+          proceedToRemove(progressInterval, progressLine);
+        }
+      })();
+    }, 400);
+
+    function proceedToRemove(progressInterval, progressLine){
+      runCmdAsync(`rm -rf ${CHROOT_DIR}`, (success2) => {
+        clearInterval(progressInterval);
+        progressLine.remove();
+        
+        if(success2) {
+          appendConsole('✅ Chroot uninstalled successfully', 'success');
+          appendConsole('Please refresh the page to see the updated status.', 'info');
+        } else {
+          appendConsole('❌ Failed to remove chroot files', 'err');
+        }
+        
+        disableSettingsPopup(false);
+        setTimeout(() => refreshStatus(), 1000);
+      });
     }
   }
+
+  // Disable settings popup when no root available
+  function disableSettingsPopup(disabled){
+    try{
+      if(els.settingsPopup){
+        // Keep popup clickable for closing, but dim it
+        els.settingsPopup.style.opacity = disabled ? '0.5' : '';
+        // Only disable pointer events if we're not allowing close button interaction
+        els.settingsPopup.style.pointerEvents = disabled ? 'auto' : '';
+      }
+      // Close button should remain functional
+      if(els.closePopup) {
+        // Close button stays enabled and visible
+      }
+      // Also disable individual popup elements with visual feedback
+      if(els.postExecScript) {
+        els.postExecScript.disabled = disabled;
+        els.postExecScript.style.opacity = disabled ? '0.5' : '';
+        els.postExecScript.style.cursor = disabled ? 'not-allowed' : '';
+        els.postExecScript.style.pointerEvents = disabled ? 'none' : '';
+      }
+      if(els.saveScript) {
+        els.saveScript.disabled = disabled;
+        els.saveScript.style.opacity = disabled ? '0.5' : '';
+        els.saveScript.style.cursor = disabled ? 'not-allowed' : '';
+        els.saveScript.style.pointerEvents = disabled ? 'none' : '';
+      }
+      if(els.clearScript) {
+        els.clearScript.disabled = disabled;
+        els.clearScript.style.opacity = disabled ? '0.5' : '';
+        els.clearScript.style.cursor = disabled ? 'not-allowed' : '';
+        els.clearScript.style.pointerEvents = disabled ? 'none' : '';
+      }
+      if(els.uninstallBtn) {
+        els.uninstallBtn.disabled = disabled;
+        els.uninstallBtn.style.opacity = disabled ? '0.5' : '';
+        els.uninstallBtn.style.cursor = disabled ? 'not-allowed' : '';
+        els.uninstallBtn.style.pointerEvents = disabled ? 'none' : '';
+      }
+    }catch(e){}
+  }
+
+  // Custom confirmation dialog function
+  function showConfirmDialog(title, message, confirmText = 'Yes', cancelText = 'No'){
+    return new Promise((resolve) => {
+      // Create overlay
+      const overlay = document.createElement('div');
+      overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2000;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+      `;
+
+      // Create dialog
+      const dialog = document.createElement('div');
+      dialog.style.cssText = `
+        background: var(--card);
+        border-radius: var(--surface-radius);
+        box-shadow: 0 6px 20px rgba(6,8,14,0.06);
+        border: 1px solid rgba(0,0,0,0.08);
+        max-width: 400px;
+        width: 90%;
+        padding: 24px;
+        transform: scale(0.9);
+        transition: transform 0.2s ease;
+      `;
+
+      // Create title
+      const titleEl = document.createElement('h3');
+      titleEl.textContent = title;
+      titleEl.style.cssText = `
+        margin: 0 0 12px 0;
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--text);
+      `;
+
+      // Create message
+      const messageEl = document.createElement('p');
+      messageEl.textContent = message;
+      messageEl.style.cssText = `
+        margin: 0 0 20px 0;
+        font-size: 14px;
+        color: var(--muted);
+        line-height: 1.5;
+        white-space: pre-line;
+      `;
+
+      // Create button container
+      const buttonContainer = document.createElement('div');
+      buttonContainer.style.cssText = `
+        display: flex;
+        gap: 12px;
+        justify-content: flex-end;
+      `;
+
+      // Create cancel button
+      const cancelBtn = document.createElement('button');
+      cancelBtn.textContent = cancelText;
+      cancelBtn.style.cssText = `
+        padding: 8px 16px;
+        border: 1px solid rgba(0,0,0,0.08);
+        border-radius: 8px;
+        background: transparent;
+        color: var(--text);
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s ease;
+      `;
+
+      // Create confirm button
+      const confirmBtn = document.createElement('button');
+      confirmBtn.textContent = confirmText;
+      confirmBtn.style.cssText = `
+        padding: 8px 16px;
+        border: 1px solid var(--danger);
+        border-radius: 8px;
+        background: var(--danger);
+        color: white;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s ease;
+      `;
+
+      // Dark mode adjustments
+      if(document.documentElement.getAttribute('data-theme') === 'dark'){
+        dialog.style.borderColor = 'rgba(255,255,255,0.08)';
+        cancelBtn.style.borderColor = 'rgba(255,255,255,0.08)';
+        cancelBtn.addEventListener('mouseenter', () => {
+          cancelBtn.style.background = 'rgba(255,255,255,0.05)';
+        });
+        cancelBtn.addEventListener('mouseleave', () => {
+          cancelBtn.style.background = 'transparent';
+        });
+      }
+
+      // Event listeners
+      const closeDialog = (result) => {
+        overlay.style.opacity = '0';
+        dialog.style.transform = 'scale(0.9)';
+        setTimeout(() => {
+          document.body.removeChild(overlay);
+          resolve(result);
+        }, 200);
+      };
+
+      cancelBtn.addEventListener('click', () => closeDialog(false));
+      confirmBtn.addEventListener('click', () => closeDialog(true));
+
+      confirmBtn.addEventListener('mouseenter', () => {
+        confirmBtn.style.transform = 'translateY(-1px)';
+        confirmBtn.style.boxShadow = '0 4px 12px rgba(220, 38, 38, 0.3)';
+      });
+
+      confirmBtn.addEventListener('mouseleave', () => {
+        confirmBtn.style.transform = 'translateY(0)';
+        confirmBtn.style.boxShadow = 'none';
+      });
+
+      // Close on overlay click
+      overlay.addEventListener('click', (e) => {
+        if(e.target === overlay) closeDialog(false);
+      });
+
+      // Keyboard support - use a proper cleanup function
+      const handleKeyDown = (e) => {
+        if(e.key === 'Escape') {
+          closeDialog(false);
+          document.removeEventListener('keydown', handleKeyDown);
+        } else if(e.key === 'Enter') {
+          closeDialog(true);
+          document.removeEventListener('keydown', handleKeyDown);
+        }
+      };
+      document.addEventListener('keydown', handleKeyDown);
+
+      // Assemble dialog
+      buttonContainer.appendChild(cancelBtn);
+      buttonContainer.appendChild(confirmBtn);
+
+      dialog.appendChild(titleEl);
+      dialog.appendChild(messageEl);
+      dialog.appendChild(buttonContainer);
+
+      overlay.appendChild(dialog);
+      document.body.appendChild(overlay);
+
+      // Animate in
+      setTimeout(() => {
+        overlay.style.opacity = '1';
+        dialog.style.transform = 'scale(1)';
+      }, 10);
+    });
+  }
+
 
   // theme: supports either an input checkbox or a button with aria-pressed
   function initTheme(){
@@ -540,18 +895,11 @@
   loadConsoleLogs(); // Restore previous console logs
   checkNamespaceWarning(); // Show warning if first visit
   
-  // If there's no root bridge, disable actions; otherwise we'll use the hardcoded path.
-  if(window.cmdExec && typeof cmdExec.execute === 'function'){
-    // root bridge present — no verbose message to keep the console clean
-  } else {
-    appendConsole('No root bridge detected — running offline. Actions disabled.');
-    disableAllActions(true);
-  }
-
   // small delay to let command-executor attach if present
-  setTimeout(()=>{
-    refreshStatus();
-    readBootFile();
+  setTimeout(async ()=>{
+    await checkRootAccess(); // Master root detection
+    await refreshStatus(); // Wait for status check
+    await readBootFile(); // Wait for boot file read
   }, 160);
 
   // export some helpers for debug
