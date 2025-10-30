@@ -27,9 +27,10 @@ extract_rootfs(){
     if unzip -l "$ZIPFILE" | grep -q "rootfs\.tar\.gz"; then
         echo "- Extracting rootfs.tar.gz..."
         mkdir -p "$ROOTFS_DIR" "$TMPDIR"
-        unzip -oj "$ZIPFILE" 'tools/post_exec.sh' -d /data/local/ubuntu-chroot >&2
         unzip -oq "$ZIPFILE" "rootfs.tar.gz" -d "$TMPDIR" || { echo "Failed to extract rootfs.tar.gz"; exit 1; }
         tar -xpf "$TMPDIR/rootfs.tar.gz" -C "$ROOTFS_DIR" || { echo "Failed to unpack rootfs.tar.gz"; exit 1; }
+        unzip -oj "$ZIPFILE" 'tools/post_exec.sh' -d /data/local/ubuntu-chroot >&2
+
     else
         echo "- rootfs.tar.gz not found, skipping extraction."
     fi
