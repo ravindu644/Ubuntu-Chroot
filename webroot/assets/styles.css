@@ -13,11 +13,11 @@
   --bottom-inset: env(safe-area-inset-bottom, 0px);
 }
 [data-theme="dark"]{
-  --bg: #071024;
-  --card: #081428;
-  --text: #e6eef8;
-  --muted: #9aa7b6;
-  --accent: #3b82f6;
+  --bg: #0f0f0f;
+  --card: #1a1a1a;
+  --text: #ffffff;
+  --muted: #a0a0a0;
+  --accent: #60a5fa;
   --danger: #fb7185;
   --console-bg: rgba(255,255,255,0.03);
 }
@@ -47,7 +47,9 @@ body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI"
 /* Ensure outline buttons remain visible in dark mode (lighten the border) */
 [data-theme="dark"] .btn.outline{border-color: rgba(255,255,255,0.08); color:var(--text);}
 .btn.primary{background:var(--accent)}
-.btn.stop{background:var(--danger);}
+.btn.stop{background:#dc2626 !important;}
+#restart-btn{background:#ea580c !important;}
+#start-btn{background:#16a34a !important;}
 .btn[disabled]{opacity:0.5;cursor:not-allowed}
 .row-label{color:var(--muted)}
 .toggle-inline{display:inline-flex;gap:8px;align-items:center}
@@ -142,6 +144,10 @@ body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI"
 .console::-webkit-scrollbar-thumb{background:rgba(0,0,0,0.2);border-radius:4px}
 .console::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,0.3)}
 
+[data-theme="dark"] .console{border-color: rgba(255,255,255,0.08)}
+[data-theme="dark"] .console::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.2)}
+[data-theme="dark"] .console::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.3)}
+
 /* header controls alignment tweaks */
 .top{border-bottom-color: rgba(0,0,0,0.05)}
 [data-theme="dark"] .top{border-bottom-color: rgba(255,255,255,0.08)}
@@ -163,7 +169,7 @@ body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI"
 /* Logo styles */
 .brand{display:flex;align-items:center;font-weight:700;font-size:18px}
 .header-logo{height:32px;width:auto;max-width:200px;object-fit:contain;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.1))}
-[data-theme="dark"] .header-logo{filter:drop-shadow(0 1px 2px rgba(0,0,0,0.3)) brightness(1.1)}
+[data-theme="dark"] .header-logo{filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5)) brightness(1.2) contrast(1.1)}
 
 @keyframes slideDown{
   from{opacity:0;transform:translateY(-10px)}
