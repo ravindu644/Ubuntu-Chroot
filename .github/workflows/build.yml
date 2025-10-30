@@ -33,9 +33,6 @@ jobs:
           ZIP_NAME="Ubuntu-Chroot-${VERSION}-${DATE}.zip"
           echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
 
-          # Move the built tarball to repo root
-          mv "Docker/Ubuntu-*.tar.gz" .
-
           # Clean the repository
           rm -rf .git .github .gitignore .gitattributes
           find . -name ".git*" -delete

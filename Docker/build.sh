@@ -36,4 +36,7 @@ gzip -9 custom-arm64-rootfs.tar
 # Rename to final output file
 mv custom-arm64-rootfs.tar.gz "$OUTPUT_FILE"
 
+# Move to parent directory (repo root)
+mv "$OUTPUT_FILE" ../
+
 echo "$OUTPUT_FILE"
