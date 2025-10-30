@@ -24,14 +24,17 @@ extract_rootfs(){
         return 0
     fi
 
-    if unzip -l "$ZIPFILE" | grep -q "rootfs\.tar\.gz"; then
-        echo "- Extracting rootfs.tar.gz..."
-        mkdir -p "$ROOTFS_DIR" "$TMPDIR"
-        unzip -oq "$ZIPFILE" "rootfs.tar.gz" -d "$TMPDIR" || { echo "Failed to extract rootfs.tar.gz"; exit 1; }
-        tar -xpf "$TMPDIR/rootfs.tar.gz" -C "$ROOTFS_DIR" || { echo "Failed to unpack rootfs.tar.gz"; exit 1; }
-        unzip -oj "$ZIPFILE" 'tools/post_exec.sh' -d /data/local/ubuntu-chroot >&2
+    # Auto-detect any .tar.gz file in the ZIP
+    local ROOTFS_FILE=$(unzip -l "$ZIPFILE" | grep '\.tar\.gz$' | head -1 | awk '{print $4}')
 
+    if [ -n "$ROOTFS_FILE" ]; then
+        echo "- Found rootfs file: $ROOTFS_FILE"
+        echo "- Extracting $ROOTFS_FILE..."
+        mkdir -p "$ROOTFS_DIR" "$TMPDIR"
+        unzip -oq "$ZIPFILE" "$ROOTFS_FILE" -d "$TMPDIR" || { echo "Failed to extract $ROOTFS_FILE"; exit 1; }
+        tar -xpf "$TMPDIR/$ROOTFS_FILE" -C "$ROOTFS_DIR" || { echo "Failed to unpack $ROOTFS_FILE"; exit 1; }
+        unzip -oj "$ZIPFILE" 'tools/post_exec.sh' -d /data/local/ubuntu-chroot >&2
     else
-        echo "- rootfs.tar.gz not found, skipping extraction."
+        echo "- No .tar.gz file found in ZIP, skipping rootfs extraction."
     fi
 }
