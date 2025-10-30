@@ -32,6 +32,13 @@
         <img src="assets/logo.png" alt="Ubuntu Chroot Manager" class="header-logo">
       </div>
       <div class="controls">
+        <button id="settings-btn" class="theme-btn" title="Options">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="5" cy="12" r="2" fill="currentColor"/>
+            <circle cx="12" cy="12" r="2" fill="currentColor"/>
+            <circle cx="19" cy="12" r="2" fill="currentColor"/>
+          </svg>
+        </button>
         <button id="theme-toggle" class="theme-btn" aria-pressed="false" title="Toggle theme">
           <!-- Sun icon (light) -->
           <svg class="icon icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
@@ -93,6 +100,35 @@
         </div>
       </section>
     </main>
+
+    <!-- Settings Popup -->
+    <div id="settings-popup" class="popup-overlay">
+      <div class="popup-content">
+        <div class="popup-header">
+          <h3>Options</h3>
+          <button id="close-popup" class="close-btn" title="Close">×</button>
+        </div>
+        <div class="popup-body">
+          <!-- Post-exec Script Section -->
+          <div class="setting-section">
+            <h4>Post-exec Script</h4>
+            <p class="setting-desc">Commands to run after chroot starts</p>
+            <textarea id="post-exec-script" class="script-editor" placeholder="echo 'Chroot started successfully'&#10;# Add your commands here" rows="6"></textarea>
+            <div class="script-actions">
+              <button id="save-script" class="btn small">Save</button>
+              <button id="clear-script" class="btn outline small">Clear</button>
+            </div>
+          </div>
+
+          <!-- Uninstall Section -->
+          <div class="setting-section">
+            <h4>Danger Zone</h4>
+            <p class="setting-desc">Permanently remove the chroot environment</p>
+            <button id="uninstall-btn" class="btn danger">Uninstall Chroot</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <footer class="foot">Ubuntu Chroot Manager</footer>
   </div>

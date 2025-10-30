@@ -18,7 +18,14 @@
     themeToggle: document.getElementById('theme-toggle'),
     namespaceWarning: document.getElementById('namespace-warning'),
     dismissWarning: document.getElementById('dismiss-warning'),
-    userSelect: document.getElementById('user-select')
+    userSelect: document.getElementById('user-select'),
+    settingsBtn: document.getElementById('settings-btn'),
+    settingsPopup: document.getElementById('settings-popup'),
+    closePopup: document.getElementById('close-popup'),
+    postExecScript: document.getElementById('post-exec-script'),
+    saveScript: document.getElementById('save-script'),
+    clearScript: document.getElementById('clear-script'),
+    uninstallBtn: document.getElementById('uninstall-btn')
   };
 
   // Track running commands to prevent UI blocking
@@ -381,6 +388,76 @@
     }
   }
 
+  // Settings popup functions
+  function openSettingsPopup(){
+    // Load current post-exec script
+    loadPostExecScript();
+    // Show popup with animation
+    els.settingsPopup.classList.add('active');
+  }
+
+  function closeSettingsPopup(){
+    els.settingsPopup.classList.remove('active');
+  }
+
+  function loadPostExecScript(){
+    try{
+      const script = localStorage.getItem('chroot_post_exec_script') || '';
+      els.postExecScript.value = script;
+    }catch(e){
+      els.postExecScript.value = '';
+    }
+  }
+
+  function savePostExecScript(){
+    try{
+      const script = els.postExecScript.value.trim();
+      localStorage.setItem('chroot_post_exec_script', script);
+      appendConsole('Post-exec script saved', 'success');
+    }catch(e){
+      appendConsole('Failed to save post-exec script', 'err');
+    }
+  }
+
+  function clearPostExecScript(){
+    els.postExecScript.value = '';
+    try{
+      localStorage.removeItem('chroot_post_exec_script');
+      appendConsole('Post-exec script cleared', 'info');
+    }catch(e){
+      appendConsole('Failed to clear post-exec script', 'err');
+    }
+  }
+
+  async function uninstallChroot(){
+    // Confirm uninstallation
+    if(!confirm('Are you sure you want to uninstall the chroot environment?\n\nThis will permanently delete all data in the chroot.')){
+      return;
+    }
+
+    appendConsole('Starting chroot uninstallation...', 'warn');
+
+    try{
+      // First stop chroot if running
+      appendConsole('Stopping chroot if running...');
+      await runCmdSync(`sh ${PATH_CHROOT_SH} stop`);
+
+      // Remove the entire chroot directory
+      appendConsole('Removing chroot files...');
+      await runCmdSync(`rm -rf /data/local/ubuntu-chroot`);
+
+      appendConsole('✅ Chroot uninstalled successfully', 'success');
+      appendConsole('Please refresh the page to see the updated status.', 'info');
+
+      // Close popup and refresh status
+      closeSettingsPopup();
+      setTimeout(() => refreshStatus(), 1000);
+
+    }catch(e){
+      appendConsole(`❌ Uninstall failed: ${e.message}`, 'err');
+    }
+  }
+
   // theme: supports either an input checkbox or a button with aria-pressed
   function initTheme(){
     const stored = localStorage.getItem('chroot_theme') || (window.matchMedia && window.matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light');
@@ -430,6 +507,16 @@
     refreshStatus();
   });
   els.bootToggle.addEventListener('change', () => writeBootFile(els.bootToggle.checked ? 1 : 0));
+
+  // Settings popup event handlers
+  els.settingsBtn.addEventListener('click', () => openSettingsPopup());
+  els.closePopup.addEventListener('click', () => closeSettingsPopup());
+  els.settingsPopup.addEventListener('click', (e) => {
+    if(e.target === els.settingsPopup) closeSettingsPopup();
+  });
+  els.saveScript.addEventListener('click', () => savePostExecScript());
+  els.clearScript.addEventListener('click', () => clearPostExecScript());
+  els.uninstallBtn.addEventListener('click', () => uninstallChroot());
 
   // Show namespace warning on first visit
   function checkNamespaceWarning(){
