@@ -15,7 +15,9 @@
     clearConsole: document.getElementById('clear-console'),
     refreshStatus: document.getElementById('refresh-status'),
     bootToggle: document.getElementById('boot-toggle'),
-    themeToggle: document.getElementById('theme-toggle')
+    themeToggle: document.getElementById('theme-toggle'),
+    namespaceWarning: document.getElementById('namespace-warning'),
+    dismissWarning: document.getElementById('dismiss-warning')
   };
 
   // Track running commands to prevent UI blocking
@@ -23,6 +25,26 @@
 
   // Start with actions disabled until we verify the chroot exists
   disableAllActions(true);
+
+  /**
+   * Save console logs to localStorage
+   */
+  function saveConsoleLogs(){
+    try{
+      const logs = els.console.innerHTML;
+      localStorage.setItem('chroot_console_logs', logs);
+    }catch(e){/* ignore storage errors */}
+  }
+
+  /**
+   * Load console logs from localStorage
+   */
+  function loadConsoleLogs(){
+    try{
+      const logs = localStorage.getItem('chroot_console_logs');
+      if(logs) els.console.innerHTML = logs;
+    }catch(e){/* ignore storage errors */}
+  }
 
   /**
    * Append text to console with optional styling
@@ -36,6 +58,9 @@
     
     // Auto-scroll to bottom for real-time feel
     pre.scrollTop = pre.scrollHeight;
+    
+    // Save logs after each append
+    saveConsoleLogs();
   }
 
   /**
@@ -338,6 +363,8 @@
     animateButton(e.target);
     els.console.innerHTML = ''; 
     appendConsole('Console cleared', 'info');
+    // Clear saved logs
+    try{ localStorage.removeItem('chroot_console_logs'); }catch(e){}
   });
   els.refreshStatus.addEventListener('click', (e) => {
     animateButton(e.target);
@@ -346,8 +373,28 @@
   });
   els.bootToggle.addEventListener('change', () => writeBootFile(els.bootToggle.checked ? 1 : 0));
 
+  // Show namespace warning on first visit
+  function checkNamespaceWarning(){
+    const dismissed = localStorage.getItem('namespace_warning_dismissed');
+    if(!dismissed){
+      els.namespaceWarning.style.display = 'flex';
+    }
+  }
+
+  // Dismiss warning handler
+  els.dismissWarning.addEventListener('click', () => {
+    const dontShowAgain = document.getElementById('dont-show-warning').checked;
+    els.namespaceWarning.style.display = 'none';
+    if(dontShowAgain){
+      try{ localStorage.setItem('namespace_warning_dismissed', '1'); }catch(e){}
+    }
+  });
+
   // init
   initTheme();
+  loadConsoleLogs(); // Restore previous console logs
+  checkNamespaceWarning(); // Show warning if first visit
+  
   // If there's no root bridge, disable actions; otherwise we'll use the hardcoded path.
   if(window.cmdExec && typeof cmdExec.execute === 'function'){
     // root bridge present — no verbose message to keep the console clean

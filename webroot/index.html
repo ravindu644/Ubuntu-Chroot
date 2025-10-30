@@ -8,8 +8,27 @@
 </head>
 <body>
   <div class="app">
+    <!-- Namespace warning banner -->
+    <div id="namespace-warning" class="warning-banner" style="display:none">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0">
+        <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/>
+        <line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+      <div style="flex:1">
+        <strong>Enable Global Namespace Mode</strong>
+        <p>To avoid issues with mount namespaces, enable "Global Namespace" mode in your root manager (KernelSU/Magisk) for this app.</p>
+        <label class="warning-checkbox">
+          <input type="checkbox" id="dont-show-warning">
+          <span class="custom-checkbox"></span>
+          <span>Don't show this again</span>
+        </label>
+      </div>
+      <button id="dismiss-warning" class="dismiss-btn" title="Dismiss">×</button>
+    </div>
+    
     <header class="top">
-      <div class="brand">Chroot Control</div>
+      <div class="brand"></div>
       <div class="controls">
         <button id="theme-toggle" class="theme-btn" aria-pressed="false" title="Toggle theme">
           <!-- Sun icon (light) -->
@@ -67,7 +86,7 @@
       </section>
     </main>
 
-    <footer class="foot">Simple UI — will call your <code>chroot.sh</code> via cmdExec when available.</footer>
+    <footer class="foot">Ubuntu Chroot Manager</footer>
   </div>
 
   <script src="assets/command-executor.js"></script>

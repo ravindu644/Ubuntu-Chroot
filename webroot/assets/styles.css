@@ -21,8 +21,8 @@
 *{box-sizing:border-box}
 html,body{height:100%;min-height:100vh}
 /* Prevent horizontal page scrolling; allow vertical scroll when content exceeds viewport */
-body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial; background:var(--bg); color:var(--text);overflow-x:hidden}
-.app{max-width:980px;width:100%;box-sizing:border-box;margin:12px auto;padding:12px}
+body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial; background:var(--bg); color:var(--text);overflow-x:hidden;padding-top:env(safe-area-inset-top)}
+.app{max-width:980px;width:100%;box-sizing:border-box;margin:24px auto 12px;padding:12px}
  
 .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
 .brand{font-weight:700;font-size:18px}
@@ -140,3 +140,19 @@ body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI"
 .console::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,0.3)}
 [data-theme="dark"] .console::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.2)}
 [data-theme="dark"] .console::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.3)}
+
+/* Warning banner */
+.warning-banner{display:flex;align-items:flex-start;gap:10px;background:linear-gradient(135deg,#dc2626,#ef4444);color:white;padding:12px 14px;border-radius:10px;margin-bottom:14px;box-shadow:0 4px 16px rgba(220,38,38,0.25);animation:slideDown 0.3s ease-out}
+.warning-banner svg{margin-top:1px;flex-shrink:0}
+.warning-banner strong{display:block;font-size:14px;margin-bottom:3px;font-weight:600}
+.warning-banner p{margin:0 0 8px 0;font-size:12px;line-height:1.4;opacity:0.92}
+.warning-banner .dismiss-btn{background:rgba(255,255,255,0.15);border:none;color:white;font-size:20px;line-height:1;padding:2px 8px;border-radius:5px;cursor:pointer;margin-left:auto;transition:background 0.2s;flex-shrink:0}
+.warning-banner .dismiss-btn:hover{background:rgba(255,255,255,0.25)}
+.warning-checkbox{display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;user-select:none}
+.warning-checkbox input[type="checkbox"]{display:none}
+.warning-checkbox .custom-checkbox{width:15px;height:15px;border:2px solid rgba(255,255,255,0.6);border-radius:3px;display:flex;align-items:center;justify-content:center;transition:all 0.2s;flex-shrink:0}
+.warning-checkbox input[type="checkbox"]:checked + .custom-checkbox{background:white;border-color:white}
+.warning-checkbox input[type="checkbox"]:checked + .custom-checkbox::after{content:'✓';color:#dc2626;font-size:11px;font-weight:bold}
+.warning-checkbox:hover .custom-checkbox{border-color:rgba(255,255,255,0.9)}
+.warning-checkbox span{opacity:0.9;line-height:1.3}
+@keyframes slideDown{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
