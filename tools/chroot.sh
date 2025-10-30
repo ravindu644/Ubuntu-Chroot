@@ -149,6 +149,26 @@ cleanup_mounts() {
             umount -lf "$mount_point" 2>/dev/null
         done
     fi
+    # Restore original SELinux status
+    local og_selinux_file="/data/local/ubuntu-chroot/og-selinux"
+    if [ -f "$og_selinux_file" ]; then
+        local original_status="$(cat "$og_selinux_file")"
+        case "$original_status" in
+            Enforcing)
+                (setenforce 1 && log "Restored SELinux to enforcing mode") || warn "Failed to restore SELinux to enforcing"
+                ;;
+            Permissive)
+                (setenforce 0 && log "Restored SELinux to permissive mode") || warn "Failed to restore SELinux to permissive"
+                ;;
+            Disabled)
+                log "SELinux was originally disabled, no restoration needed"
+                ;;
+            *)
+                warn "Unknown SELinux status stored: $original_status"
+                ;;
+        esac
+        rm -f "$og_selinux_file"
+    fi
     
     log "Chroot stopped"
 }
@@ -228,6 +248,12 @@ start_chroot() {
     local no_shell="$1"
     log "Setting up advanced chroot..."
     [ -d "$CHROOT_PATH" ] || { error "Chroot directory not found at $CHROOT_PATH"; exit 1; }
+
+    # Store original SELinux status before changing it
+    local og_selinux_file="/data/local/ubuntu-chroot/og-selinux"
+    if [ ! -f "$og_selinux_file" ]; then
+        getenforce > "$og_selinux_file" 2>/dev/null && log "Stored original SELinux status" || warn "Failed to store SELinux status"
+    fi
 
     (setenforce 0 && log "SELinux set to permissive mode") || warn "Failed to set SELinux to permissive mode"
 
