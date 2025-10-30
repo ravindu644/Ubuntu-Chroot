@@ -101,9 +101,6 @@ apply_internet_fix() {
     
     # Network configuration
     sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1
-    echo "127.0.0.1    localhost kernel-builder" > "$CHROOT_PATH/etc/hosts"
-    echo "::1          localhost ip6-localhost ip6-loopback" >> "$CHROOT_PATH/etc/hosts"
-    echo "kernel-builder" > "$CHROOT_PATH/proc/sys/kernel/hostname" 2>/dev/null
     
     log "Internet fix successfully applied."
 }
