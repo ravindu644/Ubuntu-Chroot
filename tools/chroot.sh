@@ -8,6 +8,7 @@
 CHROOT_PATH="${CHROOT_PATH:-/data/local/ubuntu-chroot/rootfs}"
 SCRIPT_NAME="$(basename "$0")"
 SCRIPT_DIR="$(dirname "$0")"
+C_HOSTNAME="ubuntu"
 
 log() { echo "[INFO] $1"; }
 warn() { echo "[WARN] $1"; }
@@ -101,9 +102,9 @@ apply_internet_fix() {
     
     # Network configuration
     sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1
-    echo "127.0.0.1    localhost kernel-builder" > "$CHROOT_PATH/etc/hosts"
+    echo "127.0.0.1    localhost $C_HOSTNAME" > "$CHROOT_PATH/etc/hosts"
     echo "::1          localhost ip6-localhost ip6-loopback" >> "$CHROOT_PATH/etc/hosts"
-    echo "kernel-builder" > "$CHROOT_PATH/proc/sys/kernel/hostname" 2>/dev/null
+    echo "$C_HOSTNAME" > "$CHROOT_PATH/proc/sys/kernel/hostname" 2>/dev/null
     
     log "Internet fix successfully applied."
 }
