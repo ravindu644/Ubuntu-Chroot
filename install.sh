@@ -21,6 +21,7 @@ echo " | (__| ' \| '_/ _ / _ |  _|   ";
 echo "  \___|_||_|_| \___\___/\__|   ";
 echo "                               ";
 echo "       by @ravindu644          ";
+echo " "
 }
 
 check_for_susfs || exit 1
