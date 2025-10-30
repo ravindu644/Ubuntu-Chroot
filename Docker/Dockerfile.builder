@@ -90,12 +90,8 @@ SETUP_USER_FILE="/var/lib/.default-user"
 # Allow root login anytime - but run setup if not done yet
 CURRENT_USER=$(id -un)
 if [ "$CURRENT_USER" = "root" ] && [ ! -f "$SETUP_FLAG" ]; then
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "      Welcome to Ubuntu Chroot Environment"
-    echo "    First-time setup required for root login"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo ""
-    # Don't exit - continue to setup below
+    # Continue to setup below
+    true
 fi
 
 # If setup already done and we have a default user, switch to it
