@@ -57,7 +57,7 @@ enter_chroot() {
     if [ "$user" = "root" ]; then
         # For root, direct chroot to bash with proper environment
         exec chroot "$CHROOT_PATH" /bin/bash -c "
-            export PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+            export PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/libexec:/opt/bin'
             export TERM='xterm-256color'
             export HOME='/root'
             cd /root
@@ -66,7 +66,7 @@ enter_chroot() {
     else
         # For non-root users, use su to switch user with proper environment
         exec chroot "$CHROOT_PATH" /bin/bash -c "
-            export PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+            export PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/libexec:/opt/bin'
             export TERM='xterm-256color'
             export HOME=\"/home/$user\"
             cd \"/home/$user\" 2>/dev/null || export HOME='/root'
@@ -317,7 +317,7 @@ start_chroot() {
         # Copy script to chroot tmp and execute it inside chroot
         cp "$post_exec_script" "$CHROOT_PATH/tmp/post_exec.sh"
         chmod +x "$CHROOT_PATH/tmp/post_exec.sh"
-        chroot "$CHROOT_PATH" /bin/bash /tmp/post_exec.sh
+        chroot "$CHROOT_PATH" /bin/bash -c "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/libexec:/opt/bin && /tmp/post_exec.sh"
         rm -f "$CHROOT_PATH/tmp/post_exec.sh"
     fi
     
