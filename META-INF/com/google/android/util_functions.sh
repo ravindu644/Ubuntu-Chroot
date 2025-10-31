@@ -36,7 +36,8 @@ detect_root(){
     case "$ROOT_METHOD" in
         magisk)
             echo "- Magisk detected"
-            echo "- WARNING: You may face various TTY bugs. Please report them to the Magisk developer as they are not relatable to this module."
+            echo -e "\n- WARNING: You may face various terminal bugs with Magisk. Please report them to the Magisk developer as they are not relatable to this module."
+            echo -e "- You can try downgrading your Magisk version to v28 or v29, as they used to have stable terminal management.\n"
             ;;
         kernelsu) echo "- Kernelsu detected" ;;
         apatch)   echo "- Apatch detected" ;;
