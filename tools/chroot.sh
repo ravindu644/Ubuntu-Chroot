@@ -177,11 +177,12 @@ start_chroot() {
     advanced_mount "devpts" "$CHROOT_PATH/dev/pts" "devpts" "-o rw,nosuid,noexec,relatime,gid=5,mode=620,ptmxmode=000"
     advanced_mount "tmpfs" "$CHROOT_PATH/tmp" "tmpfs" "-o rw,nosuid,nodev,relatime,size=100M"
     advanced_mount "tmpfs" "$CHROOT_PATH/run" "tmpfs" "-o rw,nosuid,nodev,relatime,size=50M"
-    advanced_mount "/system" "$CHROOT_PATH/system" "bind"
+
+    # Mount /config if possible
+    [ -d "/config" ] && mount -t bind "/config" "$CHROOT_PATH/config" 2>/dev/null && log "Mounted $CHROOT_PATH/config" && echo "$CHROOT_PATH/config" >> "$MOUNTED_FILE"
 
     # Optional mounts for better compatibility.
     [ -d "/sys/kernel/debug" ] && advanced_mount "/sys/kernel/debug" "$CHROOT_PATH/sys/kernel/debug" "bind"
-    [ -d "/config" ] && advanced_mount "/config" "$CHROOT_PATH/config" "bind"
     [ -d "/sys/kernel/config" ] && advanced_mount "/sys/kernel/config" "$CHROOT_PATH/sys/kernel/config" "bind"
     [ -d "/dev/binderfs" ] && advanced_mount "/dev/binderfs" "$CHROOT_PATH/dev/binderfs" "bind"
     [ -d "/proc/bus/usb" ] && advanced_mount "/proc/bus/usb" "$CHROOT_PATH/proc/bus/usb" "bind"
