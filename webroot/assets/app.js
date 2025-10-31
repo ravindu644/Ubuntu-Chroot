@@ -422,7 +422,7 @@
 
     // Use -M flag to run in global mount namespace (KernelSU)
     // This ensures the script can see existing mounts and detect if chroot is already running
-    const cmd = `su -M -c "sh ${PATH_CHROOT_SH} start ${selectedUser}"`;
+    const cmd = `su -M -c "sh ${PATH_CHROOT_SH} start -s ${selectedUser}"`;
     if(navigator.clipboard && navigator.clipboard.writeText){
       navigator.clipboard.writeText(cmd).then(()=> appendConsole(`Login command for user '${selectedUser}' copied to clipboard`))
         .catch(()=> appendConsole('Failed to copy to clipboard'));

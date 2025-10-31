@@ -9,9 +9,10 @@ CHROOT_PATH="${CHROOT_PATH:-/data/local/ubuntu-chroot/rootfs}"
 SCRIPT_NAME="$(basename "$0")"
 SCRIPT_DIR="$(dirname "$0")"
 C_HOSTNAME="ubuntu"
+SILENT=0
 
-log() { echo "[INFO] $1"; }
-warn() { echo "[WARN] $1"; }
+log() { [ "$SILENT" -eq 0 ] && echo "[INFO] $1"; }
+warn() { [ "$SILENT" -eq 0 ] && echo "[WARN] $1"; }
 error() { echo "[ERROR] $1"; }
 
 MOUNT_SUBPATHS="
@@ -25,9 +26,10 @@ run
 if [ "$(id -u)" -ne 0 ]; then error "This script must be run as root."; exit 1; fi
 
 usage() {
-    echo "Usage: $SCRIPT_NAME [start|stop|restart|status] [USER] [--no-shell]"
+    echo "Usage: $SCRIPT_NAME [start|stop|restart|status] [-s] [USER] [--no-shell]"
     echo "  USER: Username to login as (default: root)"
     echo "  --no-shell: Setup chroot without entering interactive shell (for WebUI)"
+    echo "  -s: Silent mode (suppress output)"
     exit 1
 }
 
@@ -331,7 +333,7 @@ start_chroot() {
 
 case "${1:-start}" in
     start)
-        # Parse arguments: start [user] [--no-shell]
+        # Parse arguments: start [-s] [user] [--no-shell]
         local user=""
         local no_shell=""
         shift
@@ -341,8 +343,11 @@ case "${1:-start}" in
                 --no-shell)
                     no_shell="--no-shell"
                     ;;
+                -s)
+                    SILENT=1
+                    ;;
                 *)
-                    # Assume it's a username if not --no-shell
+                    # Assume it's a username if not --no-shell or -s
                     if [ -z "$user" ]; then
                         user="$1"
                     fi
@@ -364,9 +369,21 @@ case "${1:-start}" in
             start_chroot "$no_shell"
         fi
         ;;
-    stop) cleanup_mounts ;;
+    stop)
+        # Parse stop arguments: stop [-s]
+        shift
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                -s)
+                    SILENT=1
+                    ;;
+            esac
+            shift
+        done
+        cleanup_mounts
+        ;;
     restart)
-        # Parse restart arguments: restart [user] [--no-shell]
+        # Parse restart arguments: restart [-s] [user] [--no-shell]
         local restart_user=""
         local restart_no_shell=""
         shift
@@ -375,6 +392,9 @@ case "${1:-start}" in
             case "$1" in
                 --no-shell)
                     restart_no_shell="--no-shell"
+                    ;;
+                -s)
+                    SILENT=1
                     ;;
                 *)
                     if [ -z "$restart_user" ]; then
