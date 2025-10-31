@@ -492,9 +492,10 @@
     }
     try{
       const script = els.postExecScript.value.trim();
-      // Escape single quotes by replacing ' with '\''
-      const escapedScript = script.replace(/'/g, "'\\''");
-      await runCmdSync(`echo '${escapedScript}' > ${POST_EXEC_SCRIPT}`);
+      // Use base64 encoding to safely transfer complex scripts with special characters
+      // This avoids all shell escaping issues
+      const base64Script = btoa(unescape(encodeURIComponent(script)));
+      await runCmdSync(`echo '${base64Script}' | base64 -d > ${POST_EXEC_SCRIPT}`);
       appendConsole('Post-exec script saved successfully', 'success');
     }catch(e){
       appendConsole(`Failed to save post-exec script: ${e.message}`, 'err');
