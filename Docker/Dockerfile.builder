@@ -68,9 +68,8 @@ RUN apt-get install -y --no-install-recommends \
     valgrind \
     strace \
     ltrace \
-    heimdall-flash \
-    android-sdk-platform-tools
-
+    heimdall-flash
+    
 # Install fastfetch (neofetch alternative)
 RUN apt-get install -y --no-install-recommends \
     software-properties-common \
