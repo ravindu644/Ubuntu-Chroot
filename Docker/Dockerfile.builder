@@ -193,13 +193,12 @@ BASHRC
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "  Setup complete! User '$username' created."
-    echo "  Default login will now use this user."
-    echo "  To login as root, use: chroot /path/to/rootfs /bin/bash"
+    echo "     To log in as '$username',"
+    echo "     copy the login command from the webui."
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
 
-    # Switch to the new user
-    exec su - "$username"
+    exit 0
 fi
 EOF
 
