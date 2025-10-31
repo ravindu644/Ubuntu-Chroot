@@ -8,7 +8,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get upgrade -y
 
 # Update and install development tools, compilers, and utilities
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get install -y --no-install-recommends \
     # Core utilities
     bash \
     coreutils \
@@ -20,6 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     wget \
     ca-certificates \
+    locales \
     gnupg \
     # Compression tools
     zip \
@@ -69,11 +70,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ltrace
 
 # Install fastfetch (neofetch alternative)
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get install -y --no-install-recommends \
     software-properties-common \
     && add-apt-repository ppa:zhangsongcui3371/fastfetch \
     && apt-get update && apt-get install -y fastfetch \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Update locales
+RUN locale-gen en_US.UTF-8 && update-locale LANG=en_US.UTF-8 && update-locale LC_ALL=en_US.UTF-8
 
 # Configure SSH
 RUN mkdir -p /var/run/sshd && \
