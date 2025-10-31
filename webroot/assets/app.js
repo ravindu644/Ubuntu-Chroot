@@ -33,6 +33,12 @@
   // Track running commands to prevent UI blocking
   let activeCommandId = null;
 
+  // Root access flag - set by master check
+  let rootAccessConfirmed = false;
+
+  // Track if chroot missing message was logged
+  let _chrootMissingLogged = false;
+
   // Start with actions disabled until we verify the chroot exists
   disableAllActions(true);
 
@@ -138,7 +144,7 @@
     if(!window.cmdExec || typeof cmdExec.executeAsync !== 'function'){
       const msg = 'Backend not available (cmdExec missing in page).';
       appendConsole(msg, 'err');
-      if(onComplete) onComplete(false);
+      if(onComplete) onComplete({ success: false, error: msg });
       return null;
     }
 
@@ -157,7 +163,7 @@
       },
       onComplete: (result) => {
         activeCommandId = null;
-        if(onComplete) onComplete(result.success);
+        if(onComplete) onComplete(result);
       }
     });
 
@@ -246,11 +252,11 @@
     
     // Use setTimeout to allow UI to update before blocking command
     setTimeout(() => {
-      runCmdAsync(cmd, (success) => {
+      runCmdAsync(cmd, (result) => {
         clearInterval(progressInterval);
         progressLine.remove();
         
-        if(success) {
+        if(result.success) {
           appendConsole(`✓ ${action} completed successfully`, 'success');
         } else {
           appendConsole(`✗ ${action} failed`, 'err');
@@ -427,9 +433,6 @@
     }
   }
 
-  // Root access flag - set by master check
-  let rootAccessConfirmed = false;
-
   // Master root detection function - checks backend once and sets UI state
   async function checkRootAccess(){
     if(!window.cmdExec || typeof cmdExec.execute !== 'function'){
@@ -489,7 +492,7 @@
     }
     try{
       const script = els.postExecScript.value.trim();
-      // Escape single quotes by replacing ' with '
+      // Escape single quotes by replacing ' with '\''
       const escapedScript = script.replace(/'/g, "'\\''");
       await runCmdSync(`echo '${escapedScript}' > ${POST_EXEC_SCRIPT}`);
       appendConsole('Post-exec script saved successfully', 'success');
@@ -530,80 +533,101 @@
       return;
     }
 
-    // Close settings popup smoothly
+    // Close settings popup with smooth animation
     closeSettingsPopup();
     
-    // Start uninstall after animations complete
-    setTimeout(() => {
-      appendConsole('Starting chroot uninstallation...', 'warn');
+    // Wait for settings popup animation to complete (300ms for fade out)
+    await new Promise(resolve => setTimeout(resolve, 350));
+    
+    // Now we're back at main UI - start uninstall process
+    appendConsole('━━━ Starting Uninstallation ━━━', 'warn');
+    
+    // Disable all actions during uninstall
+    disableAllActions(true);
+    disableSettingsPopup(true);
 
-      // Disable settings popup during uninstall
-      disableSettingsPopup(true);
+    // Check current status from UI state - no need for additional command
+    const currentStatus = els.statusText.textContent.trim();
+    const isRunning = currentStatus === 'running';
+    
+    if(isRunning){
+      appendConsole('Chroot is currently running - stopping first...', 'info');
+      
+      // Show progress for stopping
+      const progressLine = document.createElement('div');
+      progressLine.className = 'progress-indicator';
+      progressLine.textContent = '⏳ Stopping chroot';
+      els.console.appendChild(progressLine);
+      els.console.scrollTop = els.console.scrollHeight;
+      
+      let dotCount = 0;
+      const progressInterval = setInterval(() => {
+        dotCount = (dotCount + 1) % 4;
+        progressLine.textContent = '⏳ Stopping chroot' + '.'.repeat(dotCount);
+      }, 400);
 
-      // Check if chroot is running
-      (async () => {
-        const statusOutput = await runCmdSync(`sh ${PATH_CHROOT_SH} status`);
-        const isRunning = /Status:\s*RUNNING/i.test(String(statusOutput || ''));
-        
-        if(isRunning){
-          // Show progress for stopping
-          const progressLine = document.createElement('div');
-          progressLine.className = 'progress-indicator';
-          progressLine.textContent = '⏳ Stopping chroot...';
-          els.console.appendChild(progressLine);
-          els.console.scrollTop = els.console.scrollHeight;
-          
-          let dotCount = 0;
-          const progressInterval = setInterval(() => {
-            dotCount = (dotCount + 1) % 4;
-            progressLine.textContent = '⏳ Stopping chroot' + '.'.repeat(dotCount);
-          }, 400);
-
-          runCmdAsync(`sh ${PATH_CHROOT_SH} stop`, (success) => {
-            if(success) {
-              appendConsole('Chroot stopped successfully');
-              progressLine.textContent = '⏳ Removing chroot files...';
-              dotCount = 0;
-              proceedToRemove(progressInterval, progressLine);
-            } else {
-              clearInterval(progressInterval);
-              progressLine.remove();
-              appendConsole('❌ Failed to stop chroot', 'err');
-              disableSettingsPopup(false);
-            }
-          });
-        } else {
-          // Show progress for removing
-          const progressLine = document.createElement('div');
-          progressLine.className = 'progress-indicator';
-          progressLine.textContent = '⏳ Removing chroot files...';
-          els.console.appendChild(progressLine);
-          els.console.scrollTop = els.console.scrollHeight;
-          
-          let dotCount = 0;
-          const progressInterval = setInterval(() => {
-            dotCount = (dotCount + 1) % 4;
-            progressLine.textContent = '⏳ Removing chroot files' + '.'.repeat(dotCount);
-          }, 400);
-          
-          proceedToRemove(progressInterval, progressLine);
-        }
-      })();
-    }, 400);
-
-    function proceedToRemove(progressInterval, progressLine){
-      runCmdAsync(`rm -rf ${CHROOT_DIR}`, (success2) => {
+      // Stop chroot first
+      runCmdAsync(`sh ${PATH_CHROOT_SH} stop`, (result) => {
         clearInterval(progressInterval);
         progressLine.remove();
         
-        if(success2) {
-          appendConsole('✅ Chroot uninstalled successfully', 'success');
-          appendConsole('Please refresh the page to see the updated status.', 'info');
+        if(result.success) {
+          appendConsole('✓ Chroot stopped successfully', 'success');
+          // Proceed to removal after successful stop
+          proceedToRemove();
         } else {
-          appendConsole('❌ Failed to remove chroot files', 'err');
+          appendConsole('✗ Failed to stop chroot', 'err');
+          appendConsole('Uninstallation aborted - please stop the chroot manually first', 'err');
+          disableAllActions(false);
+          disableSettingsPopup(false);
+        }
+      });
+    } else {
+      // Chroot not running - proceed directly to removal
+      appendConsole('Chroot is not running - proceeding with removal...', 'info');
+      proceedToRemove();
+    }
+
+    // Helper function to remove chroot files
+    function proceedToRemove(){
+      appendConsole('Removing chroot files...', 'info');
+      
+      // Show progress for removal
+      const progressLine = document.createElement('div');
+      progressLine.className = 'progress-indicator';
+      progressLine.textContent = '⏳ Removing files';
+      els.console.appendChild(progressLine);
+      els.console.scrollTop = els.console.scrollHeight;
+      
+      let dotCount = 0;
+      const progressInterval = setInterval(() => {
+        dotCount = (dotCount + 1) % 4;
+        progressLine.textContent = '⏳ Removing files' + '.'.repeat(dotCount);
+      }, 400);
+      
+      // Remove chroot directory
+      runCmdAsync(`rm -rf ${CHROOT_DIR}`, (result) => {
+        clearInterval(progressInterval);
+        progressLine.remove();
+        
+        if(result.success) {
+          appendConsole('✅ Chroot uninstalled successfully!', 'success');
+          appendConsole('All chroot data has been removed.', 'info');
+          appendConsole('━━━ Uninstallation Complete ━━━', 'success');
+          
+          // Update UI to reflect removal
+          updateStatus('stopped');
+          disableAllActions(true);
+        } else {
+          appendConsole('✗ Failed to remove chroot files', 'err');
+          appendConsole('You may need to manually remove the directory', 'warn');
+          disableAllActions(false);
         }
         
+        // Always re-enable settings popup after completion
         disableSettingsPopup(false);
+        
+        // Refresh status to update UI
         setTimeout(() => refreshStatus(), 1000);
       });
     }
