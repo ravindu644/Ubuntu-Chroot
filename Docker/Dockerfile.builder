@@ -67,7 +67,9 @@ RUN apt-get install -y --no-install-recommends \
     llvm \
     valgrind \
     strace \
-    ltrace
+    ltrace \
+    heimdall-flash \
+    android-sdk-platform-tools
 
 # Install fastfetch (neofetch alternative)
 RUN apt-get install -y --no-install-recommends \
