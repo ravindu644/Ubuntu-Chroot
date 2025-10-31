@@ -24,9 +24,8 @@ echo "       by @ravindu644          ";
 echo " "
 }
 
-check_for_susfs || exit 1
-
 on_install() {
+  detect_root
   unzip -o "$ZIPFILE" 'webroot/*' -d $MODPATH >&2
   unzip -oj "$ZIPFILE" 'service.sh' -d $MODPATH >&2
 

@@ -7,13 +7,49 @@ setup_chroot(){
 }
 
 check_for_susfs(){
+    local susfs_detected=false
+
     if zcat /proc/config.gz 2>/dev/null | grep -q "CONFIG_KSU_SUSFS=y"; then
-        echo "ERROR: CONFIG_KSU_SUSFS detected — not supported"
-        exit 1
+        susfs_detected=true
     elif [ -d /data/adb/modules/susfs4ksu ]; then
-        echo "ERROR: Using this module with SuSFS is not supported"
-        exit 1
+        susfs_detected=true
     fi
+
+    if [ "$susfs_detected" = true ]; then
+        echo "WARNING: SuSFS detected — not supported. Using this module with SuSFS is extremely not recommended as it may cause stability issues. Do not report these issues to the module developer."
+    fi
+}
+
+detect_root(){
+    # Detect root method
+    if command -v magisk >/dev/null 2>&1; then
+        ROOT_METHOD="magisk"
+    elif command -v ksud >/dev/null 2>&1; then
+        ROOT_METHOD="kernelsu"
+    elif command -v apd >/dev/null 2>&1; then
+        ROOT_METHOD="apatch"
+    else
+        ROOT_METHOD="unknown"
+    fi
+
+    # Print detection result
+    case "$ROOT_METHOD" in
+        magisk)
+            echo "- Magisk detected"
+            echo "- WARNING: You may face various TTY bugs. Please report them to the Magisk developer as they are not relatable to this module."
+            ;;
+        kernelsu) echo "- Kernelsu detected" ;;
+        apatch)   echo "- Apatch detected" ;;
+        *)        echo "- Unknown root method detected. Proceed with caution." ;;
+    esac
+
+    check_for_susfs
+
+    # Enable global mount if needed
+    case "$ROOT_METHOD" in
+        kernelsu) echo 1 > /data/adb/ksu/.global_mnt ;;
+        apatch)   echo 1 > /data/adb/.global_namespace_enable ;;
+    esac
 }
 
 extract_rootfs(){
