@@ -4,13 +4,14 @@
 
 echo "[POST-EXEC] Running post-execution script..."
 
-# Example: Start SSH server
-# if command -v sshd >/dev/null 2>&1; then
-#     echo "[POST-EXEC] Starting SSH server..."
-#     service ssh start || /usr/sbin/sshd
-# fi
 
-# Example: Start other services
+# start dbus service by default
+service dbus start
+
+# Example: Start SSH server
+# service ssh start
+
+# Example: Start other services if installed
 # service postgresql start
 # service nginx start
 
