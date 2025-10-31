@@ -22,8 +22,7 @@ jobs:
       - name: Build Ubuntu RootFS
         run: |
           cd Docker
-          chmod +x build.sh
-          ./build.sh
+          VERSION="${{ github.event.inputs.version || github.ref_name }}" ./build.sh
 
       - name: Prepare Package
         run: |

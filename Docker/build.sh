@@ -1,12 +1,7 @@
 #!/bin/bash
 set -e
 
-# Get version from GitHub tag or use "dev" as default
-if [ -n "$GITHUB_REF" ] && [[ "$GITHUB_REF" == refs/tags/* ]]; then
-    VERSION="${GITHUB_REF#refs/tags/}"
-else
-    VERSION="dev"
-fi
+: "${VERSION:=dev}"
 
 # Get current date in YYYYMMDD format
 DATE=$(date +%Y%m%d)
