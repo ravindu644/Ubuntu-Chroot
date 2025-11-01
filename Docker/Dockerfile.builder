@@ -72,7 +72,7 @@ RUN apt-get install -y --no-install-recommends \
     heimdall-flash
 
 # Install Xubuntu, VNC, and then immediately purge conflicting/unwanted packages
-RUN apt-get install -y --no-install-recommends xubuntu-desktop tigervnc-standalone-server tigervnc-tools \
+RUN apt-get install -y --no-install-recommends xubuntu-desktop tigervnc-standalone-server tigervnc-tools dbus-x11 \
     && apt-get purge -y gdm3 gnome-session gnome-shell whoopsie \
     && apt-get autoremove -y \
     && echo "lightdm shared/default-x-display-manager select lightdm" | debconf-set-selections \
@@ -192,10 +192,8 @@ if [ ! -f "$SETUP_FLAG" ]; then
     # Create the VNC startup script
     cat > /home/$username/.vnc/xstartup << 'VNC_EOF'
 #!/bin/sh
-unset SESSION_MANAGER
-unset DBUS_SESSION_BUS_ADDRESS
 . /etc/X11/Xsession
-xfce4-session &
+dbus-run-session -- xfce4-session
 VNC_EOF
     chmod +x /home/$username/.vnc/xstartup
 
