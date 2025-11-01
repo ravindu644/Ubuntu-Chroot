@@ -1,4 +1,4 @@
-name: Build and Release
+name: Build and Release - GUI
 
 on:
   push:
@@ -29,7 +29,7 @@ jobs:
           # Get version
           VERSION="${{ github.event.inputs.version || github.ref_name }}"
           DATE=$(date +%Y%m%d)
-          ZIP_NAME="Ubuntu-Chroot-${VERSION}-${DATE}.zip"
+          ZIP_NAME="Ubuntu-Chroot-${VERSION}-${DATE}-GUI.zip"
           echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
 
           # Clean the repository
@@ -52,8 +52,8 @@ jobs:
           artifacts: "${{ env.ZIP_NAME }}"
           token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ github.event.inputs.version || github.ref_name }}
-          name: "Ubuntu Chroot ${{ github.event.inputs.version || github.ref_name }}"
+          name: "Ubuntu Chroot GUI ${{ github.event.inputs.version || github.ref_name }}"
           body: |
-            Ubuntu Chroot Environment ${{ github.event.inputs.version || github.ref_name }}
+            Ubuntu Chroot Environment GUI ${{ github.event.inputs.version || github.ref_name }}
 
-            Flashable KernelSU module for Ubuntu ARM64 chroot environment.
+            Flashable KernelSU module for Ubuntu ARM64 chroot environment with GUI.

@@ -70,6 +70,14 @@ RUN apt-get install -y --no-install-recommends \
     strace \
     ltrace \
     heimdall-flash
+
+# Install Xubuntu, VNC, and then immediately purge conflicting/unwanted packages
+RUN apt-get install -y --no-install-recommends xubuntu-desktop tigervnc-standalone-server \
+    && apt-get purge -y gdm3 gnome-session gnome-shell whoopsie \
+    && apt-get autoremove -y \
+    && echo "lightdm shared/default-x-display-manager select lightdm" | debconf-set-selections \
+    && dpkg-reconfigure -f noninteractive lightdm \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
     
 # Install fastfetch (neofetch alternative)
 RUN apt-get install -y --no-install-recommends \
@@ -86,7 +94,7 @@ RUN mkdir -p /var/run/sshd && \
     sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
     sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
 
-# Create WSL-like first-run setup script
+# Create WSL-like first-run setup script with VNC auto-configuration
 RUN cat > /usr/local/bin/first-run-setup.sh << 'EOF'
 #!/bin/bash
 
@@ -177,6 +185,25 @@ if [ ! -f "$SETUP_FLAG" ]; then
     echo "$username ALL=(ALL) NOPASSWD:ALL" > "/etc/sudoers.d/$username"
     chmod 0440 "/etc/sudoers.d/$username"
 
+    # Configure VNC for the new user
+    echo "--- Configuring VNC for user $username ---"
+    mkdir -p /home/$username/.vnc
+    
+    # Create the VNC startup script
+    cat > /home/$username/.vnc/xstartup << 'VNC_EOF'
+#!/bin/sh
+unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
+. /etc/X11/Xsession
+xfce4-session &
+VNC_EOF
+    chmod +x /home/$username/.vnc/xstartup
+
+    # Set the user's VNC password to their login password
+    echo "$password" | vncpasswd -f > /home/$username/.vnc/passwd
+    chmod 600 /home/$username/.vnc/passwd
+    echo "--- VNC configuration complete ---"
+
     # Configure bash for the user (like WSL)
     cat >> /home/$username/.bashrc << 'BASHRC'
 export PS1="\[\e[38;5;208m\]\u@\h\[\e[m\]:\[\e[34m\]\w\[\e[m\]\$ "
@@ -199,6 +226,7 @@ BASHRC
     echo "  Setup complete! User '$username' created."
     echo "     To log in as '$username',"
     echo "     copy the login command from the webui."
+    echo "     VNC server will start on the next boot."
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
 
