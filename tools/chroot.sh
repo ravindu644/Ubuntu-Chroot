@@ -316,7 +316,7 @@ enter_chroot() {
     log "Entering chroot as user: $user"
     local common_exports="
         export PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/libexec:/opt/bin';
-        export TERM='xterm-256-color';
+        export TERM='xterm';
     "
 
     # Load holder PID
