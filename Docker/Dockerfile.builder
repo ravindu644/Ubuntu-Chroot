@@ -72,7 +72,7 @@ RUN apt-get install -y --no-install-recommends \
     heimdall-flash
 
 # Install Xubuntu, VNC, and then immediately purge conflicting/unwanted packages
-RUN apt-get install -y --no-install-recommends xubuntu-desktop tigervnc-standalone-server \
+RUN apt-get install -y --no-install-recommends xubuntu-desktop tigervnc-standalone-server tigervnc-tools \
     && apt-get purge -y gdm3 gnome-session gnome-shell whoopsie \
     && apt-get autoremove -y \
     && echo "lightdm shared/default-x-display-manager select lightdm" | debconf-set-selections \
