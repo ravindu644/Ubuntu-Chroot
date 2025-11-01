@@ -40,7 +40,7 @@ usage() {
 
 run_in_ns() {
     if [ -n "$HOLDER_PID" ] && kill -0 "$HOLDER_PID" 2>/dev/null; then
-        nsenter --target "$HOLDER_PID" --mount -- "$@"
+        busybox nsenter --target "$HOLDER_PID" --mount -- "$@"
     else
         "$@"
     fi
@@ -326,7 +326,7 @@ enter_chroot() {
 
     if [ "$user" = "root" ]; then
         # For root, directly execute a login shell inside the namespace
-        exec nsenter --target "$HOLDER_PID" --mount -- \
+        exec busybox nsenter --target "$HOLDER_PID" --mount -- \
             chroot "$CHROOT_PATH" /bin/bash -c "
                 $common_exports
                 export HOME='/root';
@@ -336,7 +336,7 @@ enter_chroot() {
     else
         # For non-root users, bypass PAM by using chroot with su's --session-command
         # This avoids PAM session errors in isolated namespaces
-        exec nsenter --target "$HOLDER_PID" --mount -- \
+        exec busybox nsenter --target "$HOLDER_PID" --mount -- \
             chroot "$CHROOT_PATH" /bin/bash -c "
                 $common_exports
                 # Create user runtime directory if it doesn't exist
