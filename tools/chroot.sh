@@ -228,7 +228,7 @@ start_chroot() {
     apply_internet_fix
 
     # Increase shared memory for services like PostgreSQL.
-    sysctl -w kernel.shmmax=268435456 >/dev/null
+    sysctl -w kernel.shmmax=268435456 >/dev/null 2>&1
 
     # Run post-execution script if it exists.
     if [ -f "$POST_EXEC_SCRIPT" ] && [ -x "$POST_EXEC_SCRIPT" ]; then
