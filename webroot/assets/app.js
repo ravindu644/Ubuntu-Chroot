@@ -572,9 +572,8 @@
       
       // Stop chroot first
       setTimeout(() => {
-        runCmdAsync(`sh ${PATH_CHROOT_SH} stop`, (result) => {
+        runCmdAsync(`sh ${PATH_CHROOT_SH} stop >/dev/null 2>&1`, (result) => {
           if(result.success) {
-            appendConsole('✓ Chroot stopped successfully', 'success');
             // Proceed to removal after successful stop
             proceedToRemove();
           } else {
