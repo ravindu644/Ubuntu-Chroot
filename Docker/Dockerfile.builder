@@ -71,8 +71,14 @@ RUN apt-get install -y --no-install-recommends \
     ltrace \
     heimdall-flash
 
-# Install Xubuntu, VNC, and then immediately purge conflicting/unwanted packages
-RUN apt-get install -y --no-install-recommends xubuntu-desktop tigervnc-standalone-server tigervnc-tools dbus-x11 \
+# Install Xubuntu, VNC, all required icon themes, and then immediately purge conflicting/unwanted packages
+RUN apt-get install -y --no-install-recommends \
+    xubuntu-desktop \
+    tigervnc-standalone-server \
+    tigervnc-tools \
+    dbus-x11 \
+    adwaita-icon-theme-full \
+    hicolor-icon-theme \
     && apt-get purge -y gdm3 gnome-session gnome-shell whoopsie \
     && apt-get autoremove -y \
     && echo "lightdm shared/default-x-display-manager select lightdm" | debconf-set-selections \
