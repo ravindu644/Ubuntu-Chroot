@@ -239,6 +239,9 @@ start_chroot() {
         rm -f "$CHROOT_PATH/root/post_exec.sh"
     fi
 
+    # Disable Android Doze to prevent background process slowdowns when screen is off
+    su -c 'dumpsys deviceidle disable' >/dev/null 2>&1 && log "Disabled Android Doze to prevent background slowdowns"
+
     log "Chroot environment setup completed successfully!"
 }
 
@@ -295,6 +298,9 @@ stop_chroot() {
         rm -f "$HOLDER_PID_FILE"
     fi
     
+    # Re-enable Android Doze
+    su -c 'dumpsys deviceidle enable' >/dev/null 2>&1 && log "Re-enabled Android Doze"
+
     log "Chroot stopped successfully."
 }
 
