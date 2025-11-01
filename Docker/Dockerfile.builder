@@ -182,6 +182,9 @@ if [ ! -f "$SETUP_FLAG" ]; then
 export PS1="\[\e[38;5;208m\]\u@\h\[\e[m\]:\[\e[34m\]\w\[\e[m\]\$ "
 alias ll="ls -lah"
 alias gs="git status"
+if [ -f /etc/bash_completion ]; then
+    . /etc/bash_completion
+fi
 BASHRC
 
     chown -R $username:$username /home/$username
@@ -211,7 +214,10 @@ RUN echo '#!/bin/bash' > /root/.bashrc && \
     echo '    . /usr/local/bin/first-run-setup.sh' >> /root/.bashrc && \
     echo 'fi' >> /root/.bashrc && \
     echo 'export PS1="\[\e[38;5;208m\]\u@\h\[\e[m\]:\[\e[34m\]\w\[\e[m\]# "' >> /root/.bashrc && \
-    echo 'alias ll="ls -lah"' >> /root/.bashrc
+    echo 'alias ll="ls -lah"' >> /root/.bashrc && \
+    echo 'if [ -f /etc/bash_completion ]; then' >> /root/.bashrc && \
+    echo '    . /etc/bash_completion' >> /root/.bashrc && \
+    echo 'fi' >> /root/.bashrc
 
 # Stage 2: Export to scratch for extraction
 FROM scratch AS export
