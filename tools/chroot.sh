@@ -310,7 +310,7 @@ enter_chroot() {
     log "Entering chroot as user: $user"
     local common_exports="
         export PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/libexec:/opt/bin';
-        export TERM='xterm-256color';
+        export TERM='xterm-256-color';
     "
 
     # Load holder PID
@@ -328,20 +328,29 @@ enter_chroot() {
                 exec /bin/bash --login;
             "
     else
-        # For other users, use su to properly switch users inside the namespace
+        # For non-root users, bypass PAM by using chroot with su's --session-command
+        # This avoids PAM session errors in isolated namespaces
         exec nsenter --target "$HOLDER_PID" --mount -- \
             chroot "$CHROOT_PATH" /bin/bash -c "
                 $common_exports
+                # Create user runtime directory if it doesn't exist
+                user_uid=\$(id -u '$user' 2>/dev/null)
+                if [ -n \"\$user_uid\" ]; then
+                    mkdir -p /run/user/\$user_uid 2>/dev/null
+                    chown '$user':'$user' /run/user/\$user_uid 2>/dev/null
+                    chmod 700 /run/user/\$user_uid 2>/dev/null
+                fi
                 export HOME=\"/home/$user\";
                 cd \"/home/$user\" 2>/dev/null || export HOME='/root';
-                exec /bin/su - '$user';
+                # Use su without login to avoid PAM session issues
+                exec /bin/su '$user' -s /bin/bash;
             "
     fi
 }
 
 show_status() {
     # Status output for webui detection
-    if [ -f "$HOLDER_PID_FILE" ]; then
+    if is_chroot_running; then
         echo "Status: RUNNING"
     else
         echo "Status: STOPPED"
