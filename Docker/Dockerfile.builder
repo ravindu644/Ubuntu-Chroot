@@ -22,6 +22,7 @@ RUN apt-get install -y --no-install-recommends \
     ca-certificates \
     locales \
     gnupg \
+    bash-completion \
     # Compression tools
     zip \
     unzip \
@@ -207,7 +208,7 @@ RUN chmod +x /usr/local/bin/first-run-setup.sh
 # Set up root's bashrc - auto-run setup if not done
 RUN echo '#!/bin/bash' > /root/.bashrc && \
     echo 'if [ ! -f /var/lib/.user-setup-done ]; then' >> /root/.bashrc && \
-    echo '    /usr/local/bin/first-run-setup.sh' >> /root/.bashrc && \
+    echo '    . /usr/local/bin/first-run-setup.sh' >> /root/.bashrc && \
     echo 'fi' >> /root/.bashrc && \
     echo 'export PS1="\[\e[38;5;208m\]\u@\h\[\e[m\]:\[\e[34m\]\w\[\e[m\]# "' >> /root/.bashrc && \
     echo 'alias ll="ls -lah"' >> /root/.bashrc
