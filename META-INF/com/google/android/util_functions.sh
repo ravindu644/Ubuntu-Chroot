@@ -16,7 +16,8 @@ check_for_susfs(){
     fi
 
     if [ "$susfs_detected" = true ]; then
-        echo "WARNING: SuSFS detected — not supported. Using this module with SuSFS is extremely not recommended as it may cause stability issues. Do not report these issues to the module developer."
+        echo "ERROR: SuSFS detected — not supported. This module is incompatible with SuSFS."
+        exit 1
     fi
 }
 
@@ -45,12 +46,6 @@ detect_root(){
     esac
 
     check_for_susfs
-
-    # Enable global mount if needed
-    case "$ROOT_METHOD" in
-        kernelsu) echo 1 > /data/adb/ksu/.global_mnt ;;
-        apatch)   echo 1 > /data/adb/.global_namespace_enable ;;
-    esac
 }
 
 extract_rootfs(){

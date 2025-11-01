@@ -12,6 +12,7 @@ SCRIPT_DIR="$(dirname "$0")"
 C_HOSTNAME="ubuntu"
 MOUNTED_FILE="/data/local/ubuntu-chroot/mount.points"
 POST_EXEC_SCRIPT="/data/local/ubuntu-chroot/post_exec.sh"
+HOLDER_PID_FILE="/data/local/ubuntu-chroot/holder.pid"
 SILENT=0
 
 
@@ -37,19 +38,27 @@ usage() {
     exit 1
 }
 
+run_in_ns() {
+    if [ -n "$HOLDER_PID" ] && kill -0 "$HOLDER_PID" 2>/dev/null; then
+        nsenter --target "$HOLDER_PID" --mount -- "$@"
+    else
+        "$@"
+    fi
+}
+
 
 # --- State Check Functions ---
 
 is_mounted() {
-    # Check if a given path is a mountpoint.
+    # Check if a given path is a mountpoint in the isolated namespace.
     # The output of mountpoint is "path is a mountpoint" on success.
     # We grep for 'is a' to confirm.
-    [ -n "$(mountpoint "$1" 2>/dev/null | grep 'is a')" ]
+    run_in_ns mountpoint "$1" 2>/dev/null | grep -q 'is a'
 }
 
 is_chroot_running() {
-    # The most reliable indicator of a running chroot is an active /proc mount.
-    is_mounted "$CHROOT_PATH/proc"
+    # Check if the namespace holder process is running
+    [ -f "$HOLDER_PID_FILE" ] && kill -0 "$(cat "$HOLDER_PID_FILE")" 2>/dev/null
 }
 
 
@@ -57,18 +66,19 @@ is_chroot_running() {
 
 advanced_mount() {
     local src="$1" tgt="$2" type="$3" opts="$4"
-    mkdir -p "$(dirname "$tgt")" 2>/dev/null
     
     # Create target directory for non-bind mounts or if source doesn't exist for bind
     if [ "$type" = "tmpfs" ] || [ "$type" = "devpts" ] || [ ! -e "$src" ]; then
-        mkdir -p "$tgt"
+        run_in_ns mkdir -p "$tgt" 2>/dev/null
+    else
+        run_in_ns mkdir -p "$(dirname "$tgt")" 2>/dev/null
     fi
 
     if [ "$type" = "bind" ]; then
         [ -e "$src" ] || { warn "Source for bind mount does not exist: $src"; return 1; }
-        mount --bind "$src" "$tgt"
+        run_in_ns mount --bind "$src" "$tgt"
     else
-        mount -t "$type" $opts "$type" "$tgt"
+        run_in_ns mount -t "$type" $opts "$type" "$tgt"
     fi
     
     if [ $? -eq 0 ]; then
@@ -84,16 +94,12 @@ setup_storage() {
     local storage_path="/storage/emulated/0"
     local chroot_storage="$CHROOT_PATH/storage/emulated/0"
     
-    if is_mounted "$chroot_storage"; then
-        log "Storage already mounted"
-        return 0
-    fi
-    
     if [ -d "$storage_path" ] && [ -r "$storage_path" ]; then
         log "Setting up storage access: $storage_path"
-        mkdir -p "$chroot_storage"
-        if mount -o bind "$storage_path" "$chroot_storage" 2>/dev/null; then
+        run_in_ns mkdir -p "$chroot_storage"
+        if run_in_ns mount -o bind "$storage_path" "$chroot_storage" 2>/dev/null; then
             log "Storage mounted at /storage/emulated/0"
+            echo "$chroot_storage" >> "$MOUNTED_FILE"
         else
             warn "Storage mount failed"
         fi
@@ -119,18 +125,18 @@ apply_internet_fix() {
     # Add necessary network groups for apps like apt.
     grep -q "aid_inet" "$CHROOT_PATH/etc/group" || echo "aid_inet:x:3003:" >> "$CHROOT_PATH/etc/group"
     grep -q "aid_net_raw" "$CHROOT_PATH/etc/group" || echo "aid_net_raw:x:3004:" >> "$CHROOT_PATH/etc/group"
-    if chroot "$CHROOT_PATH" id root >/dev/null 2>&1; then
-        chroot "$CHROOT_PATH" /usr/sbin/usermod -aG aid_inet root 2>/dev/null
+    if run_in_ns chroot "$CHROOT_PATH" id root >/dev/null 2>&1; then
+        run_in_ns chroot "$CHROOT_PATH" /usr/sbin/usermod -aG aid_inet root 2>/dev/null
     fi
-    if chroot "$CHROOT_PATH" id _apt >/dev/null 2>&1; then
-        chroot "$CHROOT_PATH" /usr/sbin/usermod -aG aid_inet,aid_net_raw _apt 2>/dev/null
+    if run_in_ns chroot "$CHROOT_PATH" id _apt >/dev/null 2>&1; then
+        run_in_ns chroot "$CHROOT_PATH" /usr/sbin/usermod -aG aid_inet,aid_net_raw _apt 2>/dev/null
     fi
     
     # Set up hosts file and enable IP forwarding.
     sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1
     echo "127.0.0.1    localhost $C_HOSTNAME" > "$CHROOT_PATH/etc/hosts"
     echo "::1          localhost ip6-localhost ip6-loopback" >> "$CHROOT_PATH/etc/hosts"
-    echo "$C_HOSTNAME" > "$CHROOT_PATH/proc/sys/kernel/hostname" 2>/dev/null
+    run_in_ns sh -c "echo '$C_HOSTNAME' > '$CHROOT_PATH/proc/sys/kernel/hostname'" 2>/dev/null
     
     log "Internet fix successfully applied."
 }
@@ -155,6 +161,20 @@ kill_chroot_processes() {
 
 start_chroot() {
     log "Setting up advanced chroot environment..."
+    
+    # Set up namespace isolation
+    if [ -f "$HOLDER_PID_FILE" ] && kill -0 "$(cat "$HOLDER_PID_FILE")" 2>/dev/null; then
+        log "Namespace holder already running."
+        HOLDER_PID=$(cat "$HOLDER_PID_FILE")
+    else
+        log "Creating new mount namespace..."
+        unshare --fork --mount busybox sleep infinity &
+        HOLDER_PID=$!
+        echo $HOLDER_PID > "$HOLDER_PID_FILE"
+        sleep 0.5  # Give namespace time to initialize
+        log "Running in isolated mount namespace (PID: $HOLDER_PID)"
+    fi
+    
     [ -d "$CHROOT_PATH" ] || { error "Chroot directory not found at $CHROOT_PATH"; exit 1; }
 
     # Clean up previous mount tracking file if it exists.
@@ -168,7 +188,7 @@ start_chroot() {
     (setenforce 0 && log "SELinux set to permissive mode") || warn "Failed to set SELinux to permissive mode"
 
     # Remount /data with suid to fix sudo issues for non-root users.
-    mount -o remount,suid /data 2>/dev/null && log "Remounted /data with suid" || warn "Failed to remount /data with suid"
+    run_in_ns mount -o remount,suid /data 2>/dev/null && log "Remounted /data with suid" || warn "Failed to remount /data with suid"
 
     log "Setting up system mounts..."
     advanced_mount "/proc" "$CHROOT_PATH/proc" "proc" "-o rw,nosuid,nodev,noexec,relatime"
@@ -179,7 +199,7 @@ start_chroot() {
     advanced_mount "tmpfs" "$CHROOT_PATH/run" "tmpfs" "-o rw,nosuid,nodev,relatime,size=50M"
 
     # Mount /config if possible
-    [ -d "/config" ] && mount -t bind "/config" "$CHROOT_PATH/config" 2>/dev/null && log "Mounted $CHROOT_PATH/config" && echo "$CHROOT_PATH/config" >> "$MOUNTED_FILE"
+    [ -d "/config" ] && run_in_ns mount -t bind "/config" "$CHROOT_PATH/config" 2>/dev/null && log "Mounted $CHROOT_PATH/config" && echo "$CHROOT_PATH/config" >> "$MOUNTED_FILE"
 
     # Optional mounts for better compatibility.
     [ -d "/sys/kernel/debug" ] && advanced_mount "/sys/kernel/debug" "$CHROOT_PATH/sys/kernel/debug" "bind"
@@ -190,11 +210,11 @@ start_chroot() {
 
     # Minimal cgroup setup for Docker support.
     log "Setting up minimal cgroups for Docker..."
-    mkdir -p "$CHROOT_PATH/sys/fs/cgroup"
-    if mount -t tmpfs -o mode=755 tmpfs "$CHROOT_PATH/sys/fs/cgroup" 2>/dev/null; then
+    run_in_ns mkdir -p "$CHROOT_PATH/sys/fs/cgroup"
+    if run_in_ns mount -t tmpfs -o mode=755 tmpfs "$CHROOT_PATH/sys/fs/cgroup" 2>/dev/null; then
         echo "$CHROOT_PATH/sys/fs/cgroup" >> "$MOUNTED_FILE"
-        mkdir -p "$CHROOT_PATH/sys/fs/cgroup/devices"
-        if mount -t cgroup -o devices cgroup "$CHROOT_PATH/sys/fs/cgroup/devices" 2>/dev/null; then
+        run_in_ns mkdir -p "$CHROOT_PATH/sys/fs/cgroup/devices"
+        if run_in_ns mount -t cgroup -o devices cgroup "$CHROOT_PATH/sys/fs/cgroup/devices" 2>/dev/null; then
             log "Cgroup devices mounted successfully."
             echo "$CHROOT_PATH/sys/fs/cgroup/devices" >> "$MOUNTED_FILE"
         else
@@ -213,10 +233,10 @@ start_chroot() {
     # Run post-execution script if it exists.
     if [ -f "$POST_EXEC_SCRIPT" ] && [ -x "$POST_EXEC_SCRIPT" ]; then
         log "Running post-execution script..."
-        cp "$POST_EXEC_SCRIPT" "$CHROOT_PATH/tmp/post_exec.sh"
-        chmod +x "$CHROOT_PATH/tmp/post_exec.sh"
-        chroot "$CHROOT_PATH" /bin/bash -c "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/libexec:/opt/bin && /tmp/post_exec.sh"
-        rm -f "$CHROOT_PATH/tmp/post_exec.sh"
+        cp "$POST_EXEC_SCRIPT" "$CHROOT_PATH/root/post_exec.sh"
+        chmod +x "$CHROOT_PATH/root/post_exec.sh"
+        run_in_ns chroot "$CHROOT_PATH" /bin/bash -c "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/libexec:/opt/bin && /root/post_exec.sh"
+        rm -f "$CHROOT_PATH/root/post_exec.sh"
     fi
 
     log "Chroot environment setup completed successfully!"
@@ -232,15 +252,12 @@ stop_chroot() {
     if is_mounted "$chroot_storage"; then
         log "Unmounting storage safely..."
         for i in 1 2 3; do
-            if umount "$chroot_storage" 2>/dev/null; then
+            if run_in_ns umount "$chroot_storage" 2>/dev/null; then
                 log "Storage unmounted successfully."
                 break
             fi
             [ $i -lt 3 ] && sleep 1
         done
-        if is_mounted "$chroot_storage"; then
-            warn "Storage still mounted."
-        fi
     fi
     
     # Unmount tracked mount points in reverse order for safety.
@@ -249,8 +266,8 @@ stop_chroot() {
         sort -r "$MOUNTED_FILE" | while read -r mount_point; do
             # Use lazy unmount for /sys as it can be busy.
             case "$mount_point" in
-                "$CHROOT_PATH"/sys*) umount -l "$mount_point" 2>/dev/null ;;
-                *) umount "$mount_point" 2>/dev/null ;;
+                "$CHROOT_PATH"/sys*) run_in_ns umount -l "$mount_point" 2>/dev/null ;;
+                *) run_in_ns umount "$mount_point" 2>/dev/null ;;
             esac
         done
         rm -f "$MOUNTED_FILE"
@@ -269,6 +286,15 @@ stop_chroot() {
         rm -f "$og_selinux_file"
     fi
     
+    # Kill namespace holder process
+    if [ -f "$HOLDER_PID_FILE" ]; then
+        HOLDER_PID=$(cat "$HOLDER_PID_FILE")
+        if kill -0 "$HOLDER_PID" 2>/dev/null; then
+            kill "$HOLDER_PID" 2>/dev/null && log "Killed namespace holder process." || warn "Failed to kill holder process."
+        fi
+        rm -f "$HOLDER_PID_FILE"
+    fi
+    
     log "Chroot stopped successfully."
 }
 
@@ -276,7 +302,6 @@ enter_chroot() {
     local user="$1"
 
     # Check if we are running in an interactive terminal.
-    # If not, do not attempt to exec into a shell, as it will hang.
     if ! [ -t 1 ]; then
         log "Chroot is running. To enter manually, use: sh $SCRIPT_NAME start $user"
         return
@@ -288,35 +313,38 @@ enter_chroot() {
         export TERM='xterm-256color';
     "
 
+    # Load holder PID
+    if [ -f "$HOLDER_PID_FILE" ]; then
+        HOLDER_PID=$(cat "$HOLDER_PID_FILE")
+    fi
+
     if [ "$user" = "root" ]; then
-        # For root, directly execute a login shell.
-        exec chroot "$CHROOT_PATH" /bin/bash -c "
-            $common_exports
-            export HOME='/root';
-            cd /root;
-            exec /bin/bash --login;
-        "
+        # For root, directly execute a login shell inside the namespace
+        exec nsenter --target "$HOLDER_PID" --mount -- \
+            chroot "$CHROOT_PATH" /bin/bash -c "
+                $common_exports
+                export HOME='/root';
+                cd /root;
+                exec /bin/bash --login;
+            "
     else
-        # For other users, use su to properly switch users.
-        exec chroot "$CHROOT_PATH" /bin/bash -c "
-            $common_exports
-            export HOME=\"/home/$user\";
-            cd \"/home/$user\" 2>/dev/null || export HOME='/root'; # Fallback to /root if user home doesn't exist
-            exec /bin/su - '$user';
-        "
+        # For other users, use su to properly switch users inside the namespace
+        exec nsenter --target "$HOLDER_PID" --mount -- \
+            chroot "$CHROOT_PATH" /bin/bash -c "
+                $common_exports
+                export HOME=\"/home/$user\";
+                cd \"/home/$user\" 2>/dev/null || export HOME='/root';
+                exec /bin/su - '$user';
+            "
     fi
 }
 
 show_status() {
-    log "Checking chroot status..."
-    if is_chroot_running; then
-        log "Status: RUNNING"
-        log "Active mounts:"
-        mount | grep "$CHROOT_PATH" | while read -r line; do
-            echo "  -> $line"
-        done
+    # Status output for webui detection
+    if [ -f "$HOLDER_PID_FILE" ]; then
+        echo "Status: RUNNING"
     else
-        log "Status: STOPPED"
+        echo "Status: STOPPED"
     fi
 }
 
@@ -326,6 +354,12 @@ show_status() {
 # Must be run as root.
 if [ "$(id -u)" -ne 0 ]; then
     error "This script must be run as root."
+    exit 1
+fi
+
+# Check if busybox is available
+if ! command -v busybox >/dev/null 2>&1; then
+    error "busybox command not found. Please install busybox."
     exit 1
 fi
 
@@ -353,12 +387,10 @@ for arg in "$@"; do
         -h|--help)
             usage
             ;;
-        # This is the POSIX-compliant way to check for an option.
         -*)
             echo "Unknown option: $arg"
             usage
             ;;
-        # Anything not matching the above is assumed to be the username.
         *)
             USER_ARG="$arg"
             ;;

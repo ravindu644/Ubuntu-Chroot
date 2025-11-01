@@ -315,7 +315,7 @@
       // Get status without blocking UI
       const out = await runCmdSync(`sh ${PATH_CHROOT_SH} status`);
       const s = String(out || '');
-      // Check for "Status: RUNNING" from the new detection method
+      // Check for "Status: RUNNING" from the status output
       const running = /Status:\s*RUNNING/i.test(s);
       updateStatus(running ? 'running' : 'stopped');
 
@@ -420,9 +420,8 @@
     // Save selected user
     try{ localStorage.setItem('chroot_selected_user', selectedUser); }catch(e){}
 
-    // Use -M flag to run in global mount namespace (KernelSU)
-    // This ensures the script can see existing mounts and detect if chroot is already running
-    const cmd = `su -M -c "sh ${PATH_CHROOT_SH} start -s ${selectedUser}"`;
+    // Generate login command for selected user
+    const cmd = `su -c "sh ${PATH_CHROOT_SH} start -s ${selectedUser}"`;
     if(navigator.clipboard && navigator.clipboard.writeText){
       navigator.clipboard.writeText(cmd).then(()=> appendConsole(`Login command for user '${selectedUser}' copied to clipboard`))
         .catch(()=> appendConsole('Failed to copy to clipboard'));
