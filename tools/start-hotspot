@@ -1,0 +1,307 @@
+#!/system/bin/sh
+# THIS SCRIPT MUST BE RUN FROM A ROOT ANDROID SHELL
+#
+# Version 30: The Dual-Band Release
+# - Allows the user to select between a 2.4GHz and a 5GHz hotspot.
+# - Automatically enables 802.11ac (Wi-Fi 5) for 5GHz mode.
+# - The definitive, feature-complete, polished script.
+
+# --- Global Variables ---
+DNS_SERVER1=$(getprop net.dns1)
+[ -z "$DNS_SERVER1" ] && DNS_SERVER1=8.8.8.8
+PHY_IFACE="wlan0"
+AP_IFACE="ap0"
+CHROOT_PATH="/data/local/ubuntu-chroot/rootfs"
+HOLDER_PID_FILE="/data/local/ubuntu-chroot/holder.pid"
+
+# Hotspot configuration variables (set via arguments or defaults)
+UPSTREAM_IFACE=""
+SSID=""
+PASSWORD=""
+BAND="2"
+CHANNEL=""
+
+# Network configuration constants
+IP_GW="192.168.42.1"
+IP_SUB_OCTET="255.255.255.0"
+IP_SUB_CDIR="24"
+IP_NET_ADDR="192.168.42.0"
+IP_BEGIN="192.168.42.10"
+IP_END="192.168.42.50"
+
+# --- Logging and Utility Functions ---
+
+log() { echo "$1"; }
+warn() { echo "[WARN] $1"; }
+error() { echo "[ERROR] $1"; }
+
+# --- Helper Function ---
+run_in_ns() {
+    if [ -n "$HOLDER_PID" ] && kill -0 "$HOLDER_PID" 2>/dev/null; then
+        busybox nsenter --target "$HOLDER_PID" --mount -- "$@"
+    else
+        "$@"
+    fi
+}
+
+run_in_chroot() {
+    run_in_ns chroot "$CHROOT_PATH" /bin/bash -c "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; $*"
+}
+
+check_prerequisites() {
+    
+    # Check Android commands
+    if ! command -v /system/bin/ip >/dev/null 2>&1; then
+        error "ip command not found"
+        exit 1
+    fi
+    
+    if ! command -v /system/bin/iptables >/dev/null 2>&1; then
+        error "iptables command not found"
+        exit 1
+    fi
+
+    # Check chroot commands
+    if ! run_in_chroot "command -v iw" >/dev/null 2>&1; then
+        error "iw command not found in chroot"
+        exit 1
+    fi
+    
+    if ! run_in_chroot "command -v hostapd" >/dev/null 2>&1; then
+        error "hostapd not found in chroot. Please install hostapd."
+        exit 1
+    fi
+    
+    if ! run_in_chroot "command -v dhcpd" >/dev/null 2>&1; then
+        error "dhcpd not found in chroot. Please install isc-dhcp-server."
+        exit 1
+    fi
+}
+
+# --- Functions ---
+function print_usage() {
+    echo "Usage: sh start_wifi_hotspot.sh [-o <iface>] [-s <SSID>] [-p <password>] [-b <band>] [-c <channel>] [-k] [-h|--help]"
+    echo "    -o <iface>     Upstream interface"
+    echo "    -s <SSID>      Hotspot name"
+    echo "    -p <password>  Hotspot password"
+    echo "    -b <band>      Band selection (2 for 2.4GHz, 5 for 5GHz)"
+    echo "    -c <channel>   Channel (1-11 for 2.4GHz, 36/48/149 etc for 5GHz)"
+    echo "    -k             Kill hotspot"
+    echo "    -h, --help     Show this help"
+}
+
+function kill_proc() {
+    log "Bringing down $AP_IFACE and reverting settings..."
+
+    run_in_chroot "pkill hostapd; pkill dhcpd"
+    run_in_chroot "rm -f /var/lib/dhcp/dhcpd.leases /tmp/hotspot_dhcpd.conf /run/dhcpd.pid /tmp/hotspot_hostapd.conf"
+
+    run_in_ns sh -c "echo 0 > /proc/sys/net/ipv4/ip_forward"
+
+    run_in_ns /system/bin/iptables -t nat -D POSTROUTING -o $UPSTREAM_IFACE -j MASQUERADE 2>/dev/null
+    run_in_ns /system/bin/iptables -t filter -D FORWARD -i $UPSTREAM_IFACE -o $AP_IFACE -j ACCEPT 2>/dev/null
+    run_in_ns /system/bin/iptables -t filter -D FORWARD -i $AP_IFACE -o $UPSTREAM_IFACE -j ACCEPT 2>/dev/null
+    run_in_ns /system/bin/ip rule del from all iif $AP_IFACE lookup $UPSTREAM_IFACE 2>/dev/null
+    run_in_ns /system/bin/ip route del $IP_NET_ADDR/$IP_SUB_CDIR dev $AP_IFACE 2>/dev/null
+    
+    log "Deleting virtual interface $AP_IFACE..."
+    run_in_chroot "iw dev $AP_IFACE del"
+
+    log "Done."
+    exit 0
+}
+
+function config_network() {
+    log "Creating virtual AP interface '$AP_IFACE'..."
+    run_in_chroot "iw dev $AP_IFACE del" 2>/dev/null
+    run_in_chroot "iw dev $PHY_IFACE interface add $AP_IFACE type __ap"
+    
+    log "Configuring hotspot IP address..."
+    run_in_ns /system/bin/ip link set $AP_IFACE down
+    run_in_ns /system/bin/ip addr flush dev $AP_IFACE
+    run_in_ns /system/bin/ip addr add $IP_GW/$IP_SUB_CDIR dev $AP_IFACE
+    run_in_ns /system/bin/ip link set $AP_IFACE up
+
+    log "Enabling Kernel IP forwarding..."
+    run_in_ns sh -c "echo 1 > /proc/sys/net/ipv4/ip_forward"
+    
+    log "Adding routing and firewall rules..."
+    MAIN_TABLE=$(run_in_ns /system/bin/ip rule list | head -n1 | sed -n -e 's/^.*lookup \(.*\)$/\1/p')
+    log "Adding explicit route for hotspot subnet to main table ($MAIN_TABLE)..."
+    run_in_ns /system/bin/ip route append $IP_NET_ADDR/$IP_SUB_CDIR dev $AP_IFACE src $IP_GW proto kernel scope link table $MAIN_TABLE
+
+    run_in_ns /system/bin/ip rule add from all iif $AP_IFACE lookup $UPSTREAM_IFACE
+    run_in_ns /system/bin/iptables -t filter -I FORWARD 1 -i $AP_IFACE -o $UPSTREAM_IFACE -j ACCEPT
+    run_in_ns /system/bin/iptables -t filter -I FORWARD 2 -i $UPSTREAM_IFACE -o $AP_IFACE -j ACCEPT
+    run_in_ns /system/bin/iptables -t nat -I POSTROUTING 1 -o $UPSTREAM_IFACE -j MASQUERADE
+}
+
+function start_services() {
+    log "Creating configuration files in chroot..."
+    
+    # --- Smart Config Generation ---
+    if [ "$BAND" = "5" ]; then
+        # 5GHz Configuration with 802.11ac
+        HOSTAPD_CONF="interface=$AP_IFACE
+driver=nl80211
+ssid=$SSID
+hw_mode=a
+channel=$CHANNEL
+ieee80211n=1
+ieee80211ac=1
+wpa=2
+wpa_passphrase=$PASSWORD
+wpa_key_mgmt=WPA-PSK
+rsn_pairwise=CCMP"
+    else
+        # 2.4GHz Configuration (Default)
+        HOSTAPD_CONF="interface=$AP_IFACE
+driver=nl80211
+ssid=$SSID
+hw_mode=g
+channel=$CHANNEL
+wpa=2
+wpa_passphrase=$PASSWORD
+wpa_key_mgmt=WPA-PSK
+rsn_pairwise=CCMP"
+    fi
+
+    run_in_chroot "echo \"$HOSTAPD_CONF\" > /tmp/hotspot_hostapd.conf"
+
+    run_in_chroot "cat << EOF > /tmp/hotspot_dhcpd.conf
+ddns-update-style none;
+default-lease-time 600;
+max-lease-time 7200;
+authoritative;
+log-facility local7;
+subnet $IP_NET_ADDR netmask $IP_SUB_OCTET {
+  range $IP_BEGIN $IP_END;
+  option routers $IP_GW;
+  option domain-name-servers $DNS_SERVER1, 8.8.8.8;
+}
+EOF"
+    
+    log "Starting hostapd and isc-dhcp-server in chroot..."
+    run_in_chroot "rm -f /var/lib/dhcp/dhcpd.leases && touch /var/lib/dhcp/dhcpd.leases"
+    run_in_chroot "/usr/sbin/hostapd -B -P /run/hostapd.pid /tmp/hotspot_hostapd.conf"
+    run_in_chroot "/usr/sbin/dhcpd -cf /tmp/hotspot_dhcpd.conf -q $AP_IFACE &"
+}
+
+# --- Command Line Argument Processing ---
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -h|--help)
+            print_usage
+            exit 0
+            ;;
+        -k)
+            # Load holder PID for namespace isolation
+            if [ -f "$HOLDER_PID_FILE" ]; then
+                HOLDER_PID=$(cat "$HOLDER_PID_FILE")
+            fi
+            # Set dummy variables to avoid errors in kill_proc
+            UPSTREAM_IFACE=""
+            IP_NET_ADDR="192.168.42.0"
+            IP_SUB_CDIR="24"
+            kill_proc
+            ;;
+        -o)
+            shift
+            UPSTREAM_IFACE="$1"
+            ;;
+        -s)
+            if [ "$2" ]; then
+                shift
+                SSID="$1"
+            else
+                error "SSID not specified"
+                exit 1
+            fi
+            ;;
+        -p)
+            shift
+            PASSWORD="$1"
+            ;;
+        -b)
+            shift
+            BAND="$1"
+            ;;
+        -c)
+            shift
+            CHANNEL="$1"
+            ;;
+        *)
+            error "Unknown option: $1"
+            print_usage
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+# --- Main Part ---
+trap 'kill_proc; exit' INT TERM
+
+# --- Interactive Mode ---
+if [ -z "$UPSTREAM_IFACE" ]; then
+    if [ "$SILENT" -eq 0 ]; then
+        echo -n "Enter Internet Interface (e.g., wlan0): "
+        read UPSTREAM_IFACE
+    else
+        error "Upstream interface not specified"
+        exit 1
+    fi
+fi
+
+if [ -z "$SSID" ]; then
+    if [ "$SILENT" -eq 0 ]; then
+        echo -n "Enter Hotspot Name (SSID): "
+        read SSID
+    else
+        error "SSID not specified"
+        exit 1
+    fi
+fi
+
+if [ -z "$PASSWORD" ]; then
+    if [ "$SILENT" -eq 0 ]; then
+        echo -n "Enter Hotspot Password (min 8 chars): "
+        read PASSWORD
+    else
+        error "Password not specified"
+        exit 1
+    fi
+fi
+
+if [ -z "$BAND" ]; then
+    BAND=2
+fi
+
+if [ -z "$CHANNEL" ]; then
+    if [ "$BAND" = "5" ]; then
+        CHANNEL=36
+    else
+        CHANNEL=6
+    fi
+fi
+
+# Final validation
+[ -z "$UPSTREAM_IFACE" ] && error "Upstream interface cannot be empty." && exit 1
+[ -z "$SSID" ] && error "SSID cannot be empty." && exit 1
+if [ $(echo -n "$PASSWORD" | wc -c) -lt 8 ]; then
+    error "Password must be at least 8 characters long."
+    exit 1
+fi
+[ -z "$CHANNEL" ] && error "Channel cannot be empty." && exit 1
+
+# Load holder PID for namespace isolation
+if [ -f "$HOLDER_PID_FILE" ]; then
+    HOLDER_PID=$(cat "$HOLDER_PID_FILE")
+fi
+
+check_prerequisites
+config_network
+start_services
+
+log "Hotspot is now ACTIVE!"
+exit 0
