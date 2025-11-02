@@ -16,8 +16,8 @@ check_for_susfs(){
     fi
 
     if [ "$susfs_detected" = true ]; then
-        echo -e "\nWARNING: SuSFS detected. You may face issues with this module when using it with SuSFS.\n"
-        echo -e "DO NOT REPORT ANY ISSUES RELATED TO THIS MODULE WHEN USING IT WITH SUSFS.\n"
+        echo -e "\nWARNING: SuSFS detected. You may encounter mounting issues with \"/proc\" when using this module alongside SuSFS.\n"
+        echo -e "This is fixable by disabling \"HIDE SUS MOUNTS FOR ALL PROCESSES\" from the SuSFS4KSU settings.\n"
     fi
 }
 
