@@ -1,10 +1,31 @@
 #!/system/bin/sh
 TMPDIR=/dev/tmp
+VERSION_FILE="/data/local/ubuntu-chroot/version"
 
 setup_chroot(){
   mkdir -p /data/local/ubuntu-chroot
   unzip -oj "$ZIPFILE" 'tools/chroot.sh' -d /data/local/ubuntu-chroot >&2
   unzip -oj "$ZIPFILE" 'tools/start-hotspot' -d /data/local/ubuntu-chroot >&2
+}
+
+setup_ota(){
+    mkdir -p /data/local/ubuntu-chroot/ota
+    unzip -oj "$ZIPFILE" 'tools/updater.sh' -d /data/local/ubuntu-chroot/ota >&2
+    unzip -oj "$ZIPFILE" 'tools/updates.sh' -d /data/local/ubuntu-chroot/ota >&2
+
+    chmod 0755 /data/local/ubuntu-chroot/ota/updater.sh >&2
+    chmod 0755 /data/local/ubuntu-chroot/ota/updates.sh >&2
+
+    # Only create version file if it doesn't exist
+    if [ ! -f "$VERSION_FILE" ]; then
+        set -x
+        local version_code
+        unzip -oj "$ZIPFILE" 'module.prop' -d $MODPATH >&2
+        version_code=$(grep "^versionCode=" $MODPATH/module.prop | cut -d'=' -f2)
+        echo "$version_code" | tee $VERSION_FILE
+        set +x
+    fi
+
 }
 
 check_for_susfs(){
@@ -23,7 +44,6 @@ check_for_susfs(){
 }
 
 detect_root(){
-    # Detect root method
     if command -v magisk >/dev/null 2>&1; then
         ROOT_METHOD="magisk"
     elif command -v ksud >/dev/null 2>&1; then

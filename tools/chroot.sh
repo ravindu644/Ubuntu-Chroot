@@ -14,12 +14,21 @@ MOUNTED_FILE="/data/local/ubuntu-chroot/mount.points"
 POST_EXEC_SCRIPT="/data/local/ubuntu-chroot/post_exec.sh"
 HOLDER_PID_FILE="/data/local/ubuntu-chroot/holder.pid"
 SILENT=0
+SKIP_POST_EXEC=0
 
 
 # --- Logging and Utility Functions ---
 
-log() { [ "$SILENT" -eq 0 ] && echo "[INFO] $1"; }
-warn() { [ "$SILENT" -eq 0 ] && echo "[WARN] $1"; }
+log() { 
+    if [ "$SILENT" -eq 0 ]; then
+        echo "[INFO] $1"
+    fi
+}
+warn() { 
+    if [ "$SILENT" -eq 0 ]; then
+        echo "[WARN] $1"
+    fi
+}
 error() { echo "[ERROR] $1"; }
 
 usage() {
@@ -34,6 +43,7 @@ usage() {
     echo "Options:"
     echo "  [user]        Username to log in as (default: root)."
     echo "  --no-shell    Setup chroot without entering an interactive shell."
+    echo "  --skip-post-exec  Skip running post-execution scripts."
     echo "  -s            Silent mode (suppress informational output)."
     exit 1
 }
@@ -235,8 +245,8 @@ start_chroot() {
     # Increase shared memory for services like PostgreSQL.
     sysctl -w kernel.shmmax=268435456 >/dev/null 2>&1
 
-    # Run post-execution script if it exists.
-    if [ -f "$POST_EXEC_SCRIPT" ] && [ -x "$POST_EXEC_SCRIPT" ]; then
+    # Run post-execution script if it exists and we're not skipping it.
+    if [ "$SKIP_POST_EXEC" -eq 0 ] && [ -f "$POST_EXEC_SCRIPT" ] && [ -x "$POST_EXEC_SCRIPT" ]; then
         log "Running post-execution script..."
         cp "$POST_EXEC_SCRIPT" "$CHROOT_PATH/root/post_exec.sh"
         chmod +x "$CHROOT_PATH/root/post_exec.sh"
@@ -400,6 +410,9 @@ for arg in "$@"; do
             ;;
         --no-shell)
             NO_SHELL_FLAG=1
+            ;;
+        --skip-post-exec)
+            SKIP_POST_EXEC=1
             ;;
         -s)
             SILENT=1

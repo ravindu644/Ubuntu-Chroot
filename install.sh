@@ -30,6 +30,7 @@ on_install() {
   unzip -oj "$ZIPFILE" 'service.sh' -d $MODPATH >&2
 
   setup_chroot
+  setup_ota
   extract_rootfs
   create_symlink
 
@@ -42,6 +43,9 @@ set_permissions() {
   set_perm "/data/local/ubuntu-chroot/chroot.sh" 0 0 0755
   set_perm "/data/local/ubuntu-chroot/post_exec.sh" 0 0 0755
   set_perm "/data/local/ubuntu-chroot/start-hotspot" 0 0 0755
+  set_perm "/data/local/ubuntu-chroot/ota" 0 0 0755
+  set_perm "/data/local/ubuntu-chroot/ota/updater.sh" 0 0 0755
+  set_perm "/data/local/ubuntu-chroot/ota/updates.sh" 0 0 0755
   set_perm "$MODPATH/service.sh" 0 0 0755
 
 }
