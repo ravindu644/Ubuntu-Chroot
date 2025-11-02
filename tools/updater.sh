@@ -11,6 +11,7 @@ HOLDER_PID_FILE="/data/local/ubuntu-chroot/holder.pid"
 VERSION_FILE="/data/local/ubuntu-chroot/version"
 OTA_DIR="/data/local/ubuntu-chroot/ota"
 UPDATES_SCRIPT="${OTA_DIR}/updates.sh"
+LOG_FILE=""
 SILENT=0
 
 # --- Logging Functions ---
@@ -36,7 +37,8 @@ run_in_ns() {
 }
 
 run_in_chroot() {
-    run_in_ns chroot "$CHROOT_PATH" /bin/bash -c "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; $*"
+    # Execute command and append all output to the global log file
+    run_in_ns chroot "$CHROOT_PATH" /bin/bash -c "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; exec 2>&1; $*" >> "$LOG_FILE" 2>&1
 }
 
 # --- Version Management ---
@@ -95,6 +97,22 @@ apply_update() {
 # --- Core Update Logic ---
 perform_update() {
     local current_version target_version
+
+    # Set up logging for this update session
+    local log_dir="/data/local/ubuntu-chroot/logs"
+    local timestamp=$(date +%Y%m%d_%H%M)
+    LOG_FILE="${log_dir}/update_${timestamp}.log"
+
+    # Create logs directory if it doesn't exist
+    mkdir -p "$log_dir" 2>/dev/null
+
+    # Initialize log file with session info
+    {
+        echo "=== Ubuntu Chroot Update Session ==="
+        echo "Started: $(date)"
+        echo "Log file: $LOG_FILE"
+        echo ""
+    } > "$LOG_FILE"
 
     current_version=$(get_current_version)
     target_version=$(get_target_version)
@@ -173,6 +191,15 @@ main() {
         log "Chroot not running, starting it..."
         if ! "$(dirname "$OTA_DIR")/chroot.sh" start --no-shell --skip-post-exec -s; then
             error "Failed to start chroot"
+            exit 1
+        fi
+
+        # Reload holder PID after starting chroot
+        if [ -f "$HOLDER_PID_FILE" ]; then
+            HOLDER_PID=$(cat "$HOLDER_PID_FILE")
+            log "Chroot started successfully, PID: $HOLDER_PID"
+        else
+            error "HOLDER_PID_FILE not found after starting chroot"
             exit 1
         fi
     fi
