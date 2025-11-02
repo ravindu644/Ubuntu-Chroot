@@ -7,6 +7,7 @@
   const CHROOT_DIR = '/data/local/ubuntu-chroot';
   const POST_EXEC_SCRIPT = '/data/local/ubuntu-chroot/post_exec.sh';
   const HOTSPOT_SCRIPT = '/data/local/ubuntu-chroot/start-hotspot';
+  const OTA_UPDATER = '/data/local/ubuntu-chroot/ota/updater.sh';
 
   const els = {
     statusDot: document.getElementById('status-dot'),
@@ -27,6 +28,7 @@
     saveScript: document.getElementById('save-script'),
     clearScript: document.getElementById('clear-script'),
     uninstallBtn: document.getElementById('uninstall-btn'),
+    updateBtn: document.getElementById('update-btn'),
     hotspotBtn: document.getElementById('hotspot-btn'),
     hotspotPopup: document.getElementById('hotspot-popup'),
     closeHotspotPopup: document.getElementById('close-hotspot-popup'),
@@ -792,6 +794,77 @@
     }, 50);
   }
 
+  async function updateChroot(){
+    if(activeCommandId) {
+      appendConsole('⚠ Another command is already running. Please wait...', 'warn');
+      return;
+    }
+
+    if(!rootAccessConfirmed){
+      appendConsole('Cannot update chroot: root access not available', 'err');
+      return;
+    }
+
+    // Custom confirmation dialog
+    const confirmed = await showConfirmDialog(
+      'Update Chroot Environment',
+      'This will apply any available updates to the chroot environment.\n\nThe chroot will be started if it\'s not running. Continue?',
+      'Update',
+      'Cancel'
+    );
+
+    if(!confirmed){
+      return;
+    }
+
+    closeSettingsPopup();
+    appendConsole('━━━ Starting Chroot Update ━━━', 'info');
+
+    // Show progress indicator IMMEDIATELY
+    const progressLine = document.createElement('div');
+    progressLine.className = 'progress-indicator';
+    progressLine.textContent = '⏳ Updating chroot';
+    els.console.appendChild(progressLine);
+    els.console.scrollTop = els.console.scrollHeight;
+
+    let dotCount = 0;
+    const progressInterval = setInterval(() => {
+      dotCount = (dotCount + 1) % 4;
+      progressLine.textContent = '⏳ Updating chroot' + '.'.repeat(dotCount);
+    }, 400);
+
+    // Disable settings button during update
+    els.settingsBtn.disabled = true;
+    els.settingsBtn.style.opacity = '0.5';
+
+    // Mark as active to prevent other commands
+    activeCommandId = 'chroot-update';
+
+    const cmd = `sh ${OTA_UPDATER}`;
+
+    // Use setTimeout to allow UI to update
+    setTimeout(() => {
+      runCmdAsync(cmd, (result) => {
+        clearInterval(progressInterval);
+        progressLine.remove();
+
+        if(result.success) {
+          appendConsole('✓ Chroot update completed successfully', 'success');
+          appendConsole('━━━ Update Complete ━━━', 'success');
+        } else {
+          appendConsole('✗ Chroot update failed', 'err');
+        }
+
+        activeCommandId = null;
+        els.settingsBtn.disabled = false;
+        els.settingsBtn.style.opacity = '';
+
+        // Refresh status after update
+        setTimeout(() => refreshStatus(), 500);
+      });
+    }, 50);
+  }
+
   async function uninstallChroot(){ 
     if(activeCommandId) {
       appendConsole('⚠ Another command is already running. Please wait...', 'warn');
@@ -1163,6 +1236,7 @@
   });
   els.saveScript.addEventListener('click', () => savePostExecScript());
   els.clearScript.addEventListener('click', () => clearPostExecScript());
+  els.updateBtn.addEventListener('click', () => updateChroot());
   els.uninstallBtn.addEventListener('click', () => uninstallChroot());
 
   // Hotspot event handlers
