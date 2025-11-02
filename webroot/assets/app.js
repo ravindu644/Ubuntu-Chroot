@@ -1173,6 +1173,30 @@
   });
   els.startHotspotBtn.addEventListener('click', () => startHotspot());
   els.stopHotspotBtn.addEventListener('click', () => stopHotspot());
+
+  // Password toggle functionality
+  const togglePasswordBtn = document.getElementById('toggle-password');
+  if(togglePasswordBtn){
+    togglePasswordBtn.addEventListener('click', () => {
+      const passwordInput = document.getElementById('hotspot-password');
+      const icon = togglePasswordBtn.querySelector('svg');
+      
+      if(passwordInput.type === 'password'){
+        passwordInput.type = 'text';
+        // Change icon to show "eye-off" (closed eye)
+        icon.innerHTML = `
+          <path d="M2.99902 3L20.999 21M9.8433 9.91364C9.32066 10.4536 8.99902 11.1892 8.99902 12C8.99902 13.6569 10.3422 15 12 15C12.8215 15 13.5667 14.669 14.1086 14.133M6.49902 6.64715C4.59972 7.90034 3.15305 9.78394 2.45703 12C3.73128 16.0571 7.52159 19 11.9992 19C13.9881 19 15.8414 18.4194 17.3988 17.4184M10.999 5.04939C11.328 5.01673 11.6617 5 11.9992 5C16.4769 5 20.2672 7.94291 21.5414 12C21.2607 12.894 20.8577 13.7338 20.3522 14.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        `;
+      } else {
+        passwordInput.type = 'password';
+        // Change icon back to show "eye" (open eye)
+        icon.innerHTML = `
+          <path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12C23 12 19 20 12 20C5 20 1 12 1 12Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5"/>
+        `;
+      }
+    });
+  }
   if(els.dismissHotspotWarning) {
     els.dismissHotspotWarning.addEventListener('click', () => dismissHotspotWarning());
   }
