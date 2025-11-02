@@ -430,7 +430,85 @@ body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI"
   width: 100%;
 }
 
-.console-actions .btn {
+/* 5GHz Hotspot Warning Banner */
+.warning-banner {
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  border-radius: var(--surface-radius);
+  padding: 16px;
+  margin-bottom: 20px;
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+[data-theme="dark"] .warning-banner {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.warning-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
   flex: 1;
-  min-width: 0;
+}
+
+.warning-content svg {
+  color: #f59e0b;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.warning-text {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #92400e;
+  margin: 0;
+}
+
+[data-theme="dark"] .warning-text {
+  color: #fbbf24;
+}
+
+.warning-close {
+  background: transparent;
+  border: 1px solid rgba(146, 64, 14, 0.3);
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  color: #92400e;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: bold;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+[data-theme="dark"] .warning-close {
+  border-color: rgba(251, 191, 36, 0.3);
+  color: #fbbf24;
+}
+
+.warning-close:hover {
+  background: rgba(146, 64, 14, 0.1);
+  transform: scale(1.1);
+}
+
+[data-theme="dark"] .warning-close:hover {
+  background: rgba(251, 191, 36, 0.1);
+}
+
+/* Hide warning banner when dismissed */
+.warning-banner.hidden {
+  display: none;
 }
