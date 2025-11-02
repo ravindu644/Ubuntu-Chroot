@@ -71,19 +71,32 @@ RUN apt-get install -y --no-install-recommends \
     ltrace \
     heimdall-flash
 
-# Install Xubuntu, VNC, all required icon themes, and then immediately purge conflicting/unwanted packages
+# Install XFCE Desktop Environment with proper icon support
 RUN apt-get install -y --no-install-recommends \
-    xubuntu-desktop \
+    xfce4 \
+    desktop-base \
+    xfce4-terminal \
+    xfce4-session \
+    xscreensaver \
+    xfce4-goodies \
     tigervnc-standalone-server \
     tigervnc-tools \
     dbus-x11 \
+    # Icon themes
     adwaita-icon-theme-full \
     hicolor-icon-theme \
+    gnome-icon-theme \
+    humanity-icon-theme \
+    elementary-xfce-icon-theme \
+    tango-icon-theme \
     && apt-get purge -y gdm3 gnome-session gnome-shell whoopsie \
     && apt-get autoremove -y \
     && echo "lightdm shared/default-x-display-manager select lightdm" | debconf-set-selections \
     && dpkg-reconfigure -f noninteractive lightdm \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Update icon cache
+RUN gtk-update-icon-cache -f /usr/share/icons/* 2>/dev/null || true
     
 # Install fastfetch (neofetch alternative)
 RUN apt-get install -y --no-install-recommends \
