@@ -92,9 +92,31 @@ RUN apt-get install -y --no-install-recommends \
     && apt-get purge -y gdm3 gnome-session gnome-shell whoopsie \
     && apt-get autoremove -y
 
+# Install GTK theme engines and additional themes
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # GTK theme engines (Ubuntu 22.04 compatible)
+    gtk2-engines-murrine \
+    gtk2-engines-pixbuf \
+    gnome-themes-standard \
+    gnome-themes-extra \
+    gnome-themes-extra-data \
+    xubuntu-artwork \
+    greybird-gtk-theme \
+    shimmer-themes \
+    # Additional popular themes
+    arc-theme \
+    numix-gtk-theme \
+    materia-gtk-theme \
+    papirus-icon-theme \
+    # xdg-user-dirs for home folder management
+    xdg-user-dirs
+
+# Create default user directories
+RUN xdg-user-dirs-update
+
 # Update icon cache
 RUN gtk-update-icon-cache -f /usr/share/icons/* 2>/dev/null || true
-    
+
 # Install fastfetch (neofetch alternative)
 RUN apt-get install -y --no-install-recommends \
     software-properties-common \
