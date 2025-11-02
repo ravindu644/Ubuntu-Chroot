@@ -51,7 +51,7 @@ jobs:
         with:
           artifacts: "${{ env.ZIP_NAME }}"
           token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ github.event.inputs.version || github.ref_name }}
+          tag: ${{ github.event.inputs.version || github.ref_name }}-gui
           name: "Ubuntu Chroot GUI ${{ github.event.inputs.version || github.ref_name }}"
           body: |
             Ubuntu Chroot Environment GUI ${{ github.event.inputs.version || github.ref_name }}
