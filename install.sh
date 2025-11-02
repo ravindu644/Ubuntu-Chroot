@@ -31,6 +31,7 @@ on_install() {
 
   setup_chroot
   extract_rootfs
+  create_symlink
 
   rm -rf /data/system/package_cache/*
 }

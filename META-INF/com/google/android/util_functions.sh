@@ -70,3 +70,15 @@ extract_rootfs(){
         echo "- No .tar.gz file found in ZIP, skipping rootfs extraction."
     fi
 }
+
+create_symlink(){
+
+    mkdir -p $MODPATH/system/bin
+
+    ln -s /data/local/ubuntu-chroot/chroot.sh \
+    $MODPATH/system/bin/ubuntu-chroot > /dev/null 2>&1 && \
+    chmod 0755 $MODPATH/system/bin/ubuntu-chroot > /dev/null 2>&1 && \
+    echo "- Created symlink for chrootmgr" || \
+    echo "- Failed to create symlink for chrootmgr"
+
+}
