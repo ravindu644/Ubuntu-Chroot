@@ -215,11 +215,15 @@ start_chroot() {
     if run_in_ns mount -t tmpfs -o mode=755 tmpfs "$CHROOT_PATH/sys/fs/cgroup" 2>/dev/null; then
         echo "$CHROOT_PATH/sys/fs/cgroup" >> "$MOUNTED_FILE"
         run_in_ns mkdir -p "$CHROOT_PATH/sys/fs/cgroup/devices"
-        if run_in_ns mount -t cgroup -o devices cgroup "$CHROOT_PATH/sys/fs/cgroup/devices" 2>/dev/null; then
-            log "Cgroup devices mounted successfully."
-            echo "$CHROOT_PATH/sys/fs/cgroup/devices" >> "$MOUNTED_FILE"
+        if grep -q devices /proc/cgroups 2>/dev/null; then
+            if run_in_ns mount -t cgroup -o devices cgroup "$CHROOT_PATH/sys/fs/cgroup/devices" 2>/dev/null; then
+                log "Cgroup devices mounted successfully."
+                echo "$CHROOT_PATH/sys/fs/cgroup/devices" >> "$MOUNTED_FILE"
+            else
+                warn "Failed to mount cgroup devices."
+            fi
         else
-            warn "Failed to mount cgroup devices."
+            warn "Devices cgroup controller not available."
         fi
     else
         warn "Failed to mount cgroup tmpfs."
