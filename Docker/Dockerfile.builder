@@ -82,6 +82,7 @@ RUN apt-get install -y --no-install-recommends \
     tigervnc-standalone-server \
     tigervnc-tools \
     dbus-x11 \
+    tumbler \
     fonts-lklug-sinhala \
     # Icon themes
     adwaita-icon-theme-full \
