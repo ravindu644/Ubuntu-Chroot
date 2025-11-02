@@ -90,9 +90,7 @@ RUN apt-get install -y --no-install-recommends \
     elementary-xfce-icon-theme \
     tango-icon-theme \
     && apt-get purge -y gdm3 gnome-session gnome-shell whoopsie \
-    && apt-get autoremove -y \
-    && echo "lightdm shared/default-x-display-manager select lightdm" | debconf-set-selections \
-    && dpkg-reconfigure -f noninteractive lightdm
+    && apt-get autoremove -y
 
 # Update icon cache
 RUN gtk-update-icon-cache -f /usr/share/icons/* 2>/dev/null || true
