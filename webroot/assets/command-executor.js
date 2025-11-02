@@ -40,8 +40,14 @@ class CommandExecutor {
                     if (stdout && onOutput) onOutput(stdout);
                     if (onComplete) onComplete({ success: true, exitCode, output: stdout });
                 } else {
-                    if (stderr && onError) onError(stderr);
-                    if (onComplete) onComplete({ success: false, exitCode, error: stderr || `exit:${exitCode}` });
+                    // --- FIXED ---
+                    // Combine stdout and stderr for a more informative error message,
+                    // as many scripts write errors to stdout before exiting.
+                    const combinedOutput = [stdout, stderr].filter(Boolean).join('\n');
+                    const errorMessage = combinedOutput.trim() || `exit:${exitCode}`;
+                    
+                    if (errorMessage && onError) onError(errorMessage);
+                    if (onComplete) onComplete({ success: false, exitCode, error: errorMessage });
                 }
             };
             
@@ -65,8 +71,13 @@ class CommandExecutor {
                         if (result.output && onOutput) onOutput(result.output);
                         if (onComplete) onComplete({ success: true, output: result.output });
                     } else {
-                        if (result.error && onError) onError(result.error);
-                        if (onComplete) onComplete({ success: false, error: result.error });
+                        // --- FIXED ---
+                        // Combine output and error for a more informative message on failure.
+                        const combinedOutput = [result.output, result.error].filter(Boolean).join('\n');
+                        const errorMessage = combinedOutput.trim() || `Command failed with exit code ${result.exitCode || 'unknown'}`;
+                        
+                        if (errorMessage && onError) onError(errorMessage);
+                        if (onComplete) onComplete({ success: false, error: errorMessage });
                     }
                 });
             } catch (e) {

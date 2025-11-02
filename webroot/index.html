@@ -13,6 +13,15 @@
         <img src="assets/logo.png" alt="Ubuntu Chroot Manager" class="header-logo">
       </div>
       <div class="controls">
+        <button id="hotspot-btn" class="theme-btn" title="Hotspot">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5">
+              <circle cx="12" cy="14" r="2"/>
+              <path d="M4 20.001A9.96 9.96 0 0 1 2 14C2 8.477 6.477 4 12 4s10 4.477 10 10c0 2.252-.744 4.33-2 6.001"/>
+              <path d="M7.528 18a6 6 0 1 1 8.944 0"/>
+            </g>
+          </svg>
+        </button>
         <button id="settings-btn" class="theme-btn" title="Options">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <circle cx="5" cy="12" r="2" fill="currentColor"/>
@@ -106,6 +115,51 @@
             <h4>Danger Zone</h4>
             <p class="setting-desc">Permanently remove the chroot environment</p>
             <button id="uninstall-btn" class="btn danger">Uninstall Chroot</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hotspot Popup -->
+    <div id="hotspot-popup" class="popup-overlay">
+      <div class="popup-content">
+        <div class="popup-header">
+          <h3>Hotspot Configuration</h3>
+          <button id="close-hotspot-popup" class="close-btn" title="Close">×</button>
+        </div>
+        <div class="popup-body">
+          <div class="setting-section">
+            <form id="hotspot-form">
+              <div class="form-group">
+                <label for="hotspot-iface">Upstream Interface:</label>
+                <input type="text" id="hotspot-iface" value="wlan0" required>
+              </div>
+              <div class="form-group">
+                <label for="hotspot-ssid">SSID (Hotspot Name):</label>
+                <input type="text" id="hotspot-ssid" placeholder="MyHotspot" required>
+              </div>
+              <div class="form-group">
+                <label for="hotspot-password">Password:</label>
+                <input type="password" id="hotspot-password" placeholder="Min 8 characters" minlength="8" required>
+              </div>
+              <div class="form-group">
+                <label for="hotspot-band">Band:</label>
+                <select id="hotspot-band">
+                  <option value="2">2.4GHz</option>
+                  <option value="5">5GHz</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="hotspot-channel">Channel:</label>
+                <select id="hotspot-channel" required>
+                  <!-- Options populated by JavaScript -->
+                </select>
+              </div>
+            </form>
+            <div class="script-actions">
+              <button id="start-hotspot-btn" class="btn">Start Hotspot</button>
+              <button id="stop-hotspot-btn" class="btn danger">Stop Hotspot</button>
+            </div>
           </div>
         </div>
       </div>

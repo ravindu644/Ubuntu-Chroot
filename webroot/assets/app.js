@@ -6,6 +6,7 @@
   const BOOT_FILE = '/data/local/ubuntu-chroot/boot-service';
   const CHROOT_DIR = '/data/local/ubuntu-chroot';
   const POST_EXEC_SCRIPT = '/data/local/ubuntu-chroot/post_exec.sh';
+  const HOTSPOT_SCRIPT = '/data/local/ubuntu-chroot/start-hotspot';
 
   const els = {
     statusDot: document.getElementById('status-dot'),
@@ -25,7 +26,13 @@
     postExecScript: document.getElementById('post-exec-script'),
     saveScript: document.getElementById('save-script'),
     clearScript: document.getElementById('clear-script'),
-    uninstallBtn: document.getElementById('uninstall-btn')
+    uninstallBtn: document.getElementById('uninstall-btn'),
+    hotspotBtn: document.getElementById('hotspot-btn'),
+    hotspotPopup: document.getElementById('hotspot-popup'),
+    closeHotspotPopup: document.getElementById('close-hotspot-popup'),
+    startHotspotBtn: document.getElementById('start-hotspot-btn'),
+    stopHotspotBtn: document.getElementById('stop-hotspot-btn'),
+    hotspotForm: document.getElementById('hotspot-form')
   };
 
   // Track running commands to prevent UI blocking
@@ -205,6 +212,8 @@
       els.userSelect.disabled = disabled;
       els.settingsBtn.disabled = disabled;
       els.settingsBtn.style.opacity = disabled ? '0.5' : '';
+      els.hotspotBtn.disabled = disabled;
+      els.hotspotBtn.style.opacity = disabled ? '0.5' : '';
       const copyBtn = document.getElementById('copy-login');
       if(copyBtn) copyBtn.disabled = disabled;
       // Disable boot toggle when root not available
@@ -326,10 +335,16 @@
       // Handle user select dropdown
       if(running){
         els.userSelect.disabled = false;
+        if(rootAccessConfirmed){
+          els.hotspotBtn.disabled = false;
+          els.hotspotBtn.style.opacity = '';
+        }
         // Fetch users when chroot is running
         fetchUsers();
       } else {
         els.userSelect.disabled = true;
+        els.hotspotBtn.disabled = true;
+        els.hotspotBtn.style.opacity = '0.5';
         // Reset to root when not running
         els.userSelect.innerHTML = '<option value="root">root</option>';
       }
@@ -514,6 +529,171 @@
     }catch(e){
       appendConsole(`Failed to clear post-exec script: ${e.message}`, 'err');
     }
+  }
+
+  // Hotspot functions
+  function openHotspotPopup(){
+    els.hotspotPopup.classList.add('active');
+  }
+
+  function closeHotspotPopup(){
+    els.hotspotPopup.classList.remove('active');
+  }
+
+  async function startHotspot(){
+    if(activeCommandId) {
+      appendConsole('⚠ Another command is already running. Please wait...', 'warn');
+      return;
+    }
+
+    if(!rootAccessConfirmed){
+      appendConsole('Cannot start hotspot: root access not available', 'err');
+      return;
+    }
+
+    const iface = document.getElementById('hotspot-iface').value.trim();
+    const ssid = document.getElementById('hotspot-ssid').value.trim();
+    const password = document.getElementById('hotspot-password').value;
+    const band = document.getElementById('hotspot-band').value;
+    const channel = document.getElementById('hotspot-channel').value;
+
+    if(!iface || !ssid || !password || !channel){
+      appendConsole('All fields are required', 'err');
+      return;
+    }
+
+    if(password.length < 8){
+      appendConsole('Password must be at least 8 characters', 'err');
+      return;
+    }
+
+    saveHotspotSettings(); // Save settings before starting
+
+    closeHotspotPopup();
+    appendConsole(`━━━ Starting hotspot '${ssid}' ━━━`, 'info');
+    
+    // Show progress indicator IMMEDIATELY
+    const progressLine = document.createElement('div');
+    progressLine.className = 'progress-indicator';
+    const actionText = `Starting hotspot '${ssid}'`;
+    progressLine.textContent = '⏳ ' + actionText;
+    els.console.appendChild(progressLine);
+    els.console.scrollTop = els.console.scrollHeight;
+    
+    let spinIndex = 0;
+    const spinner = ['|', '/', '-', '\\'];
+    const progressInterval = setInterval(() => {
+      spinIndex = (spinIndex + 1) % 4;
+      progressLine.textContent = '⏳ ' + actionText + ' ' + spinner[spinIndex];
+    }, 200);
+    
+    // Disable hotspot button during execution
+    els.hotspotBtn.disabled = true;
+    els.hotspotBtn.style.opacity = '0.5';
+    
+    // Mark as active to prevent other commands
+    activeCommandId = 'hotspot-start';
+
+    // Redirect stderr to stdout to capture all output
+    const cmd = `sh ${HOTSPOT_SCRIPT} -o ${iface} -s ${ssid} -p ${password} -b ${band} -c ${channel} 2>&1`;
+    
+    // Use setTimeout to allow UI to update, then run sync command wrapped as async
+    setTimeout(async () => {
+      try {
+        const output = await runCmdSync(cmd);
+        clearInterval(progressInterval);
+        progressLine.remove();
+        
+        // Display all output line by line
+        if(output) {
+          const lines = String(output).split('\n');
+          lines.forEach(line => {
+            if(line.trim()) {
+              appendConsole(line);
+            }
+          });
+        }
+        
+        if(output && output.includes('AP-ENABLED')) {
+          appendConsole(`✓ Hotspot started successfully`, 'success');
+        } else {
+          appendConsole(`✗ Failed to start hotspot`, 'err');
+        }
+      } catch(error) {
+        clearInterval(progressInterval);
+        progressLine.remove();
+        
+        // Display error output line by line
+        const errorMsg = String(error.message || error);
+        const lines = errorMsg.split('\n');
+        lines.forEach(line => {
+          if(line.trim()) {
+            appendConsole(line, 'err');
+          }
+        });
+        
+        appendConsole(`✗ Hotspot failed to start`, 'err');
+      } finally {
+        activeCommandId = null;
+        els.hotspotBtn.disabled = false;
+        els.hotspotBtn.style.opacity = '';
+      }
+    }, 50);
+  }
+
+  async function stopHotspot(){
+    if(activeCommandId) {
+      appendConsole('⚠ Another command is already running. Please wait...', 'warn');
+      return;
+    }
+
+    if(!rootAccessConfirmed){
+      appendConsole('Cannot stop hotspot: root access not available', 'err');
+      return;
+    }
+
+    closeHotspotPopup();
+    appendConsole(`━━━ Stopping hotspot ━━━`, 'info');
+
+    // Show progress indicator IMMEDIATELY
+    const progressLine = document.createElement('div');
+    progressLine.className = 'progress-indicator';
+    const actionText = 'Stopping hotspot';
+    progressLine.textContent = '⏳ ' + actionText;
+    els.console.appendChild(progressLine);
+    els.console.scrollTop = els.console.scrollHeight;
+
+    let spinIndex = 0;
+    const spinner = ['|', '/', '-', '\\'];
+    const progressInterval = setInterval(() => {
+      spinIndex = (spinIndex + 1) % 4;
+      progressLine.textContent = '⏳ ' + actionText + ' ' + spinner[spinIndex];
+    }, 200);
+
+    // Disable hotspot button during execution
+    els.hotspotBtn.disabled = true;
+    els.hotspotBtn.style.opacity = '0.5';
+
+    // Redirect stderr to stdout to capture all output
+    const cmd = `${HOTSPOT_SCRIPT} -k 2>&1`;
+
+    // Use setTimeout to allow UI to update before blocking command
+    setTimeout(() => {
+      runCmdAsync(cmd, (result) => {
+        clearInterval(progressInterval);
+        progressLine.remove();
+        
+        if(result.success) {
+          appendConsole(`✓ Hotspot stopped successfully`, 'success');
+        } else {
+          appendConsole(`✗ Failed to stop hotspot (exit code: ${result.exitCode || 'unknown'})`, 'err');
+        }
+        
+        // Re-enable hotspot button
+        els.hotspotBtn.disabled = false;
+        els.hotspotBtn.style.opacity = '';
+      });
+    }, 50);
   }
 
   async function uninstallChroot(){ 
@@ -889,9 +1069,78 @@
   els.clearScript.addEventListener('click', () => clearPostExecScript());
   els.uninstallBtn.addEventListener('click', () => uninstallChroot());
 
+  // Hotspot event handlers
+  els.hotspotBtn.addEventListener('click', () => openHotspotPopup());
+  els.closeHotspotPopup.addEventListener('click', () => closeHotspotPopup());
+  els.hotspotPopup.addEventListener('click', (e) => {
+    if(e.target === els.hotspotPopup) closeHotspotPopup();
+  });
+  els.startHotspotBtn.addEventListener('click', () => startHotspot());
+  els.stopHotspotBtn.addEventListener('click', () => stopHotspot());
+
+  // Band change updates channel limits
+  document.getElementById('hotspot-band').addEventListener('change', updateChannelLimits);
+
+  // Hotspot band change handler
+  function updateChannelLimits(){
+    const bandSelect = document.getElementById('hotspot-band');
+    const channelSelect = document.getElementById('hotspot-channel');
+    const band = bandSelect.value;
+    
+    // Clear existing options
+    channelSelect.innerHTML = '';
+    
+    let channels = [];
+    if(band === '5'){
+      // 5GHz channels
+      channels = [36,40,44,48,52,56,60,64,100,104,108,112,116,120,124,128,132,136,140,149,153,157,161,165];
+    } else {
+      // 2.4GHz channels
+      channels = [1,2,3,4,5,6,7,8,9,10,11];
+    }
+    
+    // Add options
+    channels.forEach(ch => {
+      const option = document.createElement('option');
+      option.value = ch;
+      option.textContent = ch;
+      channelSelect.appendChild(option);
+    });
+    
+    // Set default value
+    channelSelect.value = band === '5' ? '36' : '6';
+  }
+
+  // Hotspot settings persistence
+  function saveHotspotSettings(){
+    const settings = {
+      iface: document.getElementById('hotspot-iface').value,
+      ssid: document.getElementById('hotspot-ssid').value,
+      password: document.getElementById('hotspot-password').value,
+      band: document.getElementById('hotspot-band').value,
+      channel: document.getElementById('hotspot-channel').value
+    };
+    try{ localStorage.setItem('chroot_hotspot_settings', JSON.stringify(settings)); }catch(e){}
+  }
+
+  function loadHotspotSettings(){
+    try{
+      const settings = JSON.parse(localStorage.getItem('chroot_hotspot_settings'));
+      if(settings){
+        document.getElementById('hotspot-iface').value = settings.iface || 'wlan0';
+        document.getElementById('hotspot-ssid').value = settings.ssid || '';
+        document.getElementById('hotspot-password').value = settings.password || '';
+        document.getElementById('hotspot-band').value = settings.band || '2';
+        updateChannelLimits(); // Populate options first
+        document.getElementById('hotspot-channel').value = settings.channel || '6';
+      }
+    }catch(e){}
+  }
+
   // init
   initTheme();
   loadConsoleLogs(); // Restore previous console logs
+  loadHotspotSettings(); // Load hotspot settings
   
   // small delay to let command-executor attach if present
   setTimeout(async ()=>{

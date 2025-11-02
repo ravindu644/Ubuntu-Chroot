@@ -191,6 +191,14 @@ body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI"
 .header-logo{height:32px;width:auto;max-width:200px;object-fit:contain;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.1))}
 [data-theme="dark"] .header-logo{filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5)) brightness(1.2) contrast(1.1)}
 
+.form-group{margin-bottom:16px}
+.form-group label{display:block;margin-bottom:6px;font-weight:500;color:var(--text)}
+.form-group input,.form-group select{padding:8px 12px;border:1px solid rgba(0,0,0,0.08);border-radius:8px;background:var(--card);color:var(--text);font-size:14px;width:100%;box-sizing:border-box}
+.form-group input:focus,.form-group select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px rgba(59,130,246,0.2)}
+[data-theme="dark"] .form-group input,[data-theme="dark"] .form-group select{border-color:rgba(255,255,255,0.08)}
+[data-theme="dark"] .form-group input:focus,[data-theme="dark"] .form-group select:focus{border-color:#60a5fa}
+
+/* User select */
 .user-select{
   padding:6px 10px;
   border:1px solid rgba(0,0,0,0.08);

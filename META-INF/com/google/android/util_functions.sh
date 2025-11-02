@@ -4,6 +4,7 @@ TMPDIR=/dev/tmp
 setup_chroot(){
   mkdir -p /data/local/ubuntu-chroot
   unzip -oj "$ZIPFILE" 'tools/chroot.sh' -d /data/local/ubuntu-chroot >&2
+  unzip -oj "$ZIPFILE" 'tools/start-hotspot' -d /data/local/ubuntu-chroot >&2
 }
 
 check_for_susfs(){
