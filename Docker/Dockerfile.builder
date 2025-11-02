@@ -92,8 +92,7 @@ RUN apt-get install -y --no-install-recommends \
     && apt-get purge -y gdm3 gnome-session gnome-shell whoopsie \
     && apt-get autoremove -y \
     && echo "lightdm shared/default-x-display-manager select lightdm" | debconf-set-selections \
-    && dpkg-reconfigure -f noninteractive lightdm \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+    && dpkg-reconfigure -f noninteractive lightdm
 
 # Update icon cache
 RUN gtk-update-icon-cache -f /usr/share/icons/* 2>/dev/null || true
@@ -102,8 +101,13 @@ RUN gtk-update-icon-cache -f /usr/share/icons/* 2>/dev/null || true
 RUN apt-get install -y --no-install-recommends \
     software-properties-common \
     && add-apt-repository ppa:zhangsongcui3371/fastfetch \
-    && apt-get update && apt-get install -y fastfetch \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+    && apt-get update && apt-get install -y fastfetch
+
+# Install Firefox ESR
+RUN add-apt-repository ppa:mozillateam/ppa -y && \
+    apt-get update && \
+    apt-get install -y firefox-esr && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*    
 
 # Update locales
 RUN locale-gen en_US.UTF-8 && update-locale LANG=en_US.UTF-8 && update-locale LC_ALL=en_US.UTF-8
