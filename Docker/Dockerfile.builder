@@ -47,6 +47,10 @@ RUN apt-get install -y --no-install-recommends \
     lsof \
     psmisc \
     procps \
+    # Wireless networking tools for hotspot functionality
+    iw \
+    hostapd \
+    isc-dhcp-server \
     # C/C++ Development
     build-essential \
     gcc \
