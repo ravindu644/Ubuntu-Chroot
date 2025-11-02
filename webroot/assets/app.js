@@ -38,8 +38,8 @@
   // Track running commands to prevent UI blocking
   let activeCommandId = null;
 
-  // Root access flag - set by master check
-  let rootAccessConfirmed = false;
+  // Track hotspot state - much more reliable than filesystem checks
+  let hotspotActive = false;
 
   // Track if chroot missing message was logged
   let _chrootMissingLogged = false;
@@ -229,9 +229,15 @@
   }
 
   /**
-   * Execute chroot action asynchronously (non-blocking)
+   * Check if hotspot is currently running (using state tracking)
    */
-  function doAction(action, btn){
+  function isHotspotRunning(){
+    return hotspotActive;
+  }
+  /**
+   * Execute chroot action asynchronously (non-blocking), with hotspot handling for stop/restart
+   */
+  async function doAction(action, btn){
     if(activeCommandId) {
       appendConsole('⚠ Another command is already running. Please wait...', 'warn');
       return;
@@ -256,6 +262,34 @@
     
     // Disable buttons during execution
     setButtonsForAction(action, true);
+
+    // Check for hotspot on stop/restart
+    let hotspotWasRunning = false;
+    if(action === 'stop' || action === 'restart'){
+      try{
+        hotspotWasRunning = isHotspotRunning();
+        if(hotspotWasRunning){
+          progressLine.textContent = '⏳ Stopping hotspot first';
+          dotCount = 0; // reset dots
+          
+          // Stop hotspot first
+          await new Promise((resolve, reject) => {
+            runCmdAsync(`sh ${HOTSPOT_SCRIPT} -k 2>&1`, (result) => {
+              if(result.success) {
+                appendConsole('✓ Hotspot stopped successfully', 'success');
+                hotspotActive = false; // Update state
+                resolve();
+              } else {
+                appendConsole('✗ Failed to stop hotspot, continuing with chroot action', 'warn');
+                resolve(); // Continue anyway
+              }
+            });
+          });
+        }
+      }catch(e){
+        appendConsole('⚠ Could not check hotspot status, proceeding with chroot action', 'warn');
+      }
+    }
 
     // Use --no-shell flag to prevent blocking on interactive shell
     const cmd = `sh ${PATH_CHROOT_SH} ${action} --no-shell`;
@@ -336,8 +370,15 @@
       if(running){
         els.userSelect.disabled = false;
         if(rootAccessConfirmed){
+          // Hotspot button enabled, but individual start/stop buttons depend on hotspot state
           els.hotspotBtn.disabled = false;
           els.hotspotBtn.style.opacity = '';
+          
+          // Disable individual hotspot buttons based on hotspot state
+          els.startHotspotBtn.disabled = hotspotActive;
+          els.stopHotspotBtn.disabled = !hotspotActive;
+          els.startHotspotBtn.style.opacity = hotspotActive ? '0.5' : '';
+          els.stopHotspotBtn.style.opacity = !hotspotActive ? '0.5' : '';
         }
         // Fetch users when chroot is running
         fetchUsers();
@@ -345,8 +386,15 @@
         els.userSelect.disabled = true;
         els.hotspotBtn.disabled = true;
         els.hotspotBtn.style.opacity = '0.5';
+        // Disable individual hotspot buttons when chroot not running
+        els.startHotspotBtn.disabled = true;
+        els.stopHotspotBtn.disabled = true;
+        els.startHotspotBtn.style.opacity = '0.5';
+        els.stopHotspotBtn.style.opacity = '0.5';
         // Reset to root when not running
         els.userSelect.innerHTML = '<option value="root">root</option>';
+        // Reset hotspot state when chroot stops
+        hotspotActive = false;
       }
     }catch(e){
       updateStatus('unknown');
@@ -374,17 +422,29 @@
         els.restartBtn.disabled = false;
         els.startBtn.disabled = true;
         els.userSelect.disabled = false;
+        // Visual feedback
+        els.stopBtn.style.opacity = '';
+        els.restartBtn.style.opacity = '';
+        els.startBtn.style.opacity = '0.5';
       } else if(state === 'stopped'){
         els.stopBtn.disabled = true;
         els.restartBtn.disabled = true;
         els.startBtn.disabled = false;
         els.userSelect.disabled = true;
+        // Visual feedback
+        els.stopBtn.style.opacity = '0.5';
+        els.restartBtn.style.opacity = '0.5';
+        els.startBtn.style.opacity = '';
       } else {
         // unknown
         els.stopBtn.disabled = true;
         els.restartBtn.disabled = true;
         els.startBtn.disabled = false;
         els.userSelect.disabled = true;
+        // Visual feedback
+        els.stopBtn.style.opacity = '0.5';
+        els.restartBtn.style.opacity = '0.5';
+        els.startBtn.style.opacity = '';
       }
     }catch(e){ /* ignore if elements missing */ }
   }
@@ -616,6 +676,12 @@
         
         if(output && output.includes('AP-ENABLED')) {
           appendConsole(`✓ Hotspot started successfully`, 'success');
+          hotspotActive = true; // Update state
+          // Immediately update button states
+          els.startHotspotBtn.disabled = true;
+          els.stopHotspotBtn.disabled = false;
+          els.startHotspotBtn.style.opacity = '0.5';
+          els.stopHotspotBtn.style.opacity = '';
         } else {
           appendConsole(`✗ Failed to start hotspot`, 'err');
         }
@@ -675,7 +741,7 @@
     els.hotspotBtn.style.opacity = '0.5';
 
     // Redirect stderr to stdout to capture all output
-    const cmd = `${HOTSPOT_SCRIPT} -k 2>&1`;
+    const cmd = `sh ${HOTSPOT_SCRIPT} -k 2>&1`;
 
     // Use setTimeout to allow UI to update before blocking command
     setTimeout(() => {
@@ -685,6 +751,12 @@
         
         if(result.success) {
           appendConsole(`✓ Hotspot stopped successfully`, 'success');
+          hotspotActive = false; // Update state
+          // Immediately update button states
+          els.startHotspotBtn.disabled = false;
+          els.stopHotspotBtn.disabled = true;
+          els.startHotspotBtn.style.opacity = '';
+          els.stopHotspotBtn.style.opacity = '0.5';
         } else {
           appendConsole(`✗ Failed to stop hotspot (exit code: ${result.exitCode || 'unknown'})`, 'err');
         }
