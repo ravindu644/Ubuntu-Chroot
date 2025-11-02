@@ -32,7 +32,9 @@
     closeHotspotPopup: document.getElementById('close-hotspot-popup'),
     startHotspotBtn: document.getElementById('start-hotspot-btn'),
     stopHotspotBtn: document.getElementById('stop-hotspot-btn'),
-    hotspotForm: document.getElementById('hotspot-form')
+    hotspotForm: document.getElementById('hotspot-form'),
+    hotspotWarning: document.getElementById('hotspot-warning'),
+    dismissHotspotWarning: document.getElementById('dismiss-hotspot-warning')
   };
 
   // Track running commands to prevent UI blocking
@@ -593,11 +595,33 @@
 
   // Hotspot functions
   function openHotspotPopup(){
+    // Show warning banner on first visit
+    showHotspotWarning();
     els.hotspotPopup.classList.add('active');
   }
 
   function closeHotspotPopup(){
     els.hotspotPopup.classList.remove('active');
+  }
+
+  function showHotspotWarning(){
+    if(!els.hotspotWarning) return;
+    
+    // Check if user has already dismissed the warning
+    const dismissed = localStorage.getItem('hotspot_warning_dismissed') === 'true';
+    if(dismissed){
+      els.hotspotWarning.classList.add('hidden');
+    } else {
+      els.hotspotWarning.classList.remove('hidden');
+    }
+  }
+
+  function dismissHotspotWarning(){
+    if(!els.hotspotWarning) return;
+    
+    // Hide the warning and save dismissal to localStorage
+    els.hotspotWarning.classList.add('hidden');
+    try{ localStorage.setItem('hotspot_warning_dismissed', 'true'); }catch(e){}
   }
 
   async function startHotspot(){
@@ -1149,6 +1173,9 @@
   });
   els.startHotspotBtn.addEventListener('click', () => startHotspot());
   els.stopHotspotBtn.addEventListener('click', () => stopHotspot());
+  if(els.dismissHotspotWarning) {
+    els.dismissHotspotWarning.addEventListener('click', () => dismissHotspotWarning());
+  }
 
   // Band change updates channel limits
   document.getElementById('hotspot-band').addEventListener('change', updateChannelLimits);

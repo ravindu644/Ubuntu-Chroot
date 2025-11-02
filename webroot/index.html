@@ -128,6 +128,19 @@
           <button id="close-hotspot-popup" class="close-btn" title="Close">×</button>
         </div>
         <div class="popup-body">
+          <!-- 5GHz Warning Banner -->
+          <div id="hotspot-warning" class="warning-banner">
+            <div class="warning-content">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.232 16.5c-.77.833.192 2.5 1.732 2.5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <div class="warning-text">
+                <strong>Important:</strong> Some devices may not support 5GHz hotspot creation even if the setup appears successful. If your hotspot doesn't work on 5GHz, try switching to 2.4GHz.
+              </div>
+            </div>
+            <button id="dismiss-hotspot-warning" class="warning-close" title="Dismiss warning">×</button>
+          </div>
+          
           <div class="setting-section">
             <form id="hotspot-form">
               <div class="form-group">
