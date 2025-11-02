@@ -18,8 +18,6 @@
     refreshStatus: document.getElementById('refresh-status'),
     bootToggle: document.getElementById('boot-toggle'),
     themeToggle: document.getElementById('theme-toggle'),
-    namespaceWarning: document.getElementById('namespace-warning'),
-    dismissWarning: document.getElementById('dismiss-warning'),
     userSelect: document.getElementById('user-select'),
     settingsBtn: document.getElementById('settings-btn'),
     settingsPopup: document.getElementById('settings-popup'),
@@ -891,27 +889,9 @@
   els.clearScript.addEventListener('click', () => clearPostExecScript());
   els.uninstallBtn.addEventListener('click', () => uninstallChroot());
 
-  // Show namespace warning on first visit
-  function checkNamespaceWarning(){
-    const dismissed = localStorage.getItem('namespace_warning_dismissed');
-    if(!dismissed){
-      els.namespaceWarning.style.display = 'flex';
-    }
-  }
-
-  // Dismiss warning handler
-  els.dismissWarning.addEventListener('click', () => {
-    const dontShowAgain = document.getElementById('dont-show-warning').checked;
-    els.namespaceWarning.style.display = 'none';
-    if(dontShowAgain){
-      try{ localStorage.setItem('namespace_warning_dismissed', '1'); }catch(e){}
-    }
-  });
-
   // init
   initTheme();
   loadConsoleLogs(); // Restore previous console logs
-  checkNamespaceWarning(); // Show warning if first visit
   
   // small delay to let command-executor attach if present
   setTimeout(async ()=>{
