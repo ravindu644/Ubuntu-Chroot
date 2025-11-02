@@ -8,23 +8,6 @@
 </head>
 <body>
   <div class="app">
-    <!-- Namespace warning banner -->
-    <div id="namespace-warning" class="warning-banner" style="display:none">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0">
-        <path d="M12 9V11M12 15H12.01M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-      <div style="flex:1">
-        <strong>Enable Global Namespace Mode</strong>
-        <p>To avoid issues with mount namespaces, enable "Global Namespace" mode in your root manager (KernelSU/Magisk) for this app.</p>
-        <label class="warning-checkbox">
-          <input type="checkbox" id="dont-show-warning">
-          <span class="custom-checkbox"></span>
-          <span>Don't show this again</span>
-        </label>
-      </div>
-      <button id="dismiss-warning" class="dismiss-btn" title="Dismiss">×</button>
-    </div>
-    
     <header class="top">
       <div class="brand">
         <img src="assets/logo.png" alt="Ubuntu Chroot Manager" class="header-logo">
