@@ -16,8 +16,8 @@ check_for_susfs(){
     fi
 
     if [ "$susfs_detected" = true ]; then
-        echo "ERROR: SuSFS detected — not supported. This module is incompatible with SuSFS."
-        exit 1
+        echo -e "\nWARNING: SuSFS detected. You may face issues with this module when using it with SuSFS.\n"
+        echo -e "DO NOT REPORT ANY ISSUES RELATED TO THIS MODULE WHEN USING IT WITH SUSFS.\n"
     fi
 }
 
@@ -40,7 +40,7 @@ detect_root(){
             echo -e "\n- WARNING: You may face various terminal bugs with Magisk. Please report them to the Magisk developer as they are not relatable to this module."
             echo -e "- You can try downgrading your Magisk version to v28 or v29, as they used to have stable terminal management.\n"
             ;;
-        kernelsu) echo "- Kernelsu detected" ;;
+        kernelsu) echo "- KernelSU detected" ;;
         apatch)   echo "- Apatch detected" ;;
         *)        echo "- Unknown root method detected. Proceed with caution." ;;
     esac
