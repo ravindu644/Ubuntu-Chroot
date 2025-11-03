@@ -40,6 +40,7 @@ usage() {
     echo "  stop          Stop the chroot environment and kill all processes."
     echo "  restart       Restart the chroot environment."
     echo "  status        Show the current status of the chroot."
+    echo "  run <command> Execute a command inside the chroot environment."
     echo "  backup <path> Create a compressed backup of the chroot environment."
     echo "  restore <path> Restore chroot from a backup archive."
     echo ""
@@ -62,20 +63,34 @@ run_in_ns() {
 run_in_chroot() {
     # Execute a command inside the chroot environment using namespace isolation
     local command="$*"
-    
+
+    # Common exports for chroot environment
+    local common_exports="export PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/libexec:/opt/bin';"
+
     # Ensure chroot is started if not running
     if ! is_chroot_running; then
         start_chroot
     fi
-    
-    # Common exports for chroot environment
-    local common_exports="export PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/libexec:/opt/bin';"
-    
-    # Use run_in_ns to execute the chroot command with namespace isolation
-    run_in_ns chroot "$CHROOT_PATH" /bin/bash -c "
-        $common_exports
-        $command
-    "
+
+    # Load holder PID if available
+    if [ -f "$HOLDER_PID_FILE" ]; then
+        HOLDER_PID=$(cat "$HOLDER_PID_FILE")
+    fi
+
+    # If namespace holder is running, execute command in namespace with chroot
+    if [ -n "$HOLDER_PID" ] && kill -0 "$HOLDER_PID" 2>/dev/null; then
+        busybox nsenter --target "$HOLDER_PID" --mount -- \
+            chroot "$CHROOT_PATH" /bin/bash -c "
+                $common_exports
+                $command
+            "
+    else
+        # Fallback to direct chroot if namespace not available
+        chroot "$CHROOT_PATH" /bin/bash -c "
+            $common_exports
+            $command
+        "
+    fi
 }
 
 
@@ -428,6 +443,13 @@ list_users() {
     run_in_chroot "grep -E ':x:1[0-9][0-9][0-9]:' /etc/passwd 2>/dev/null | cut -d: -f1 | head -20 | tr '\n' ',' | sed 's/,$//'"
 }
 
+run_command() {
+    local command="$*"
+    log "Running command in chroot: $command"
+    # run_in_chroot will start chroot if needed and execute with proper namespace isolation
+    run_in_chroot "$command"
+}
+
 backup_chroot() {
     local backup_path="$1"
     
@@ -558,12 +580,13 @@ fi
 COMMAND=""
 USER_ARG="root"
 BACKUP_PATH=""
+RUN_COMMAND=""
 NO_SHELL_FLAG=0
 WEBUI_MODE=0
 
 for arg in "$@"; do
     case "$arg" in
-        start|stop|restart|status|backup|restore|list-users)
+        start|stop|restart|status|backup|restore|list-users|run)
             COMMAND="$arg"
             ;;
         --no-shell)
@@ -586,8 +609,15 @@ for arg in "$@"; do
             usage
             ;;
         *)
+            # For run command, collect all remaining arguments as the command
+            if [ "$COMMAND" = "run" ]; then
+                if [ -z "$RUN_COMMAND" ]; then
+                    RUN_COMMAND="$arg"
+                else
+                    RUN_COMMAND="$RUN_COMMAND $arg"
+                fi
             # For backup/restore commands, the next argument is the path
-            if [ "$COMMAND" = "backup" ] || [ "$COMMAND" = "restore" ]; then
+            elif [ "$COMMAND" = "backup" ] || [ "$COMMAND" = "restore" ]; then
                 BACKUP_PATH="$arg"
             else
                 USER_ARG="$arg"
@@ -630,6 +660,13 @@ case "$COMMAND" in
         ;;
     list-users)
         list_users
+        ;;
+    run)
+        if [ -z "$RUN_COMMAND" ]; then
+            error "No command specified for run"
+            usage
+        fi
+        run_command "$RUN_COMMAND"
         ;;
     backup)
         backup_chroot "$BACKUP_PATH"
