@@ -1382,6 +1382,7 @@
   loadConsoleLogs(); // Restore previous console logs
   loadHotspotSettings(); // Load hotspot settings
   loadHotspotStatus(); // Load hotspot status
+  updateChannelLimits(); // Initialize channel options based on default/loaded band
   
   // small delay to let command-executor attach if present
   setTimeout(async ()=>{
