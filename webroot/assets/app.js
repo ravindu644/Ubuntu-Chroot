@@ -1124,7 +1124,7 @@
       dotCount = 0;
 
       setTimeout(() => {
-        runCmdAsync(`rm -rf ${CHROOT_DIR}`, (result) => {
+        runCmdAsync(`rm -rf ${CHROOT_PATH_UI}`, (result) => {
           if(result.success) {
             appendConsole('✓ Existing chroot directory removed', 'success');
             // Now proceed to restore
@@ -1256,7 +1256,7 @@
       
       // Remove chroot directory
       setTimeout(() => {
-        runCmdAsync(`rm -rf ${CHROOT_DIR}`, (result) => {
+        runCmdAsync(`rm -rf ${CHROOT_PATH_UI}`, (result) => {
           clearInterval(progressInterval);
           progressLine.remove();
           
