@@ -29,6 +29,11 @@ update_v2000() {
     return 0
 }
 
+update_v2500() {
+    log "Nothing new buddy ! Everything is up-to date 🎉"
+    return 0
+}
+
 # Add new updates below following the pattern:
 # update_v{VERSION_CODE}() {
 #     log "Description of what this update does..."
