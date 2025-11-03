@@ -1125,20 +1125,45 @@
       dotCount = 0;
 
       setTimeout(() => {
-        runCmdAsync(`rm -rf ${CHROOT_PATH_UI}`, (result) => {
-          if(result.success) {
-            appendConsole('✓ Existing chroot directory removed', 'success');
-            // Now proceed to restore
-            proceedToRestore();
-          } else {
-            clearInterval(progressInterval);
-            progressLine.remove();
-            appendConsole('✗ Failed to remove existing chroot directory', 'err');
-            appendConsole('Restore aborted - please remove the directory manually first', 'err');
-            activeCommandId = null;
-            disableAllActions(false);
-            disableSettingsPopup(false, false);
-          }
+        // First check if directory exists
+        runCmdSync(`[ -d "${CHROOT_PATH_UI}" ] && echo "exists" || echo "not_exists"`).then((checkResult) => {
+          const dirExists = checkResult && checkResult.trim() === 'exists';
+          
+          // Remove directory
+          runCmdAsync(`rm -rf ${CHROOT_PATH_UI}`, (result) => {
+            if(result.success) {
+              if(dirExists) {
+                appendConsole('✓ Existing chroot directory removed', 'success');
+              }
+              // Now proceed to restore
+              proceedToRestore();
+            } else {
+              clearInterval(progressInterval);
+              progressLine.remove();
+              appendConsole('✗ Failed to remove existing chroot directory', 'err');
+              appendConsole('Restore aborted - please remove the directory manually first', 'err');
+              activeCommandId = null;
+              disableAllActions(false);
+              disableSettingsPopup(false, false);
+            }
+          });
+        }).catch(() => {
+          // If check fails, assume directory exists and proceed with removal
+          runCmdAsync(`rm -rf ${CHROOT_PATH_UI}`, (result) => {
+            if(result.success) {
+              appendConsole('✓ Existing chroot directory removed', 'success');
+              // Now proceed to restore
+              proceedToRestore();
+            } else {
+              clearInterval(progressInterval);
+              progressLine.remove();
+              appendConsole('✗ Failed to remove existing chroot directory', 'err');
+              appendConsole('Restore aborted - please remove the directory manually first', 'err');
+              activeCommandId = null;
+              disableAllActions(false);
+              disableSettingsPopup(false, false);
+            }
+          });
         });
       }, 50);
     }
