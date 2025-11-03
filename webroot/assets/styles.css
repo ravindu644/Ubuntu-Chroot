@@ -466,6 +466,13 @@ textarea {
   min-width: 0;
 }
 
+/* Ensure danger buttons in script-actions are red (higher specificity) */
+.script-actions .btn.danger {
+  background: var(--danger) !important;
+  color: white !important;
+  border: 1px solid var(--danger) !important;
+}
+
 /* Make standalone buttons in settings sections consistent with script-actions buttons */
 .setting-section > .btn {
   width: 50%;

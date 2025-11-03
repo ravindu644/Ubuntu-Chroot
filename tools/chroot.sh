@@ -39,6 +39,8 @@ usage() {
     echo "  stop          Stop the chroot environment and kill all processes."
     echo "  restart       Restart the chroot environment."
     echo "  status        Show the current status of the chroot."
+    echo "  backup <path> Create a compressed backup of the chroot environment."
+    echo "  restore <path> Restore chroot from a backup archive."
     echo ""
     echo "Options:"
     echo "  [user]        Username to log in as (default: root)."
@@ -378,6 +380,95 @@ show_status() {
     fi
 }
 
+backup_chroot() {
+    local backup_path="$1"
+    
+    if [ -z "$backup_path" ]; then
+        error "Backup path not specified"
+        exit 1
+    fi
+    
+    # Ensure backup path directory exists
+    local backup_dir="$(dirname "$backup_path")"
+    if ! run_in_ns mkdir -p "$backup_dir"; then
+        error "Failed to create backup directory: $backup_dir"
+        exit 1
+    fi
+    
+    log "Creating backup archive: $backup_path"
+
+    # Stop chroot if running (only in manual mode)
+    if [ "$WEBUI_MODE" -eq 0 ] && is_chroot_running; then
+        log "Stopping chroot for backup..."
+        stop_chroot
+    fi
+    
+    # Create compressed tar archive
+    if run_in_ns busybox tar -czf "$backup_path" -C "$(dirname "$CHROOT_PATH")" "$(basename "$CHROOT_PATH")" 2>/dev/null; then
+        local size
+        size=$(run_in_ns du -h "$backup_path" 2>/dev/null | cut -f1)
+        log "Backup created successfully: $backup_path (${size:-unknown size})"
+    else
+        error "Failed to create backup archive"
+        exit 1
+    fi
+}
+
+restore_chroot() {
+    local backup_path="$1"
+    
+    if [ -z "$backup_path" ]; then
+        error "Backup path not specified"
+        exit 1
+    fi
+    
+    if [ ! -f "$backup_path" ]; then
+        error "Backup file does not exist: $backup_path"
+        exit 1
+    fi
+    
+    # Check if backup file has .tar.gz extension
+    case "$backup_path" in
+        *.tar.gz) ;;
+        *) error "Backup file must have .tar.gz extension"; exit 1 ;;
+    esac
+    
+    log "Extracting backup archive from: $backup_path"
+    
+    # Stop and clean up current chroot if running (only in manual mode)
+    if [ "$WEBUI_MODE" -eq 0 ]; then
+        if is_chroot_running; then
+            log "Stopping running chroot..."
+            stop_chroot
+        fi
+
+        # Remove existing chroot directory
+        if [ -d "$CHROOT_PATH" ]; then
+            log "Removing existing chroot directory..."
+            if ! run_in_ns rm -rf "$CHROOT_PATH"; then
+                error "Failed to remove existing chroot directory"
+                exit 1
+            fi
+        fi
+    fi
+    
+    # Create parent directory if needed
+    local chroot_parent="$(dirname "$CHROOT_PATH")"
+    if ! run_in_ns mkdir -p "$chroot_parent"; then
+        error "Failed to create chroot parent directory: $chroot_parent"
+        exit 1
+    fi
+    
+    # Extract the tar.gz archive
+    if run_in_ns busybox tar -xzf "$backup_path" -C "$chroot_parent" 2>/dev/null; then
+        log "Chroot restored successfully from: $backup_path"
+        log "You may need to restart the chroot environment"
+    else
+        error "Failed to extract backup archive"
+        exit 1
+    fi
+}
+
 
 # --- Main Script Logic ---
 
@@ -401,15 +492,20 @@ fi
 # Centralized argument parsing.
 COMMAND=""
 USER_ARG="root"
+BACKUP_PATH=""
 NO_SHELL_FLAG=0
+WEBUI_MODE=0
 
 for arg in "$@"; do
     case "$arg" in
-        start|stop|restart|status)
+        start|stop|restart|status|backup|restore)
             COMMAND="$arg"
             ;;
         --no-shell)
             NO_SHELL_FLAG=1
+            ;;
+        --webui)
+            WEBUI_MODE=1
             ;;
         --skip-post-exec)
             SKIP_POST_EXEC=1
@@ -425,7 +521,12 @@ for arg in "$@"; do
             usage
             ;;
         *)
-            USER_ARG="$arg"
+            # For backup/restore commands, the next argument is the path
+            if [ "$COMMAND" = "backup" ] || [ "$COMMAND" = "restore" ]; then
+                BACKUP_PATH="$arg"
+            else
+                USER_ARG="$arg"
+            fi
             ;;
     esac
 done
@@ -461,6 +562,12 @@ case "$COMMAND" in
         ;;
     status)
         show_status
+        ;;
+    backup)
+        backup_chroot "$BACKUP_PATH"
+        ;;
+    restore)
+        restore_chroot "$BACKUP_PATH"
         ;;
     *)
         error "Invalid command: $COMMAND"
