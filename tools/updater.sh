@@ -80,11 +80,23 @@ apply_update() {
     local func_name="update_v${version}"
 
     if command -v "$func_name" >/dev/null 2>&1; then
+        # Add clear separator for this update in the log file
+        {
+            echo ""
+            echo "=== Applying Update v$version ==="
+            echo "Started: $(date)"
+            echo ""
+        } >> "$LOG_FILE"
+
         log "Applying update v$version..."
         if "$func_name"; then
+            # Mark update as completed in log
+            echo "✓ Update v$version completed successfully" >> "$LOG_FILE"
             log "Update v$version completed successfully"
             return 0
         else
+            # Mark update as failed in log
+            echo "✗ Update v$version failed" >> "$LOG_FILE"
             error "Update v$version failed"
             return 1
         fi
@@ -143,6 +155,15 @@ perform_update() {
         # Update version file after successful update
         set_current_version "$version"
     done
+
+    # Add final summary to log file
+    {
+        echo ""
+        echo "=== Update Session Complete ==="
+        echo "Final version: $(get_current_version)"
+        echo "Completed: $(date)"
+        echo ""
+    } >> "$LOG_FILE"
 
     log "All updates applied successfully"
     return 0
