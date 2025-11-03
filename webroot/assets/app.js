@@ -27,8 +27,10 @@
     postExecScript: document.getElementById('post-exec-script'),
     saveScript: document.getElementById('save-script'),
     clearScript: document.getElementById('clear-script'),
-    uninstallBtn: document.getElementById('uninstall-btn'),
     updateBtn: document.getElementById('update-btn'),
+    backupBtn: document.getElementById('backup-btn'),
+    restoreBtn: document.getElementById('restore-btn'),
+    uninstallBtn: document.getElementById('uninstall-btn'),
     hotspotBtn: document.getElementById('hotspot-btn'),
     hotspotPopup: document.getElementById('hotspot-popup'),
     closeHotspotPopup: document.getElementById('close-hotspot-popup'),
@@ -381,14 +383,14 @@
         }
         updateStatus('stopped');
         disableAllActions(true);
-        disableSettingsPopup(true);
+        disableSettingsPopup(true, false); // chroot doesn't exist
         try{ document.getElementById('copy-login').disabled = true; }catch(e){}
         return;
       } else {
         _chrootMissingLogged = false;
         // Re-enable actions when chroot exists
         disableAllActions(false);
-        disableSettingsPopup(false);
+        disableSettingsPopup(false, true); // chroot exists
       }
 
       // Get status without blocking UI
@@ -558,7 +560,7 @@
     if(!window.cmdExec || typeof cmdExec.execute !== 'function'){
       appendConsole('No root bridge detected — running offline. Actions disabled.');
       disableAllActions(true);
-      disableSettingsPopup(true);
+      disableSettingsPopup(true, true); // assume chroot exists for now
       return;
     }
 
@@ -568,14 +570,14 @@
       // If successful, root is available
       rootAccessConfirmed = true;
       disableAllActions(false);
-      disableSettingsPopup(false);
+      disableSettingsPopup(false, true); // assume chroot exists for now
     }catch(e){
       // If failed, show the backend error message once
       rootAccessConfirmed = false;
       appendConsole(`Failed to detect root execution method: ${e.message}`, 'err');
       // Then disable all root-dependent UI elements
       disableAllActions(true);
-      disableSettingsPopup(true);
+      disableSettingsPopup(true, true); // assume chroot exists for now
     }
   }
 
@@ -908,6 +910,249 @@
     }, 50);
   }
 
+  async function backupChroot(){
+    if(activeCommandId) {
+      appendConsole('⚠ Another command is already running. Please wait...', 'warn');
+      return;
+    }
+
+    // Get backup path
+    const backupPath = await showFilePickerDialog(
+      'Backup Chroot Environment',
+      'Select where to save the backup file.\n\nThe chroot will be stopped during backup if it\'s currently running.',
+      '/sdcard',
+      `chroot-backup-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.tar.gz`
+    );
+
+    if(!backupPath) return;
+
+    // Confirm
+    const confirmed = await showConfirmDialog(
+      'Backup Chroot Environment',
+      `This will create a compressed backup of your chroot environment.\n\nThe chroot will be stopped during backup if it's currently running.\n\nBackup location: ${backupPath}\n\nContinue?`,
+      'Backup',
+      'Cancel'
+    );
+
+    if(!confirmed) return;
+
+    // Close popup and wait for animation
+    closeSettingsPopup();
+    await new Promise(resolve => setTimeout(resolve, 750));
+
+    // Start backup
+    appendConsole('━━━ Starting Chroot Backup ━━━', 'info');
+
+    const progressLine = document.createElement('div');
+    progressLine.className = 'progress-indicator';
+    progressLine.textContent = '⏳ Backing up chroot';
+    els.console.appendChild(progressLine);
+    els.console.scrollTop = els.console.scrollHeight;
+
+    let dotCount = 0;
+    const progressInterval = setInterval(() => {
+      dotCount = (dotCount + 1) % 4;
+      progressLine.textContent = '⏳ Backing up chroot' + '.'.repeat(dotCount);
+    }, 400);
+
+    disableAllActions(true);
+    disableSettingsPopup(true);
+
+    // Check if chroot is running
+    const isRunning = els.statusText.textContent.trim() === 'running';
+
+    if(isRunning){
+      // Stop chroot first
+      progressLine.textContent = '⏳ Stopping chroot';
+      dotCount = 0;
+
+      setTimeout(() => {
+        runCmdAsync(`sh ${PATH_CHROOT_SH} stop >/dev/null 2>&1`, (result) => {
+          if(result.success) {
+            appendConsole('✓ Chroot stopped for backup', 'success');
+            // Now proceed to backup
+            proceedToBackup();
+          } else {
+            clearInterval(progressInterval);
+            progressLine.remove();
+            appendConsole('✗ Failed to stop chroot', 'err');
+            appendConsole('Backup aborted - please stop the chroot manually first', 'err');
+            activeCommandId = null;
+            disableAllActions(false);
+            disableSettingsPopup(false, true);
+          }
+        });
+      }, 50);
+    } else {
+      // Chroot not running, proceed directly
+      proceedToBackup();
+    }
+
+    function proceedToBackup(){
+      progressLine.textContent = '⏳ Creating backup';
+      dotCount = 0;
+
+      setTimeout(() => {
+        runCmdAsync(`sh ${PATH_CHROOT_SH} backup --webui "${backupPath}"`, (result) => {
+          clearInterval(progressInterval);
+          progressLine.remove();
+
+          if(result.success) {
+            appendConsole('✓ Backup completed successfully', 'success');
+            appendConsole(`Saved to: ${backupPath}`, 'info');
+            appendConsole('━━━ Backup Complete ━━━', 'success');
+          } else {
+            appendConsole('✗ Backup failed', 'err');
+          }
+
+          activeCommandId = null;
+          disableAllActions(false);
+          disableSettingsPopup(false, true);
+
+          setTimeout(() => refreshStatus(), 500);
+        });
+      }, 50);
+    }
+  }
+
+  async function restoreChroot(){
+    if(activeCommandId) {
+      appendConsole('⚠ Another command is already running. Please wait...', 'warn');
+      return;
+    }
+
+    if(!rootAccessConfirmed){
+      appendConsole('Cannot restore chroot: root access not available', 'err');
+      return;
+    }
+
+    // Get backup file
+    const backupPath = await showFilePickerDialog(
+      'Restore Chroot Environment',
+      'Select the backup file to restore from.\n\n⚠️ WARNING: This will permanently delete your current chroot environment!',
+      '/sdcard',
+      '',
+      true // forRestore = true
+    );
+
+    if(!backupPath) return;
+
+    // Confirm with warning
+    const confirmed = await showConfirmDialog(
+      'Restore Chroot Environment',
+      `⚠️ WARNING: This will permanently delete your current chroot environment and replace it with the backup!\n\nAll current data in the chroot will be lost.\n\nBackup file: ${backupPath}\n\nThis action cannot be undone. Continue?`,
+      'Restore',
+      'Cancel'
+    );
+
+    if(!confirmed) return;
+
+    // Close popup and wait for animation
+    closeSettingsPopup();
+    await new Promise(resolve => setTimeout(resolve, 750));
+
+    // Start restore
+    appendConsole('━━━ Starting Chroot Restore ━━━', 'warn');
+
+    const progressLine = document.createElement('div');
+    progressLine.className = 'progress-indicator';
+    progressLine.textContent = '⏳ Restoring chroot';
+    els.console.appendChild(progressLine);
+    els.console.scrollTop = els.console.scrollHeight;
+
+    let dotCount = 0;
+    const progressInterval = setInterval(() => {
+      dotCount = (dotCount + 1) % 4;
+      progressLine.textContent = '⏳ Restoring chroot' + '.'.repeat(dotCount);
+    }, 400);
+
+    disableAllActions(true);
+    disableSettingsPopup(true);
+
+    // Check if chroot is running
+    const isRunning = els.statusText.textContent.trim() === 'running';
+
+    if(isRunning){
+      // Stop chroot first
+      progressLine.textContent = '⏳ Stopping chroot';
+      dotCount = 0;
+
+      setTimeout(() => {
+        runCmdAsync(`sh ${PATH_CHROOT_SH} stop >/dev/null 2>&1`, (result) => {
+          if(result.success) {
+            appendConsole('✓ Chroot stopped for restore', 'success');
+            // Now proceed to remove
+            proceedToRemove();
+          } else {
+            clearInterval(progressInterval);
+            progressLine.remove();
+            appendConsole('✗ Failed to stop chroot', 'err');
+            appendConsole('Restore aborted - please stop the chroot manually first', 'err');
+            activeCommandId = null;
+            disableAllActions(false);
+            disableSettingsPopup(false, true);
+          }
+        });
+      }, 50);
+    } else {
+      // Chroot not running, proceed directly to remove
+      proceedToRemove();
+    }
+
+    function proceedToRemove(){
+      progressLine.textContent = '⏳ Removing current chroot';
+      dotCount = 0;
+
+      setTimeout(() => {
+        runCmdAsync(`rm -rf ${CHROOT_DIR}`, (result) => {
+          if(result.success) {
+            appendConsole('✓ Existing chroot directory removed', 'success');
+            // Now proceed to restore
+            proceedToRestore();
+          } else {
+            clearInterval(progressInterval);
+            progressLine.remove();
+            appendConsole('✗ Failed to remove existing chroot directory', 'err');
+            appendConsole('Restore aborted - please remove the directory manually first', 'err');
+            activeCommandId = null;
+            disableAllActions(false);
+            disableSettingsPopup(false, false);
+          }
+        });
+      }, 50);
+    }
+
+    function proceedToRestore(){
+      progressLine.textContent = '⏳ Extracting backup';
+      dotCount = 0;
+
+      setTimeout(() => {
+        runCmdAsync(`sh ${PATH_CHROOT_SH} restore --webui "${backupPath}"`, (result) => {
+          clearInterval(progressInterval);
+          progressLine.remove();
+
+          if(result.success) {
+            appendConsole('✓ Restore completed successfully', 'success');
+            appendConsole('The chroot environment has been restored', 'info');
+            appendConsole('━━━ Restore Complete ━━━', 'success');
+            appendConsole('You may need to restart the chroot environment', 'info');
+
+            updateStatus('stopped');
+            disableAllActions(true);
+          } else {
+            appendConsole('✗ Restore failed', 'err');
+            disableAllActions(false);
+          }
+
+          activeCommandId = null;
+          disableSettingsPopup(false, true);
+
+          setTimeout(() => refreshStatus(), 1000);
+        });
+      }, 50);
+    }
+  }
+
   async function uninstallChroot(){ 
     if(activeCommandId) {
       appendConsole('⚠ Another command is already running. Please wait...', 'warn');
@@ -926,11 +1171,14 @@
       return;
     }
 
+    // Small delay to ensure confirmation dialog is fully closed
+    await new Promise(resolve => setTimeout(resolve, 100));
+
     // Close settings popup with smooth animation
     closeSettingsPopup();
     
-    // Wait for settings popup animation to complete (300ms for fade out)
-    await new Promise(resolve => setTimeout(resolve, 350));
+    // Wait for settings popup animation to complete (1500ms for fade out)
+    await new Promise(resolve => setTimeout(resolve, 1500));
     
     // Now we're back at main UI - start uninstall process
     appendConsole('━━━ Starting Uninstallation ━━━', 'warn');
@@ -973,7 +1221,7 @@
             appendConsole('✗ Failed to stop chroot', 'err');
             appendConsole('Uninstallation aborted - please stop the chroot manually first', 'err');
             disableAllActions(false);
-            disableSettingsPopup(false);
+            disableSettingsPopup(false, false); // chroot no longer exists after uninstall
           }
         });
       }, 50);
@@ -1008,7 +1256,7 @@
           }
           
           // Always re-enable settings popup after completion
-          disableSettingsPopup(false);
+          disableSettingsPopup(false, false); // chroot no longer exists after uninstall
           
           // Refresh status to update UI
           setTimeout(() => refreshStatus(), 1000);
@@ -1018,7 +1266,7 @@
   }
 
   // Disable settings popup when no root available
-  function disableSettingsPopup(disabled){
+  function disableSettingsPopup(disabled, chrootExists = true){
     try{
       if(els.settingsPopup){
         // Keep popup clickable for closing, but dim it
@@ -1049,11 +1297,38 @@
         els.clearScript.style.cursor = disabled ? 'not-allowed' : '';
         els.clearScript.style.pointerEvents = disabled ? 'none' : '';
       }
+      if(els.updateBtn) {
+        els.updateBtn.disabled = disabled;
+        els.updateBtn.style.opacity = disabled ? '0.5' : '';
+        els.updateBtn.style.cursor = disabled ? 'not-allowed' : '';
+        els.updateBtn.style.pointerEvents = disabled ? 'none' : '';
+      }
+      
+      // ✅ FIXED: Backup button - disabled when chroot doesn't exist OR no root access
+      if(els.backupBtn) {
+        const backupDisabled = disabled || !chrootExists;
+        els.backupBtn.disabled = backupDisabled;
+        els.backupBtn.style.opacity = backupDisabled ? '0.5' : '';
+        els.backupBtn.style.cursor = backupDisabled ? 'not-allowed' : '';
+        els.backupBtn.style.pointerEvents = backupDisabled ? 'none' : '';
+      }
+      
+      // ✅ FIXED: Restore button - only disabled when no root access (ALWAYS available with root)
+      if(els.restoreBtn) {
+        const restoreDisabled = disabled; // Only check the 'disabled' parameter (which reflects root access)
+        els.restoreBtn.disabled = restoreDisabled;
+        els.restoreBtn.style.opacity = restoreDisabled ? '0.5' : '';
+        els.restoreBtn.style.cursor = restoreDisabled ? 'not-allowed' : '';
+        els.restoreBtn.style.pointerEvents = restoreDisabled ? 'none' : '';
+      }
+      
       if(els.uninstallBtn) {
-        els.uninstallBtn.disabled = disabled;
-        els.uninstallBtn.style.opacity = disabled ? '0.5' : '';
-        els.uninstallBtn.style.cursor = disabled ? 'not-allowed' : '';
-        els.uninstallBtn.style.pointerEvents = disabled ? 'none' : '';
+        // Uninstall should be disabled when chroot doesn't exist OR no root access
+        const uninstallDisabled = disabled || !chrootExists;
+        els.uninstallBtn.disabled = uninstallDisabled;
+        els.uninstallBtn.style.opacity = uninstallDisabled ? '0.5' : '';
+        els.uninstallBtn.style.cursor = uninstallDisabled ? 'not-allowed' : '';
+        els.uninstallBtn.style.pointerEvents = uninstallDisabled ? 'none' : '';
       }
     }catch(e){}
   }
@@ -1133,6 +1408,7 @@
         cursor: pointer;
         font-size: 14px;
         transition: all 0.2s ease;
+        -webkit-tap-highlight-color: transparent;
       `;
 
       // Create confirm button
@@ -1147,6 +1423,7 @@
         cursor: pointer;
         font-size: 14px;
         transition: all 0.2s ease;
+        -webkit-tap-highlight-color: transparent;
       `;
 
       // Dark mode adjustments
@@ -1220,6 +1497,312 @@
     });
   }
 
+  // File picker dialog for backup/restore operations
+  function showFilePickerDialog(title, message, defaultPath, defaultFilename, forRestore = false){
+    return new Promise((resolve) => {
+      // Create overlay
+      const overlay = document.createElement('div');
+      overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2000;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+      `;
+
+      // Create dialog
+      const dialog = document.createElement('div');
+      dialog.style.cssText = `
+        background: var(--card);
+        border-radius: var(--surface-radius);
+        box-shadow: 0 6px 20px rgba(6,8,14,0.06);
+        border: 1px solid rgba(0,0,0,0.08);
+        max-width: 450px;
+        width: 90%;
+        padding: 24px;
+        transform: scale(0.9);
+        transition: transform 0.2s ease;
+      `;
+
+      // Create title
+      const titleEl = document.createElement('h3');
+      titleEl.textContent = title;
+      titleEl.style.cssText = `
+        margin: 0 0 12px 0;
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--text);
+      `;
+
+      // Create message
+      const messageEl = document.createElement('p');
+      messageEl.textContent = message;
+      messageEl.style.cssText = `
+        margin: 0 0 16px 0;
+        font-size: 14px;
+        color: var(--muted);
+        line-height: 1.5;
+      `;
+
+      // Create form container
+      const formContainer = document.createElement('div');
+      formContainer.style.cssText = `
+        margin-bottom: 20px;
+      `;
+
+      let pathInput; // Declare here for scope
+
+      if(!forRestore){
+        // For backup: path input + filename input
+        const pathLabel = document.createElement('label');
+        pathLabel.textContent = 'Directory:';
+        pathLabel.style.cssText = `
+          display: block;
+          margin-bottom: 6px;
+          font-weight: 500;
+          color: var(--text);
+          font-size: 14px;
+        `;
+
+        pathInput = document.createElement('input');
+        pathInput.type = 'text';
+        pathInput.value = defaultPath;
+        pathInput.placeholder = '/sdcard/backup';
+        pathInput.style.cssText = `
+          width: 100%;
+          padding: 8px 12px;
+          border: 1px solid rgba(0,0,0,0.08);
+          border-radius: 8px;
+          background: var(--card);
+          color: var(--text);
+          font-size: 14px;
+          margin-bottom: 12px;
+          box-sizing: border-box;
+        `;
+
+        const filenameLabel = document.createElement('label');
+        filenameLabel.textContent = 'Filename:';
+        filenameLabel.style.cssText = `
+          display: block;
+          margin-bottom: 6px;
+          font-weight: 500;
+          color: var(--text);
+          font-size: 14px;
+        `;
+
+        const filenameInput = document.createElement('input');
+        filenameInput.type = 'text';
+        filenameInput.value = defaultFilename;
+        filenameInput.placeholder = 'chroot-backup.tar.gz';
+        filenameInput.style.cssText = `
+          width: 100%;
+          padding: 8px 12px;
+          border: 1px solid rgba(0,0,0,0.08);
+          border-radius: 8px;
+          background: var(--card);
+          color: var(--text);
+          font-size: 14px;
+          box-sizing: border-box;
+        `;
+
+        // Auto-append .tar.gz if not present
+        filenameInput.addEventListener('input', () => {
+          if(!filenameInput.value.includes('.tar.gz') && filenameInput.value.length > 0){
+            filenameInput.value = filenameInput.value.replace(/\.tar\.gz$/, '') + '.tar.gz';
+          }
+        });
+
+        // Focus on filename input
+        setTimeout(() => filenameInput.focus(), 100);
+
+        formContainer.appendChild(pathLabel);
+        formContainer.appendChild(pathInput);
+        formContainer.appendChild(filenameLabel);
+        formContainer.appendChild(filenameInput);
+      } else {
+        // For restore: single file path input
+        const pathLabel = document.createElement('label');
+        pathLabel.textContent = 'Backup File Path:';
+        pathLabel.style.cssText = `
+          display: block;
+          margin-bottom: 6px;
+          font-weight: 500;
+          color: var(--text);
+          font-size: 14px;
+        `;
+
+        pathInput = document.createElement('input');
+        pathInput.type = 'text';
+        pathInput.value = defaultPath;
+        pathInput.placeholder = '/sdcard/chroot-backup.tar.gz';
+        pathInput.style.cssText = `
+          width: 100%;
+          padding: 8px 12px;
+          border: 1px solid rgba(0,0,0,0.08);
+          border-radius: 8px;
+          background: var(--card);
+          color: var(--text);
+          font-size: 14px;
+          box-sizing: border-box;
+        `;
+
+        // Focus on path input
+        setTimeout(() => pathInput.focus(), 100);
+
+        formContainer.appendChild(pathLabel);
+        formContainer.appendChild(pathInput);
+      }
+
+      // Create button container
+      const buttonContainer = document.createElement('div');
+      buttonContainer.style.cssText = `
+        display: flex;
+        gap: 12px;
+        justify-content: flex-end;
+      `;
+
+      // Create cancel button
+      const cancelBtn = document.createElement('button');
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.style.cssText = `
+        padding: 8px 16px;
+        border: 1px solid rgba(0,0,0,0.08);
+        border-radius: 8px;
+        background: transparent;
+        color: var(--text);
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s ease;
+        -webkit-tap-highlight-color: transparent;
+      `;
+
+      // Create select button
+      const selectBtn = document.createElement('button');
+      selectBtn.textContent = forRestore ? 'Select File' : 'Select Location';
+      selectBtn.style.cssText = `
+        padding: 8px 16px;
+        border: 1px solid var(--accent);
+        border-radius: 8px;
+        background: var(--accent);
+        color: white;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s ease;
+        -webkit-tap-highlight-color: transparent;
+      `;
+
+      // Dark mode adjustments
+      if(document.documentElement.getAttribute('data-theme') === 'dark'){
+        dialog.style.borderColor = 'rgba(255,255,255,0.08)';
+        cancelBtn.style.borderColor = 'rgba(255,255,255,0.08)';
+        if(!forRestore){
+          formContainer.querySelectorAll('input').forEach(input => {
+            input.style.borderColor = 'rgba(255,255,255,0.08)';
+          });
+        } else {
+          pathInput.style.borderColor = 'rgba(255,255,255,0.08)';
+        }
+        cancelBtn.addEventListener('mouseenter', () => {
+          cancelBtn.style.background = 'rgba(255,255,255,0.05)';
+        });
+        cancelBtn.addEventListener('mouseleave', () => {
+          cancelBtn.style.background = 'transparent';
+        });
+      }
+
+      // Event listeners
+      const closeDialog = (result) => {
+        overlay.style.opacity = '0';
+        dialog.style.transform = 'scale(0.9)';
+        setTimeout(() => {
+          document.body.removeChild(overlay);
+          resolve(result);
+        }, 200);
+      };
+
+      cancelBtn.addEventListener('click', () => closeDialog(null));
+
+      selectBtn.addEventListener('click', () => {
+        let selectedPath = '';
+        if(!forRestore){
+          const pathInput = formContainer.querySelector('input:nth-child(2)');
+          const filenameInput = formContainer.querySelector('input:nth-child(4)');
+          const path = pathInput.value.trim();
+          const filename = filenameInput.value.trim();
+          if(path && filename){
+            selectedPath = path + (path.endsWith('/') ? '' : '/') + filename;
+          }
+        } else {
+          const pathInput = formContainer.querySelector('input');
+          selectedPath = pathInput.value.trim();
+        }
+
+        if(selectedPath){
+          // Basic validation
+          if(forRestore && !selectedPath.endsWith('.tar.gz')){
+            alert('Please select a valid .tar.gz backup file');
+            return;
+          }
+          closeDialog(selectedPath);
+        } else {
+          alert('Please enter a valid path');
+        }
+      });
+
+      selectBtn.addEventListener('mouseenter', () => {
+        selectBtn.style.transform = 'translateY(-1px)';
+        selectBtn.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.3)';
+      });
+
+      selectBtn.addEventListener('mouseleave', () => {
+        selectBtn.style.transform = 'translateY(0)';
+        selectBtn.style.boxShadow = 'none';
+      });
+
+      // Close on overlay click
+      overlay.addEventListener('click', (e) => {
+        if(e.target === overlay) closeDialog(null);
+      });
+
+      // Keyboard support
+      const handleKeyDown = (e) => {
+        if(e.key === 'Escape') {
+          closeDialog(null);
+          document.removeEventListener('keydown', handleKeyDown);
+        } else if(e.key === 'Enter') {
+          selectBtn.click();
+          document.removeEventListener('keydown', handleKeyDown);
+        }
+      };
+      document.addEventListener('keydown', handleKeyDown);
+
+      // Assemble dialog
+      buttonContainer.appendChild(cancelBtn);
+      buttonContainer.appendChild(selectBtn);
+
+      dialog.appendChild(titleEl);
+      dialog.appendChild(messageEl);
+      dialog.appendChild(formContainer);
+      dialog.appendChild(buttonContainer);
+
+      overlay.appendChild(dialog);
+      document.body.appendChild(overlay);
+
+      // Animate in
+      setTimeout(() => {
+        overlay.style.opacity = '1';
+        dialog.style.transform = 'scale(1)';
+      }, 10);
+    });
+  }
+
 
   // theme: supports either an input checkbox or a button with aria-pressed
   function initTheme(){
@@ -1280,6 +1863,8 @@
   els.saveScript.addEventListener('click', () => savePostExecScript());
   els.clearScript.addEventListener('click', () => clearPostExecScript());
   els.updateBtn.addEventListener('click', () => updateChroot());
+  els.backupBtn.addEventListener('click', () => backupChroot());
+  els.restoreBtn.addEventListener('click', () => restoreChroot());
   els.uninstallBtn.addEventListener('click', () => uninstallChroot());
 
   // Hotspot event handlers
