@@ -27,7 +27,7 @@ detect_root() {
 
     # Check for SuSFS compatibility
     if zcat /proc/config.gz 2>/dev/null | grep -q "CONFIG_KSU_SUSFS=y" || [ -d /data/adb/modules/susfs4ksu ]; then
-        echo -e "\nWARNING: SuSFS detected. You may encounter mounting issues with \"/proc\".\n"
+        echo -e "WARNING: SuSFS detected. You may encounter mounting issues with \"/proc\".\n"
         echo -e "Fix: Disable \"HIDE SUS MOUNTS FOR ALL PROCESSES\" in SuSFS4KSU settings.\n"
     fi
 }
