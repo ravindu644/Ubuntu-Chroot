@@ -6,15 +6,13 @@ setup_chroot(){
   mkdir -p /data/local/ubuntu-chroot
   unzip -oj "$ZIPFILE" 'tools/chroot.sh' -d /data/local/ubuntu-chroot >&2
   unzip -oj "$ZIPFILE" 'tools/start-hotspot' -d /data/local/ubuntu-chroot >&2
+  unzip -oj "$ZIPFILE" 'tools/sparsemgr.sh' -d /data/local/ubuntu-chroot >&2
 }
 
 setup_ota(){
     mkdir -p /data/local/ubuntu-chroot/ota
     unzip -oj "$ZIPFILE" 'tools/updater.sh' -d /data/local/ubuntu-chroot/ota >&2
     unzip -oj "$ZIPFILE" 'tools/updates.sh' -d /data/local/ubuntu-chroot/ota >&2
-
-    chmod 0755 /data/local/ubuntu-chroot/ota/updater.sh >&2
-    chmod 0755 /data/local/ubuntu-chroot/ota/updates.sh >&2
 
     # Only create version file if it doesn't exist
     if [ ! -f "$VERSION_FILE" ]; then
@@ -71,22 +69,122 @@ detect_root(){
 
 extract_rootfs(){
     local ROOTFS_DIR="/data/local/ubuntu-chroot/rootfs"
+    local ROOTFS_IMG="/data/local/ubuntu-chroot/rootfs.img"
+    local EXPERIMENTAL_CONF="$MODPATH/experimental.conf"
 
-    if [ -d "$ROOTFS_DIR" ]; then
-        echo "- Rootfs already exists. Skipping extraction..."
-        return 0
+    # Extract experimental.conf first to check configuration
+    if unzip -oj "$ZIPFILE" 'experimental.conf' -d "$MODPATH" >&2 2>/dev/null; then
+        echo "- Experimental configuration extracted"
     fi
+
+    # Check if experimental sparse image method is enabled
+    if [ -f "$EXPERIMENTAL_CONF" ]; then
+        # Source the config file to get variables
+        . "$EXPERIMENTAL_CONF" 2>/dev/null
+        
+        if [ "$USE_SPARSE_IMAGE_METHOD" = "true" ]; then
+            echo "- Experimental sparse image method enabled"
+
+            # Use size from config (default 8GB) with G suffix
+            SPARSE_IMAGE_SIZE=${SPARSE_IMAGE_SIZE:-8}
+            
+            echo "- Creating sparse image: ${SPARSE_IMAGE_SIZE}GB"
+
+            # Check if image already exists and is mounted
+            if [ -f "$ROOTFS_IMG" ]; then
+                echo "- Sparse image already exists. Checking mount status..."
+
+                # Check if already mounted
+                if mountpoint -q "$ROOTFS_DIR" 2>/dev/null; then
+                    echo "- Rootfs already mounted. Skipping image creation..."
+                    return 0
+                else
+                    echo "- Image exists but not mounted. Mounting..."
+                    mkdir -p "$ROOTFS_DIR"
+                    mount -t ext4 -o loop,rw,noatime,nodiratime,barrier=0 "$ROOTFS_IMG" "$ROOTFS_DIR" || {
+                        echo "Failed to mount existing sparse image"
+                        exit 1
+                    }
+                    echo "- Sparse image mounted successfully"
+                    return 0
+                fi
+            fi
+
+            # Create sparse image
+            echo "- Creating sparse image file..."
+            truncate -s "${SPARSE_IMAGE_SIZE}G" "$ROOTFS_IMG" || {
+                echo "Failed to create sparse image"
+                exit 1
+            }
+
+            # Format as ext4 with performance optimizations
+            echo "- Formatting sparse image with ext4..."
+            mkfs.ext4 -F -O ^has_journal,^resize_inode -m 0 -L "ubuntu-chroot" "$ROOTFS_IMG" || {
+                echo "Failed to format sparse image"
+                rm -f "$ROOTFS_IMG"
+                exit 1
+            }
+
+            # Mount the image
+            echo "- Mounting sparse image..."
+            mkdir -p "$ROOTFS_DIR"
+            mount -t ext4 -o loop,rw,noatime,nodiratime,barrier=0 "$ROOTFS_IMG" "$ROOTFS_DIR" || {
+                echo "Failed to mount sparse image"
+                rm -f "$ROOTFS_IMG"
+                exit 1
+            }
+
+            echo "- Sparse image created and mounted successfully"
+
+            # Extract rootfs to mounted directory
+            extract_to_mount
+            
+            # Unmount the image after extraction
+            echo "- Unmounting sparse image..."
+            umount "$ROOTFS_DIR" || {
+                echo "Warning: Failed to unmount sparse image after extraction"
+            }
+            
+            echo "- Sparse image setup completed successfully"
+        fi
+    else
+        # Use traditional directory extraction method
+        if [ -d "$ROOTFS_DIR" ]; then
+            echo "- Rootfs already exists. Skipping extraction..."
+            return 0
+        fi
+
+        # Auto-detect any .tar.gz file in the ZIP
+        local ROOTFS_FILE=$(unzip -l "$ZIPFILE" | grep '\.tar\.gz$' | head -1 | awk '{print $4}')
+
+        if [ -n "$ROOTFS_FILE" ]; then
+            echo "- Found rootfs file: $ROOTFS_FILE"
+            echo "- Extracting $ROOTFS_FILE..."
+            mkdir -p "$ROOTFS_DIR" "$TMPDIR"
+            unzip -oq "$ZIPFILE" "$ROOTFS_FILE" -d "$TMPDIR" || { echo "Failed to extract $ROOTFS_FILE"; exit 1; }
+            tar -xpf "$TMPDIR/$ROOTFS_FILE" -C "$ROOTFS_DIR" || { echo "Failed to unpack $ROOTFS_FILE"; exit 1; }
+            unzip -oj "$ZIPFILE" 'tools/post_exec.sh' -d /data/local/ubuntu-chroot >&2
+        else
+            echo "- No .tar.gz file found in ZIP, skipping rootfs extraction."
+        fi
+    fi
+}
+
+extract_to_mount(){
+    local ROOTFS_DIR="/data/local/ubuntu-chroot/rootfs"
 
     # Auto-detect any .tar.gz file in the ZIP
     local ROOTFS_FILE=$(unzip -l "$ZIPFILE" | grep '\.tar\.gz$' | head -1 | awk '{print $4}')
 
     if [ -n "$ROOTFS_FILE" ]; then
         echo "- Found rootfs file: $ROOTFS_FILE"
-        echo "- Extracting $ROOTFS_FILE..."
-        mkdir -p "$ROOTFS_DIR" "$TMPDIR"
+        echo "- Extracting $ROOTFS_FILE to mounted sparse image..."
+        mkdir -p "$TMPDIR"
         unzip -oq "$ZIPFILE" "$ROOTFS_FILE" -d "$TMPDIR" || { echo "Failed to extract $ROOTFS_FILE"; exit 1; }
         tar -xpf "$TMPDIR/$ROOTFS_FILE" -C "$ROOTFS_DIR" || { echo "Failed to unpack $ROOTFS_FILE"; exit 1; }
         unzip -oj "$ZIPFILE" 'tools/post_exec.sh' -d /data/local/ubuntu-chroot >&2
+        unzip -oj "$ZIPFILE" 'tools/sparsemgr.sh' -d /data/local/ubuntu-chroot >&2
+        chmod 755 /data/local/ubuntu-chroot/sparsemgr.sh
     else
         echo "- No .tar.gz file found in ZIP, skipping rootfs extraction."
     fi

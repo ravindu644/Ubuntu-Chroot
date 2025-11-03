@@ -19,12 +19,12 @@ sleep 25
 if [ -f "$BOOT_FLAG" ] && [ "$(cat "$BOOT_FLAG" 2>/dev/null)" = "1" ]; then
     # Clear old log
     > "$LOG_FILE"
-    
+
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Boot service started" >> "$LOG_FILE"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting chroot..." >> "$LOG_FILE"
-    
+
     # Start chroot
     su -c "sh $CHROOT_SH start --no-shell" >> "$LOG_FILE" 2>&1 &
-    
+
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Chroot startup initiated" >> "$LOG_FILE"
 fi

@@ -46,6 +46,7 @@ set_permissions() {
   set_perm "/data/local/ubuntu-chroot/ota" 0 0 0755
   set_perm "/data/local/ubuntu-chroot/ota/updater.sh" 0 0 0755
   set_perm "/data/local/ubuntu-chroot/ota/updates.sh" 0 0 0755
+  set_perm "/data/local/ubuntu-chroot/sparsemgr.sh" 0 0 0755
   set_perm "$MODPATH/service.sh" 0 0 0755
 
 }

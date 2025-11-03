@@ -7,6 +7,7 @@
 
 # Use environment variable if set, otherwise use default path
 CHROOT_PATH="${CHROOT_PATH:-/data/local/ubuntu-chroot/rootfs}"
+ROOTFS_IMG="/data/local/ubuntu-chroot/rootfs.img"
 SCRIPT_NAME="$(basename "$0")"
 SCRIPT_DIR="$(dirname "$0")"
 C_HOSTNAME="ubuntu"
@@ -56,6 +57,25 @@ run_in_ns() {
     else
         "$@"
     fi
+}
+
+run_in_chroot() {
+    # Execute a command inside the chroot environment using namespace isolation
+    local command="$*"
+    
+    # Ensure chroot is started if not running
+    if ! is_chroot_running; then
+        start_chroot
+    fi
+    
+    # Common exports for chroot environment
+    local common_exports="export PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/libexec:/opt/bin';"
+    
+    # Use run_in_ns to execute the chroot command with namespace isolation
+    run_in_ns chroot "$CHROOT_PATH" /bin/bash -c "
+        $common_exports
+        $command
+    "
 }
 
 
@@ -189,6 +209,16 @@ start_chroot() {
     
     [ -d "$CHROOT_PATH" ] || { error "Chroot directory not found at $CHROOT_PATH"; exit 1; }
 
+    # Check if sparse image exists - mount it
+    if [ -f "$ROOTFS_IMG" ]; then
+        log "Sparse image detected, mounting to rootfs..."
+        if ! run_in_ns mount -t ext4 -o loop,rw,noatime,nodiratime,barrier=0 "$ROOTFS_IMG" "$CHROOT_PATH"; then
+            error "Failed to mount sparse image"
+            exit 1
+        fi
+        log "Sparse image mounted successfully"
+    fi
+
     # Clean up previous mount tracking file if it exists.
     rm -f "$MOUNTED_FILE"
 
@@ -266,6 +296,18 @@ stop_chroot() {
     log "Stopping chroot environment..."
     
     kill_chroot_processes
+    
+    # Unmount sparse image if it's mounted and image file exists
+    if [ -f "$ROOTFS_IMG" ] && mountpoint -q "$CHROOT_PATH" 2>/dev/null; then
+        log "Force unmounting sparse image..."
+        if umount -f "$CHROOT_PATH" 2>/dev/null; then
+            log "Sparse image force unmounted successfully."
+        elif umount -l "$CHROOT_PATH" 2>/dev/null; then
+            log "Sparse image lazy unmounted successfully."
+        else
+            warn "Failed to unmount sparse image."
+        fi
+    fi
     
     # Special handling for storage - normal unmount only to avoid breaking Android storage
     local chroot_storage="$CHROOT_PATH/storage/emulated/0"
@@ -380,6 +422,12 @@ show_status() {
     fi
 }
 
+list_users() {
+    # Get users from the chroot filesystem (regular users with UID >= 1000)
+    # run_in_chroot will start chroot if needed and execute with proper namespace isolation
+    run_in_chroot "grep -E ':x:1[0-9][0-9][0-9]:' /etc/passwd 2>/dev/null | cut -d: -f1 | head -20 | tr '\n' ',' | sed 's/,$//'"
+}
+
 backup_chroot() {
     local backup_path="$1"
     
@@ -442,6 +490,24 @@ restore_chroot() {
             stop_chroot
         fi
 
+        # Check for sparse image and force unmount if mounted
+        if [ -f "$ROOTFS_IMG" ] && mountpoint -q "$CHROOT_PATH" 2>/dev/null; then
+            log "Force unmounting sparse image..."
+            umount -f "$CHROOT_PATH" 2>/dev/null || umount -l "$CHROOT_PATH" 2>/dev/null || {
+                error "Failed to unmount sparse image"
+                exit 1
+            }
+        fi
+
+        # Remove sparse image file if it exists
+        if [ -f "$ROOTFS_IMG" ]; then
+            log "Removing sparse image file..."
+            rm -f "$ROOTFS_IMG" || {
+                error "Failed to remove sparse image file"
+                exit 1
+            }
+        fi
+
         # Remove existing chroot directory
         if [ -d "$CHROOT_PATH" ]; then
             log "Removing existing chroot directory..."
@@ -497,7 +563,7 @@ WEBUI_MODE=0
 
 for arg in "$@"; do
     case "$arg" in
-        start|stop|restart|status|backup|restore)
+        start|stop|restart|status|backup|restore|list-users)
             COMMAND="$arg"
             ;;
         --no-shell)
@@ -561,6 +627,9 @@ case "$COMMAND" in
         ;;
     status)
         show_status
+        ;;
+    list-users)
+        list_users
         ;;
     backup)
         backup_chroot "$BACKUP_PATH"
