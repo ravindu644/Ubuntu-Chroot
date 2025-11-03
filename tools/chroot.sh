@@ -462,7 +462,6 @@ restore_chroot() {
     # Extract the tar.gz archive
     if run_in_ns busybox tar -xzf "$backup_path" -C "$chroot_parent" 2>/dev/null; then
         log "Chroot restored successfully from: $backup_path"
-        log "You may need to restart the chroot environment"
     else
         error "Failed to extract backup archive"
         exit 1
