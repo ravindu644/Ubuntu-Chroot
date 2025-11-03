@@ -45,6 +45,27 @@
   // Track hotspot state - much more reliable than filesystem checks
   let hotspotActive = false;
 
+  /**
+   * Load hotspot status from localStorage on page load
+   */
+  function loadHotspotStatus(){
+    try{
+      const saved = localStorage.getItem('hotspot_active');
+      hotspotActive = saved === 'true';
+    }catch(e){
+      hotspotActive = false;
+    }
+  }
+
+  /**
+   * Save hotspot status to localStorage
+   */
+  function saveHotspotStatus(){
+    try{
+      localStorage.setItem('hotspot_active', hotspotActive.toString());
+    }catch(e){/* ignore storage errors */}
+  }
+
   // Track if chroot missing message was logged
   let _chrootMissingLogged = false;
 
@@ -233,10 +254,18 @@
   }
 
   /**
-   * Check if hotspot is currently running (using state tracking)
+   * Check if ap0 interface exists (indicates hotspot is running)
    */
-  function isHotspotRunning(){
-    return hotspotActive;
+  async function checkAp0Interface(){
+    if(!rootAccessConfirmed){
+      return false;
+    }
+    try{
+      const out = await runCmdSync(`ip link show ap0 2>/dev/null | grep -q ap0 && echo "exists" || echo "not_exists"`);
+      return String(out||'').trim() === 'exists';
+    }catch(e){
+      return false;
+    }
   }
   /**
    * Execute chroot action asynchronously (non-blocking), with hotspot handling for stop/restart
@@ -271,7 +300,8 @@
     let hotspotWasRunning = false;
     if(action === 'stop' || action === 'restart'){
       try{
-        hotspotWasRunning = isHotspotRunning();
+        // Use actual interface check instead of saved state for accuracy
+        hotspotWasRunning = await checkAp0Interface();
         if(hotspotWasRunning){
           progressLine.textContent = '⏳ Stopping hotspot first';
           dotCount = 0; // reset dots
@@ -282,6 +312,7 @@
               if(result.success) {
                 appendConsole('✓ Hotspot stopped successfully', 'success');
                 hotspotActive = false; // Update state
+                saveHotspotStatus(); // Save to localStorage
                 resolve();
               } else {
                 appendConsole('✗ Failed to stop hotspot, continuing with chroot action', 'warn');
@@ -378,6 +409,15 @@
           els.hotspotBtn.disabled = false;
           els.hotspotBtn.style.opacity = '';
           
+          // Check actual ap0 interface status to validate our saved state
+          const ap0Exists = await checkAp0Interface();
+          if(ap0Exists !== hotspotActive){
+            // State mismatch - update our saved state to match reality
+            hotspotActive = ap0Exists;
+            saveHotspotStatus();
+            appendConsole(`Hotspot state corrected: ${ap0Exists ? 'running' : 'stopped'}`, ap0Exists ? 'info' : 'warn');
+          }
+          
           // Disable individual hotspot buttons based on hotspot state
           els.startHotspotBtn.disabled = hotspotActive;
           els.stopHotspotBtn.disabled = !hotspotActive;
@@ -399,6 +439,7 @@
         els.userSelect.innerHTML = '<option value="root">root</option>';
         // Reset hotspot state when chroot stops
         hotspotActive = false;
+        saveHotspotStatus(); // Save to localStorage
       }
     }catch(e){
       updateStatus('unknown');
@@ -703,6 +744,7 @@
         if(output && output.includes('AP-ENABLED')) {
           appendConsole(`✓ Hotspot started successfully`, 'success');
           hotspotActive = true; // Update state
+          saveHotspotStatus(); // Save to localStorage
           // Immediately update button states
           els.startHotspotBtn.disabled = true;
           els.stopHotspotBtn.disabled = false;
@@ -778,6 +820,7 @@
         if(result.success) {
           appendConsole(`✓ Hotspot stopped successfully`, 'success');
           hotspotActive = false; // Update state
+          saveHotspotStatus(); // Save to localStorage
           // Immediately update button states
           els.startHotspotBtn.disabled = false;
           els.stopHotspotBtn.disabled = true;
@@ -1338,6 +1381,7 @@
   initTheme();
   loadConsoleLogs(); // Restore previous console logs
   loadHotspotSettings(); // Load hotspot settings
+  loadHotspotStatus(); // Load hotspot status
   
   // small delay to let command-executor attach if present
   setTimeout(async ()=>{
