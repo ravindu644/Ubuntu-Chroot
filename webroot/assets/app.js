@@ -1455,6 +1455,7 @@
     // Start migration process
     appendConsole('━━━ Starting Sparse Image Migration ━━━', 'warn');
     appendConsole(`Target size: ${sizeGb}GB sparse ext4 image`, 'info');
+    appendConsole('', 'info'); // Empty line for spacing
     appendConsole('This may take several minutes. Do not close this window.', 'info');
 
     // Create progress indicator (copy from restore function)
