@@ -233,6 +233,7 @@
 
   function disableAllActions(disabled){
     try{
+      // Main action buttons
       els.startBtn.disabled = disabled;
       els.stopBtn.disabled = disabled;
       els.restartBtn.disabled = disabled;
@@ -241,8 +242,20 @@
       els.settingsBtn.style.opacity = disabled ? '0.5' : '';
       els.hotspotBtn.disabled = disabled;
       els.hotspotBtn.style.opacity = disabled ? '0.5' : '';
+      
+      // Additional UI elements that should be disabled during operations
+      els.clearConsole.disabled = disabled;
+      els.clearConsole.style.opacity = disabled ? '0.5' : '';
+      els.refreshStatus.disabled = disabled;
+      els.refreshStatus.style.opacity = disabled ? '0.5' : '';
+      if(els.themeToggle){
+        els.themeToggle.disabled = disabled;
+        els.themeToggle.style.opacity = disabled ? '0.5' : '';
+      }
+      
       const copyBtn = document.getElementById('copy-login');
       if(copyBtn) copyBtn.disabled = disabled;
+      
       // Disable boot toggle when root not available
       if(els.bootToggle) {
         els.bootToggle.disabled = disabled;
@@ -295,8 +308,9 @@
       progressLine.textContent = '⏳ ' + actionText + '.'.repeat(dotCount);
     }, 400);
     
-    // Disable buttons during execution
-    setButtonsForAction(action, true);
+    // Disable ALL UI elements during execution
+    disableAllActions(true);
+    disableSettingsPopup(true);
 
     // Check for hotspot on stop/restart
     let hotspotWasRunning = false;
@@ -349,18 +363,6 @@
     }, 50);
   }
 
-  /**
-   * Set button states based on action being performed
-   */
-  function setButtonsForAction(action, running){
-    if(running){
-      // Disable all action buttons while command runs
-      els.startBtn.disabled = true;
-      els.stopBtn.disabled = true;
-      els.restartBtn.disabled = true;
-    }
-    // Status refresh will re-enable appropriate buttons
-  }
 
   /**
    * Refresh chroot status (non-blocking)
@@ -382,8 +384,26 @@
           _chrootMissingLogged = true;
         }
         updateStatus('stopped');
-        disableAllActions(true);
-        disableSettingsPopup(true, false); // chroot doesn't exist
+        // When chroot doesn't exist: disable start/hotspot buttons but enable other main UI elements
+        disableAllActions(false); // Enable clear, refresh, dark mode, settings button
+        // But disable start and hotspot buttons since they can't work without chroot
+        if(els.startBtn) {
+          els.startBtn.disabled = true;
+          els.startBtn.style.opacity = '0.5';
+        }
+        if(els.stopBtn) {
+          els.stopBtn.disabled = true;
+          els.stopBtn.style.opacity = '0.5';
+        }
+        if(els.restartBtn) {
+          els.restartBtn.disabled = true;
+          els.restartBtn.style.opacity = '0.5';
+        }
+        if(els.hotspotBtn) {
+          els.hotspotBtn.disabled = true;
+          els.hotspotBtn.style.opacity = '0.5';
+        }
+        disableSettingsPopup(false, false); // Enable popup but disable chroot-dependent elements
         try{ document.getElementById('copy-login').disabled = true; }catch(e){}
         return;
       } else {
@@ -1029,7 +1049,7 @@
     // Get backup file
     const backupPath = await showFilePickerDialog(
       'Restore Chroot Environment',
-      'Select the backup file to restore from.\n\n⚠️ WARNING: This will permanently delete your current chroot environment!',
+      'Select the backup file to restore from.\n\nWARNING: This will permanently delete your current chroot environment!',
       '/sdcard',
       '',
       true // forRestore = true
@@ -1135,7 +1155,6 @@
             appendConsole('✓ Restore completed successfully', 'success');
             appendConsole('The chroot environment has been restored', 'info');
             appendConsole('━━━ Restore Complete ━━━', 'success');
-            appendConsole('You may need to restart the chroot environment', 'info');
 
             updateStatus('stopped');
             disableAllActions(true);
@@ -1269,10 +1288,17 @@
   function disableSettingsPopup(disabled, chrootExists = true){
     try{
       if(els.settingsPopup){
-        // Keep popup clickable for closing, but dim it
-        els.settingsPopup.style.opacity = disabled ? '0.5' : '';
-        // Only disable pointer events if we're not allowing close button interaction
-        els.settingsPopup.style.pointerEvents = disabled ? 'auto' : '';
+        // Don't dim the entire popup when chroot doesn't exist - only dim individual elements
+        // Only dim when disabled due to no root access
+        if(disabled) {
+          els.settingsPopup.style.opacity = '0.5';
+          // When disabled, allow closing but dim the content
+          els.settingsPopup.style.pointerEvents = 'auto';
+        } else {
+          els.settingsPopup.style.opacity = '';
+          // When not disabled, allow full interaction
+          els.settingsPopup.style.pointerEvents = 'auto';
+        }
       }
       // Close button should remain functional
       if(els.closePopup) {
@@ -1280,28 +1306,32 @@
       }
       // Also disable individual popup elements with visual feedback
       if(els.postExecScript) {
-        els.postExecScript.disabled = disabled;
-        els.postExecScript.style.opacity = disabled ? '0.5' : '';
-        els.postExecScript.style.cursor = disabled ? 'not-allowed' : '';
-        els.postExecScript.style.pointerEvents = disabled ? 'none' : '';
+        const postExecDisabled = disabled || !chrootExists; // Always disable when no chroot exists
+        els.postExecScript.disabled = postExecDisabled;
+        els.postExecScript.style.opacity = postExecDisabled ? '0.5' : '';
+        els.postExecScript.style.cursor = postExecDisabled ? 'not-allowed' : '';
+        els.postExecScript.style.pointerEvents = postExecDisabled ? 'none' : '';
       }
       if(els.saveScript) {
-        els.saveScript.disabled = disabled;
-        els.saveScript.style.opacity = disabled ? '0.5' : '';
-        els.saveScript.style.cursor = disabled ? 'not-allowed' : '';
-        els.saveScript.style.pointerEvents = disabled ? 'none' : '';
+        const saveDisabled = disabled || !chrootExists; // Always disable when no chroot exists
+        els.saveScript.disabled = saveDisabled;
+        els.saveScript.style.opacity = saveDisabled ? '0.5' : '';
+        els.saveScript.style.cursor = saveDisabled ? 'not-allowed' : '';
+        els.saveScript.style.pointerEvents = saveDisabled ? 'none' : '';
       }
       if(els.clearScript) {
-        els.clearScript.disabled = disabled;
-        els.clearScript.style.opacity = disabled ? '0.5' : '';
-        els.clearScript.style.cursor = disabled ? 'not-allowed' : '';
-        els.clearScript.style.pointerEvents = disabled ? 'none' : '';
+        const clearDisabled = disabled || !chrootExists; // Always disable when no chroot exists
+        els.clearScript.disabled = clearDisabled;
+        els.clearScript.style.opacity = clearDisabled ? '0.5' : '';
+        els.clearScript.style.cursor = clearDisabled ? 'not-allowed' : '';
+        els.clearScript.style.pointerEvents = clearDisabled ? 'none' : '';
       }
       if(els.updateBtn) {
-        els.updateBtn.disabled = disabled;
-        els.updateBtn.style.opacity = disabled ? '0.5' : '';
-        els.updateBtn.style.cursor = disabled ? 'not-allowed' : '';
-        els.updateBtn.style.pointerEvents = disabled ? 'none' : '';
+        const updateDisabled = disabled || !chrootExists; // Also disable when no chroot exists
+        els.updateBtn.disabled = updateDisabled;
+        els.updateBtn.style.opacity = updateDisabled ? '0.5' : '';
+        els.updateBtn.style.cursor = updateDisabled ? 'not-allowed' : '';
+        els.updateBtn.style.pointerEvents = updateDisabled ? 'none' : '';
       }
       
       // ✅ FIXED: Backup button - disabled when chroot doesn't exist OR no root access
