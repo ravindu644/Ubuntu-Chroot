@@ -296,10 +296,9 @@ start_chroot() {
     # Run post-execution script if it exists and we're not skipping it.
     if [ "$SKIP_POST_EXEC" -eq 0 ] && [ -f "$POST_EXEC_SCRIPT" ] && [ -x "$POST_EXEC_SCRIPT" ]; then
         log "Running post-execution script..."
-        cp "$POST_EXEC_SCRIPT" "$CHROOT_PATH/root/post_exec.sh"
-        chmod +x "$CHROOT_PATH/root/post_exec.sh"
-        run_in_ns chroot "$CHROOT_PATH" /bin/bash -c "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/libexec:/opt/bin && /root/post_exec.sh"
-        rm -f "$CHROOT_PATH/root/post_exec.sh"
+        # Convert script to base64 and execute it directly in chroot without copying
+        SCRIPT_B64=$(busybox base64 -w 0 "$POST_EXEC_SCRIPT")
+        run_in_chroot "echo '$SCRIPT_B64' | base64 -d | bash"
     fi
 
     # Disable Android Doze to prevent background process slowdowns when screen is off
