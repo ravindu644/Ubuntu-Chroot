@@ -11,42 +11,49 @@ POSTFSDATA=false
 LATESTARTSERVICE=true
 
 print_modname() {
-
-echo "  _   _ _             _        ";
-echo " | | | | |__ _  _ _ _| |_ _  _ ";
-echo " | |_| | '_ | || | ' |  _| || |";
-echo "  \___/|_.__/\_,_|_||_\__|\_,_|";
-echo "  / __| |_  _ _ ___ ___| |_    ";
-echo " | (__| ' \| '_/ _ / _ |  _|   ";
-echo "  \___|_||_|_| \___\___/\__|   ";
-echo "                               ";
-echo "       by @ravindu644          ";
-echo " "
+    echo "  _   _ _             _        "
+    echo " | | | | |__ _  _ _ _| |_ _  _ "
+    echo " | |_| | '_ | || | ' |  _| || |"
+    echo "  \___/|_.__/\_,_|_||_\__|\_,_|"
+    echo "  / __| |_  _ _ ___ ___| |_    "
+    echo " | (__| ' \| '_/ _ / _ |  _|   "
+    echo "  \___|_||_|_| \___\___/\__|   "
+    echo "                               "
+    echo "       by @ravindu644          "
+    echo " "
 }
 
 on_install() {
-  detect_root
-  unzip -o "$ZIPFILE" 'webroot/*' -d $MODPATH >&2
-  unzip -oj "$ZIPFILE" 'service.sh' -d $MODPATH >&2
+    # Detect root method and show warnings
+    detect_root
 
-  setup_chroot
-  setup_ota
-  extract_rootfs
-  create_symlink
+    # Extract web interface files
+    unzip -o "$ZIPFILE" 'webroot/*' -d $MODPATH >&2
+    unzip -oj "$ZIPFILE" 'service.sh' -d $MODPATH >&2
 
-  rm -rf /data/system/package_cache/*
+    # Extract and setup chroot components
+    setup_chroot
+    setup_ota
+    extract_rootfs
+    create_symlink
+
+    # Clear package cache to avoid conflicts
+    rm -rf /data/system/package_cache/*
 }
 
-
 set_permissions() {
-  set_perm_recursive $MODPATH 0 0 0755 0644
-  set_perm "/data/local/ubuntu-chroot/chroot.sh" 0 0 0755
-  set_perm "/data/local/ubuntu-chroot/post_exec.sh" 0 0 0755
-  set_perm "/data/local/ubuntu-chroot/start-hotspot" 0 0 0755
-  set_perm "/data/local/ubuntu-chroot/ota" 0 0 0755
-  set_perm "/data/local/ubuntu-chroot/ota/updater.sh" 0 0 0755
-  set_perm "/data/local/ubuntu-chroot/ota/updates.sh" 0 0 0755
-  set_perm "/data/local/ubuntu-chroot/sparsemgr.sh" 0 0 0755
-  set_perm "$MODPATH/service.sh" 0 0 0755
+    # Set permissions for module files
+    set_perm_recursive $MODPATH 0 0 0755 0644
 
+    # Set permissions for chroot scripts
+    set_perm "/data/local/ubuntu-chroot/chroot.sh" 0 0 0755
+    set_perm "/data/local/ubuntu-chroot/post_exec.sh" 0 0 0755
+    set_perm "/data/local/ubuntu-chroot/start-hotspot" 0 0 0755
+    set_perm "/data/local/ubuntu-chroot/ota" 0 0 0755
+    set_perm "/data/local/ubuntu-chroot/ota/updater.sh" 0 0 0755
+    set_perm "/data/local/ubuntu-chroot/ota/updates.sh" 0 0 0755
+    set_perm "/data/local/ubuntu-chroot/sparsemgr.sh" 0 0 0755
+
+    # Set permissions for module service script
+    set_perm "$MODPATH/service.sh" 0 0 0755
 }
