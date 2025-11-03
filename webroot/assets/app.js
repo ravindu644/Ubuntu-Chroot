@@ -95,7 +95,7 @@
   }
 
   /**
-   * Fetch available users from chroot /etc/passwd
+   * Fetch available users from chroot using list-users command
    */
   async function fetchUsers(){
     if(!rootAccessConfirmed){
@@ -103,10 +103,10 @@
     }
     
     try{
-      // Use proper root command to read passwd file from chroot - only regular users (UID >= 1000)
-      const cmd = `grep -E ":x:10[0-9][0-9]:" ${CHROOT_PATH_UI}/etc/passwd 2>/dev/null | cut -d: -f1 | head -20`;
+      // Use the new list-users command that runs inside the chroot
+      const cmd = `sh ${PATH_CHROOT_SH} list-users`;
       const out = await runCmdSync(cmd);
-      const users = String(out || '').trim().split('\n').filter(u => u && u.length > 0);
+      const users = String(out || '').trim().split(',').filter(u => u && u.length > 0);
 
       // Clear existing options except root
       const select = els.userSelect;
@@ -1129,27 +1129,35 @@
         runCmdSync(`[ -d "${CHROOT_PATH_UI}" ] && echo "exists" || echo "not_exists"`).then((checkResult) => {
           const dirExists = checkResult && checkResult.trim() === 'exists';
           
-          // Remove directory
-          runCmdAsync(`rm -rf ${CHROOT_PATH_UI}`, (result) => {
-            if(result.success) {
-              if(dirExists) {
-                appendConsole('✓ Existing chroot directory removed', 'success');
-              }
-              // Now proceed to restore
-              proceedToRestore();
-            } else {
-              clearInterval(progressInterval);
-              progressLine.remove();
-              appendConsole('✗ Failed to remove existing chroot directory', 'err');
-              appendConsole('Restore aborted - please remove the directory manually first', 'err');
-              activeCommandId = null;
-              disableAllActions(false);
-              disableSettingsPopup(false, false);
-            }
-          });
+          if(dirExists) {
+            // Check if sparse image is mounted and force unmount it first
+            runCmdAsync(`mountpoint -q "${CHROOT_PATH_UI}" && (umount -f "${CHROOT_PATH_UI}" || umount -l "${CHROOT_PATH_UI}")`, (umountResult) => {
+              // Now remove directory
+              runCmdAsync(`rm -rf ${CHROOT_PATH_UI}`, (result) => {
+                if(result.success) {
+                  if(dirExists) {
+                    appendConsole('✓ Existing chroot directory removed', 'success');
+                  }
+                  // Now proceed to restore
+                  proceedToRestore();
+                } else {
+                  clearInterval(progressInterval);
+                  progressLine.remove();
+                  appendConsole('✗ Failed to remove existing chroot directory', 'err');
+                  appendConsole('Restore aborted - please remove the directory manually first', 'err');
+                  activeCommandId = null;
+                  disableAllActions(false);
+                  disableSettingsPopup(false, false);
+                }
+              });
+            });
+          } else {
+            // Directory doesn't exist, proceed directly to restore
+            proceedToRestore();
+          }
         }).catch(() => {
           // If check fails, assume directory exists and proceed with removal
-          runCmdAsync(`rm -rf ${CHROOT_PATH_UI}`, (result) => {
+          runCmdAsync(`mountpoint -q "${CHROOT_PATH_UI}" && (umount -f "${CHROOT_PATH_UI}" || umount -l "${CHROOT_PATH_UI}"); rm -rf ${CHROOT_PATH_UI}`, (result) => {
             if(result.success) {
               appendConsole('✓ Existing chroot directory removed', 'success');
               // Now proceed to restore
@@ -1287,13 +1295,21 @@
           progressLine.remove();
           
           if(result.success) {
-            appendConsole('✅ Chroot uninstalled successfully!', 'success');
-            appendConsole('All chroot data has been removed.', 'info');
-            appendConsole('━━━ Uninstallation Complete ━━━', 'success');
-            
-            // Update UI to reflect removal
-            updateStatus('stopped');
-            disableAllActions(true);
+            // Also remove sparse image if it exists
+            runCmdAsync(`[ -f "${CHROOT_DIR}/rootfs.img" ] && rm -f "${CHROOT_DIR}/rootfs.img"`, (imgResult) => {
+              // Log image removal but don't fail if it doesn't exist
+              if(imgResult.success) {
+                appendConsole('Sparse image file removed.', 'info');
+              }
+              
+              appendConsole('✅ Chroot uninstalled successfully!', 'success');
+              appendConsole('All chroot data has been removed.', 'info');
+              appendConsole('━━━ Uninstallation Complete ━━━', 'success');
+              
+              // Update UI to reflect removal
+              updateStatus('stopped');
+              disableAllActions(true);
+            });
           } else {
             appendConsole('✗ Failed to remove chroot files', 'err');
             appendConsole('You may need to manually remove the directory', 'warn');
@@ -1389,7 +1405,329 @@
     }catch(e){}
   }
 
-  // Custom confirmation dialog function
+  // Show experimental section if enabled
+  function initExperimentalFeatures(){
+    const experimentalSection = document.querySelector('.experimental-section');
+    if(experimentalSection){
+      // For now, always show experimental features (can be made conditional later)
+      experimentalSection.style.display = 'block';
+    }
+  }
+
+  // Sparse image migration function
+  async function migrateToSparseImage(){
+    // Show size selection dialog
+    const sizeGb = await showSizeSelectionDialog();
+    if(!sizeGb) return;
+
+    // Confirm migration - remove emojis from warning
+    const confirmed = await showConfirmDialog(
+      'Migrate to Sparse Image',
+      `This will convert your current rootfs to a ${sizeGb}GB sparse ext4 image.\n\n⚠️ IMPORTANT: If your chroot is currently running, it will be stopped automatically.\n\nWARNING: This process cannot be undone. Make sure you have a backup!\n\nContinue with migration?`,
+      'Start Migration',
+      'Cancel'
+    );
+
+    if(!confirmed) return;
+
+    // Close settings popup and wait for animation (copy from restore function)
+    closeSettingsPopup();
+    await new Promise(resolve => setTimeout(resolve, 750));
+
+    // Start migration process
+    appendConsole('━━━ Starting Sparse Image Migration ━━━', 'warn');
+    appendConsole(`Target size: ${sizeGb}GB sparse ext4 image`, 'info');
+    appendConsole('This may take several minutes. Do not close this window.', 'info');
+
+    // Create progress indicator (copy from restore function)
+    const progressLine = document.createElement('div');
+    progressLine.className = 'progress-indicator';
+    progressLine.textContent = 'Migrating...';
+    els.console.appendChild(progressLine);
+    els.console.scrollTop = els.console.scrollHeight;
+
+    let dotCount = 0;
+    const progressInterval = setInterval(() => {
+      dotCount = (dotCount + 1) % 4;
+      progressLine.textContent = 'Migrating' + '.'.repeat(dotCount);
+    }, 400);
+
+    // Disable all actions during migration
+    disableAllActions(true);
+    disableSettingsPopup(true);
+
+    // Mark as active to prevent other commands
+    activeCommandId = 'chroot-migration';
+
+    // Check if chroot is running and stop it first (like backup function)
+    const isRunning = els.statusText.textContent.trim() === 'running';
+
+    if(isRunning){
+      // Show stopping progress
+      progressLine.textContent = '⏳ Stopping chroot';
+      dotCount = 0; // reset dots
+
+      setTimeout(() => {
+        runCmdAsync(`sh ${PATH_CHROOT_SH} stop >/dev/null 2>&1`, (stopResult) => {
+          if(stopResult.success) {
+            appendConsole('✓ Chroot stopped for migration', 'success');
+            // Now proceed to migration
+            proceedToMigration();
+          } else {
+            clearInterval(progressInterval);
+            progressLine.remove();
+            appendConsole('✗ Failed to stop chroot', 'err');
+            appendConsole('Migration aborted - please stop the chroot manually first', 'err');
+            activeCommandId = null;
+            disableAllActions(false);
+            disableSettingsPopup(false, true);
+          }
+        });
+      }, 50);
+    } else {
+      // Chroot not running, proceed directly to migration
+      proceedToMigration();
+    }
+
+    function proceedToMigration(){
+      progressLine.textContent = 'Migrating...';
+      dotCount = 0;
+
+      setTimeout(() => {
+        runCmdAsync(`sh /data/local/ubuntu-chroot/sparsemgr.sh migrate ${sizeGb}`, (result) => {
+          clearInterval(progressInterval);
+          progressLine.remove();
+
+          if(result.success){
+            appendConsole('✅ Sparse image migration completed successfully!', 'success');
+            appendConsole('Your rootfs has been converted to a sparse image.', 'info');
+            appendConsole('━━━ Migration Complete ━━━', 'success');
+
+            // Refresh status to show new state
+            setTimeout(() => refreshStatus(), 1000);
+          } else {
+            appendConsole('✗ Sparse image migration failed!', 'err');
+            appendConsole('Check the logs above for details.', 'err');
+            appendConsole('━━━ Migration Failed ━━━', 'err');
+          }
+
+          // Re-enable UI
+          activeCommandId = null;
+          disableAllActions(false);
+          disableSettingsPopup(false, true);
+        });
+      }, 100);
+    }
+  }
+
+  // Size selection dialog for sparse image migration
+  function showSizeSelectionDialog(){
+    return new Promise((resolve) => {
+      // Create overlay
+      const overlay = document.createElement('div');
+      overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2000;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+      `;
+
+      // Create dialog
+      const dialog = document.createElement('div');
+      dialog.style.cssText = `
+        background: var(--card);
+        border-radius: var(--surface-radius);
+        box-shadow: 0 6px 20px rgba(6,8,14,0.06);
+        border: 1px solid rgba(0,0,0,0.08);
+        max-width: 400px;
+        width: 90%;
+        padding: 24px;
+        transform: scale(0.9);
+        transition: transform 0.2s ease;
+      `;
+
+      // Create title
+      const titleEl = document.createElement('h3');
+      titleEl.textContent = 'Select Sparse Image Size';
+      titleEl.style.cssText = `
+        margin: 0 0 12px 0;
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--text);
+      `;
+
+      // Create description
+      const descEl = document.createElement('p');
+      descEl.textContent = 'Choose the maximum size for your sparse ext4 image. The actual disk usage will grow as you add data.';
+      descEl.style.cssText = `
+        margin: 0 0 20px 0;
+        font-size: 14px;
+        color: var(--muted);
+        line-height: 1.5;
+      `;
+
+      // Create form
+      const formContainer = document.createElement('div');
+      formContainer.style.cssText = `
+        margin-bottom: 20px;
+      `;
+
+      const sizeSelect = document.createElement('select');
+      sizeSelect.style.cssText = `
+        width: 100%;
+        padding: 12px 16px;
+        border: 1px solid rgba(0,0,0,0.08);
+        border-radius: 8px;
+        background: var(--card);
+        color: var(--text);
+        font-size: 16px;
+        margin-bottom: 8px;
+      `;
+
+      // Add size options
+      const sizes = [4, 8, 16, 32, 64];
+      sizes.forEach(size => {
+        const option = document.createElement('option');
+        option.value = size;
+        option.textContent = `${size}GB`;
+        if(size === 8) option.selected = true; // Default to 8GB
+        sizeSelect.appendChild(option);
+      });
+
+      const sizeNote = document.createElement('p');
+      sizeNote.textContent = 'Note: This sets the maximum size. Actual usage starts small and grows as needed.';
+      sizeNote.style.cssText = `
+        margin: 8px 0 0 0;
+        font-size: 12px;
+        color: var(--muted);
+        font-style: italic;
+      `;
+
+      formContainer.appendChild(sizeSelect);
+      formContainer.appendChild(sizeNote);
+
+      // Create button container
+      const buttonContainer = document.createElement('div');
+      buttonContainer.style.cssText = `
+        display: flex;
+        gap: 12px;
+        justify-content: flex-end;
+      `;
+
+      // Create cancel button
+      const cancelBtn = document.createElement('button');
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.style.cssText = `
+        padding: 8px 16px;
+        border: 1px solid rgba(0,0,0,0.08);
+        border-radius: 8px;
+        background: transparent;
+        color: var(--text);
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s ease;
+        -webkit-tap-highlight-color: transparent;
+      `;
+
+      // Create select button
+      const selectBtn = document.createElement('button');
+      selectBtn.textContent = 'Continue';
+      selectBtn.style.cssText = `
+        padding: 8px 16px;
+        border: 1px solid var(--accent);
+        border-radius: 8px;
+        background: var(--accent);
+        color: white;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s ease;
+        -webkit-tap-highlight-color: transparent;
+      `;
+
+      // Dark mode adjustments
+      if(document.documentElement.getAttribute('data-theme') === 'dark'){
+        dialog.style.borderColor = 'rgba(255,255,255,0.08)';
+        cancelBtn.style.borderColor = 'rgba(255,255,255,0.08)';
+        sizeSelect.style.borderColor = 'rgba(255,255,255,0.08)';
+        cancelBtn.addEventListener('mouseenter', () => {
+          cancelBtn.style.background = 'rgba(255,255,255,0.05)';
+        });
+        cancelBtn.addEventListener('mouseleave', () => {
+          cancelBtn.style.background = 'transparent';
+        });
+      }
+
+      // Event listeners
+      const closeDialog = (result) => {
+        overlay.style.opacity = '0';
+        dialog.style.transform = 'scale(0.9)';
+        setTimeout(() => {
+          document.body.removeChild(overlay);
+          resolve(result);
+        }, 200);
+      };
+
+      cancelBtn.addEventListener('click', () => closeDialog(null));
+
+      selectBtn.addEventListener('click', () => {
+        const selectedSize = sizeSelect.value;
+        closeDialog(selectedSize);
+      });
+
+      selectBtn.addEventListener('mouseenter', () => {
+        selectBtn.style.transform = 'translateY(-1px)';
+        selectBtn.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.3)';
+      });
+
+      selectBtn.addEventListener('mouseleave', () => {
+        selectBtn.style.transform = 'translateY(0)';
+        selectBtn.style.boxShadow = 'none';
+      });
+
+      // Close on overlay click
+      overlay.addEventListener('click', (e) => {
+        if(e.target === overlay) closeDialog(null);
+      });
+
+      // Keyboard support
+      const handleKeyDown = (e) => {
+        if(e.key === 'Escape') {
+          closeDialog(null);
+          document.removeEventListener('keydown', handleKeyDown);
+        } else if(e.key === 'Enter') {
+          selectBtn.click();
+          document.removeEventListener('keydown', handleKeyDown);
+        }
+      };
+      document.addEventListener('keydown', handleKeyDown);
+
+      // Assemble dialog
+      buttonContainer.appendChild(cancelBtn);
+      buttonContainer.appendChild(selectBtn);
+
+      dialog.appendChild(titleEl);
+      dialog.appendChild(descEl);
+      dialog.appendChild(formContainer);
+      dialog.appendChild(buttonContainer);
+
+      overlay.appendChild(dialog);
+      document.body.appendChild(overlay);
+
+      // Animate in
+      setTimeout(() => {
+        overlay.style.opacity = '1';
+        dialog.style.transform = 'scale(1)';
+      }, 10);
+    });
+  }
   function showConfirmDialog(title, message, confirmText = 'Yes', cancelText = 'No'){
     return new Promise((resolve) => {
       // Create overlay
@@ -1923,6 +2261,12 @@
   els.restoreBtn.addEventListener('click', () => restoreChroot());
   els.uninstallBtn.addEventListener('click', () => uninstallChroot());
 
+  // Experimental features event handlers
+  const migrateSparseBtn = document.getElementById('migrate-sparse-btn');
+  if(migrateSparseBtn){
+    migrateSparseBtn.addEventListener('click', () => migrateToSparseImage());
+  }
+
   // Hotspot event handlers
   els.hotspotBtn.addEventListener('click', () => openHotspotPopup());
   els.closeHotspotPopup.addEventListener('click', () => closeHotspotPopup());
@@ -2024,6 +2368,8 @@
   loadHotspotSettings(); // Load hotspot settings
   loadHotspotStatus(); // Load hotspot status
   updateChannelLimits(); // Initialize channel options based on default/loaded band
+  
+  initExperimentalFeatures(); // Initialize experimental features
   
   // small delay to let command-executor attach if present
   setTimeout(async ()=>{

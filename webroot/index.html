@@ -133,6 +133,21 @@
             <p class="setting-desc">Permanently remove the chroot environment</p>
             <button id="uninstall-btn" class="btn danger">Uninstall Chroot</button>
           </div>
+
+          <!-- Experimental Section (Hidden by default) -->
+          <details class="setting-section experimental-section" style="display:none">
+            <summary class="experimental-toggle">
+              <h4>Experimental Features <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" style="vertical-align: middle; margin-left: 4px;"><path fill="currentColor" fill-rule="evenodd" d="M11.233 1L1 21h22L12.767 1zM12 3.891L19.73 19H4.27zM13.2 16.4a1.2 1.2 0 1 1-2.4 0a1.2 1.2 0 0 1 2.4 0M13 14h-2v-4h2z" clip-rule="evenodd"/></svg></h4>
+            </summary>
+            <p class="setting-desc"><br>Advanced experimental features - use at your own risk</p>
+
+            <!-- Sparse Image Migration -->
+            <div class="setting-subsection">
+              <h5>Migrate to Sparse Image</h5>
+              <p class="setting-desc">Convert your current directory-based rootfs to a sparse ext4 image for better performance and space efficiency</p>
+              <button id="migrate-sparse-btn" class="btn warning">Migrate to Sparse Image</button>
+            </div>
+          </details>
         </div>
       </div>
     </div>
