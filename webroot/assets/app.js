@@ -638,6 +638,7 @@
       // This avoids all shell escaping issues
       const base64Script = btoa(unescape(encodeURIComponent(script)));
       await runCmdSync(`echo '${base64Script}' | base64 -d > ${POST_EXEC_SCRIPT}`);
+      await runCmdSync(`chmod 755 ${POST_EXEC_SCRIPT}`);
       appendConsole('Post-exec script saved successfully', 'success');
     }catch(e){
       appendConsole(`Failed to save post-exec script: ${e.message}`, 'err');
