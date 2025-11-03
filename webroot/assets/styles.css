@@ -466,6 +466,12 @@ textarea {
   min-width: 0;
 }
 
+/* Make standalone buttons in settings sections consistent with script-actions buttons */
+.setting-section > .btn {
+  width: 50%;
+  box-sizing: border-box;
+}
+
 .btn.danger {
   background: var(--danger);
   color: white;
