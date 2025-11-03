@@ -40,6 +40,7 @@ usage() {
     echo "  stop          Stop the chroot environment and kill all processes."
     echo "  restart       Restart the chroot environment."
     echo "  status        Show the current status of the chroot."
+    echo "  umount        Unmount all chroot filesystems without stopping processes."
     echo "  run <command> Execute a command inside the chroot environment."
     echo "  backup <path> Create a compressed backup of the chroot environment."
     echo "  restore <path> Restore chroot from a backup archive."
@@ -311,6 +312,37 @@ stop_chroot() {
     
     kill_chroot_processes
     
+    # Unmount all filesystems (including sparse image if present)
+    umount_chroot
+    
+    # Restore original SELinux status.
+    local og_selinux_file="/data/local/ubuntu-chroot/og-selinux"
+    if [ -f "$og_selinux_file" ]; then
+        local original_status
+        original_status="$(cat "$og_selinux_file")"
+        case "$original_status" in
+            Enforcing) setenforce 1 && log "Restored SELinux to enforcing mode." || warn "Failed to restore SELinux." ;;
+            Permissive) setenforce 0 && log "Restored SELinux to permissive mode." || warn "Failed to restore SELinux." ;;
+        esac
+        rm -f "$og_selinux_file"
+    fi
+    
+    # Kill namespace holder process
+    if [ -f "$HOLDER_PID_FILE" ]; then
+        HOLDER_PID=$(cat "$HOLDER_PID_FILE")
+        if kill -0 "$HOLDER_PID" 2>/dev/null; then
+            kill "$HOLDER_PID" 2>/dev/null && log "Killed namespace holder process." || warn "Failed to kill holder process."
+        fi
+        rm -f "$HOLDER_PID_FILE"
+    fi
+    
+    # Re-enable Android Doze
+    su -c 'dumpsys deviceidle enable' >/dev/null 2>&1 && log "Re-enabled Android Doze"
+
+    log "Chroot stopped successfully."
+}
+
+umount_chroot() {
     # Unmount sparse image if it's mounted and image file exists
     if [ -f "$ROOTFS_IMG" ] && mountpoint -q "$CHROOT_PATH" 2>/dev/null; then
         log "Force unmounting sparse image..."
@@ -349,32 +381,6 @@ stop_chroot() {
         rm -f "$MOUNTED_FILE"
         log "All chroot mounts unmounted."
     fi
-    
-    # Restore original SELinux status.
-    local og_selinux_file="/data/local/ubuntu-chroot/og-selinux"
-    if [ -f "$og_selinux_file" ]; then
-        local original_status
-        original_status="$(cat "$og_selinux_file")"
-        case "$original_status" in
-            Enforcing) setenforce 1 && log "Restored SELinux to enforcing mode." || warn "Failed to restore SELinux." ;;
-            Permissive) setenforce 0 && log "Restored SELinux to permissive mode." || warn "Failed to restore SELinux." ;;
-        esac
-        rm -f "$og_selinux_file"
-    fi
-    
-    # Kill namespace holder process
-    if [ -f "$HOLDER_PID_FILE" ]; then
-        HOLDER_PID=$(cat "$HOLDER_PID_FILE")
-        if kill -0 "$HOLDER_PID" 2>/dev/null; then
-            kill "$HOLDER_PID" 2>/dev/null && log "Killed namespace holder process." || warn "Failed to kill holder process."
-        fi
-        rm -f "$HOLDER_PID_FILE"
-    fi
-    
-    # Re-enable Android Doze
-    su -c 'dumpsys deviceidle enable' >/dev/null 2>&1 && log "Re-enabled Android Doze"
-
-    log "Chroot stopped successfully."
 }
 
 enter_chroot() {
@@ -466,13 +472,16 @@ backup_chroot() {
     
     log "Creating backup archive: $backup_path"
 
-    # Stop chroot if running (only in manual mode)
-    if [ "$WEBUI_MODE" -eq 0 ] && is_chroot_running; then
-        log "Stopping chroot for backup..."
-        stop_chroot
-    fi
+    # Unified backup logic for both sparse and regular rootfs
+    # 1. Ensure chroot is restarted
+    stop_chroot >/dev/null 2>&1
+    start_chroot >/dev/null 2>&1
+
+    # 2. Umount filesystems for clean backup
+    umount_chroot >/dev/null 2>&1
+    sleep 1  # Brief pause to ensure clean unmount
     
-    # Create compressed tar archive
+    # 3. Create compressed tar archive
     if run_in_ns busybox tar -czf "$backup_path" -C "$(dirname "$CHROOT_PATH")" "$(basename "$CHROOT_PATH")" 2>/dev/null; then
         local size
         size=$(run_in_ns du -h "$backup_path" 2>/dev/null | cut -f1)
@@ -481,6 +490,9 @@ backup_chroot() {
         error "Failed to create backup archive"
         exit 1
     fi
+    
+    # 4. Always stop chroot after backup (whether successful or failed)
+    stop_chroot >/dev/null 2>&1
 }
 
 restore_chroot() {
@@ -585,7 +597,7 @@ WEBUI_MODE=0
 
 for arg in "$@"; do
     case "$arg" in
-        start|stop|restart|status|backup|restore|list-users|run)
+        start|stop|restart|status|umount|backup|restore|list-users|run)
             COMMAND="$arg"
             ;;
         --no-shell)
@@ -656,6 +668,11 @@ case "$COMMAND" in
         ;;
     status)
         show_status
+        ;;
+    umount)
+        log "Umounting chroot filesystems..."
+        umount_chroot
+        log "Chroot filesystems unmounted successfully."
         ;;
     list-users)
         list_users

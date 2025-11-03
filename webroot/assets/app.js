@@ -1014,35 +1014,8 @@
     disableAllActions(true);
     disableSettingsPopup(true);
 
-    // Check if chroot is running
-    const isRunning = els.statusText.textContent.trim() === 'running';
-
-    if(isRunning){
-      // Stop chroot first
-      progressLine.textContent = '⏳ Stopping chroot';
-      dotCount = 0;
-
-      setTimeout(() => {
-        runCmdAsync(`sh ${PATH_CHROOT_SH} stop >/dev/null 2>&1`, (result) => {
-          if(result.success) {
-            appendConsole('✓ Chroot stopped for backup', 'success');
-            // Now proceed to backup
-            proceedToBackup();
-          } else {
-            clearInterval(progressInterval);
-            progressLine.remove();
-            appendConsole('✗ Failed to stop chroot', 'err');
-            appendConsole('Backup aborted - please stop the chroot manually first', 'err');
-            activeCommandId = null;
-            disableAllActions(false);
-            disableSettingsPopup(false, true);
-          }
-        });
-      }, 50);
-    } else {
-      // Chroot not running, proceed directly
-      proceedToBackup();
-    }
+    // No need to check if running - backup_chroot handles lifecycle internally
+    proceedToBackup();
 
     function proceedToBackup(){
       progressLine.textContent = '⏳ Creating backup';
