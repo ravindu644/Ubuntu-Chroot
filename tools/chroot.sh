@@ -482,7 +482,7 @@ backup_chroot() {
     sleep 1  # Brief pause to ensure clean unmount
     
     # 3. Create compressed tar archive
-    if run_in_ns busybox tar -czf "$backup_path" -C "$(dirname "$CHROOT_PATH")" "$(basename "$CHROOT_PATH")" 2>/dev/null; then
+    if run_in_ns busybox tar -czf "$backup_path" -C "$CHROOT_PATH" . 2>/dev/null; then
         local size
         size=$(run_in_ns du -h "$backup_path" 2>/dev/null | cut -f1)
         log "Backup created successfully: $backup_path (${size:-unknown size})"
@@ -551,22 +551,20 @@ restore_chroot() {
         fi
     fi
     
-    # Create parent directory if needed
-    local chroot_parent="$(dirname "$CHROOT_PATH")"
-    if ! run_in_ns mkdir -p "$chroot_parent"; then
-        error "Failed to create chroot parent directory: $chroot_parent"
+    # Create rootfs directory
+    if ! run_in_ns mkdir -p "$CHROOT_PATH"; then
+        error "Failed to create rootfs directory: $CHROOT_PATH"
         exit 1
     fi
-    
+
     # Extract the tar.gz archive
-    if run_in_ns busybox tar -xzf "$backup_path" -C "$chroot_parent" 2>/dev/null; then
+    if run_in_ns busybox tar -xzf "$backup_path" -C "$CHROOT_PATH" 2>/dev/null; then
         log "Chroot restored successfully from: $backup_path"
     else
         error "Failed to extract backup archive"
         exit 1
     fi
 }
-
 
 # --- Main Script Logic ---
 
