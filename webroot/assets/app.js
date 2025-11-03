@@ -403,6 +403,19 @@
           els.hotspotBtn.disabled = true;
           els.hotspotBtn.style.opacity = '0.5';
         }
+        // Also disable boot toggle and user select when chroot doesn't exist
+        if(els.bootToggle) {
+          els.bootToggle.disabled = true;
+          const toggleContainer = els.bootToggle.closest('.toggle-inline');
+          if(toggleContainer) {
+            toggleContainer.style.opacity = '0.5';
+            toggleContainer.style.pointerEvents = 'none';
+          }
+        }
+        if(els.userSelect) {
+          els.userSelect.disabled = true;
+          els.userSelect.style.opacity = '0.5';
+        }
         disableSettingsPopup(false, false); // Enable popup but disable chroot-dependent elements
         try{ document.getElementById('copy-login').disabled = true; }catch(e){}
         return;
@@ -410,6 +423,19 @@
         _chrootMissingLogged = false;
         // Re-enable actions when chroot exists
         disableAllActions(false);
+        // Re-enable boot toggle and user select
+        if(els.bootToggle) {
+          els.bootToggle.disabled = false;
+          const toggleContainer = els.bootToggle.closest('.toggle-inline');
+          if(toggleContainer) {
+            toggleContainer.style.opacity = '';
+            toggleContainer.style.pointerEvents = '';
+          }
+        }
+        if(els.userSelect) {
+          els.userSelect.disabled = false;
+          els.userSelect.style.opacity = '';
+        }
         disableSettingsPopup(false, true); // chroot exists
       }
 
@@ -597,6 +623,15 @@
       appendConsole(`Failed to detect root execution method: ${e.message}`, 'err');
       // Then disable all root-dependent UI elements
       disableAllActions(true);
+      // Also disable boot toggle when no root access
+      if(els.bootToggle) {
+        els.bootToggle.disabled = true;
+        const toggleContainer = els.bootToggle.closest('.toggle-inline');
+        if(toggleContainer) {
+          toggleContainer.style.opacity = '0.5';
+          toggleContainer.style.pointerEvents = 'none';
+        }
+      }
       disableSettingsPopup(true, true); // assume chroot exists for now
     }
   }
@@ -1401,6 +1436,16 @@
         els.uninstallBtn.style.opacity = uninstallDisabled ? '0.5' : '';
         els.uninstallBtn.style.cursor = uninstallDisabled ? 'not-allowed' : '';
         els.uninstallBtn.style.pointerEvents = uninstallDisabled ? 'none' : '';
+      }
+      
+      // Experimental features - disable when chroot doesn't exist OR no root access
+      const migrateSparseBtn = document.getElementById('migrate-sparse-btn');
+      if(migrateSparseBtn) {
+        const migrateDisabled = disabled || !chrootExists;
+        migrateSparseBtn.disabled = migrateDisabled;
+        migrateSparseBtn.style.opacity = migrateDisabled ? '0.5' : '';
+        migrateSparseBtn.style.cursor = migrateDisabled ? 'not-allowed' : '';
+        migrateSparseBtn.style.pointerEvents = migrateDisabled ? 'none' : '';
       }
     }catch(e){}
   }
