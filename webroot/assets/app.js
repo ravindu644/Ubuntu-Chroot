@@ -1304,7 +1304,7 @@
           
           if(result.success) {
             // Also remove sparse image if it exists
-            runCmdAsync(`[ -f "${CHROOT_DIR}/rootfs.img" ] && rm -f "${CHROOT_DIR}/rootfs.img"`, (imgResult) => {
+            runCmdAsync(`[ -f "${CHROOT_DIR}/rootfs.img" ] && rm -f "${CHROOT_DIR}/rootfs.img" || true`, (imgResult) => {
               // Log image removal but don't fail if it doesn't exist
               if(imgResult.success) {
                 appendConsole('Sparse image file removed.', 'info');
