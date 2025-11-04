@@ -928,6 +928,9 @@
     }
 
     closeSettingsPopup();
+    // Wait for popup animation to complete
+    await new Promise(resolve => setTimeout(resolve, 450));
+
     appendConsole('━━━ Starting Chroot Update ━━━', 'info');
 
     // Show progress indicator IMMEDIATELY
@@ -943,9 +946,9 @@
       progressLine.textContent = '⏳ Updating chroot' + '.'.repeat(dotCount);
     }, 400);
 
-    // Disable settings button during update
-    els.settingsBtn.disabled = true;
-    els.settingsBtn.style.opacity = '0.5';
+    // Disable ALL UI elements during update (like backup/restore functions)
+    disableAllActions(true);
+    disableSettingsPopup(true);
 
     // Mark as active to prevent other commands
     activeCommandId = 'chroot-update';
@@ -966,8 +969,8 @@
         }
 
         activeCommandId = null;
-        els.settingsBtn.disabled = false;
-        els.settingsBtn.style.opacity = '';
+        disableAllActions(false);
+        disableSettingsPopup(false, true);
 
         // Refresh status after update
         setTimeout(() => refreshStatus(), 500);
