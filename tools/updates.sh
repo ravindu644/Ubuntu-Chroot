@@ -30,8 +30,9 @@ update_v2000() {
 }
 
 update_v2500() {
-    log "Nothing new buddy ! Everything is up-to date 🎉"
+    log "Adding XDG environment variables for better GUI application support"
     run_in_chroot "echo 'TMPDIR=/tmp' >> /etc/environment"
+    run_in_chroot "echo 'XDG_RUNTIME_DIR=/tmp/runtime' >> /etc/environment"
     return 0
 }
 

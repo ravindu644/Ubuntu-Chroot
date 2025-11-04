@@ -139,7 +139,8 @@ RUN add-apt-repository ppa:mozillateam/ppa -y && \
 RUN locale-gen en_US.UTF-8 && update-locale LANG=en_US.UTF-8 && update-locale LC_ALL=en_US.UTF-8
 
 # Set global environment variables for all users and processes
-RUN echo 'TMPDIR=/tmp' >> /etc/environment
+RUN echo 'TMPDIR=/tmp' >> /etc/environment && \
+    echo 'XDG_RUNTIME_DIR=/tmp/runtime' >> /etc/environment
 
 # Configure SSH
 RUN mkdir -p /var/run/sshd && \
