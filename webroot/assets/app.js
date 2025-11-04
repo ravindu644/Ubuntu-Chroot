@@ -29,16 +29,21 @@
     clearScript: document.getElementById('clear-script'),
     updateBtn: document.getElementById('update-btn'),
     backupBtn: document.getElementById('backup-btn'),
-    restoreBtn: document.getElementById('restore-btn'),
-    uninstallBtn: document.getElementById('uninstall-btn'),
-    hotspotBtn: document.getElementById('hotspot-btn'),
-    hotspotPopup: document.getElementById('hotspot-popup'),
-    closeHotspotPopup: document.getElementById('close-hotspot-popup'),
     startHotspotBtn: document.getElementById('start-hotspot-btn'),
     stopHotspotBtn: document.getElementById('stop-hotspot-btn'),
     hotspotForm: document.getElementById('hotspot-form'),
     hotspotWarning: document.getElementById('hotspot-warning'),
-    dismissHotspotWarning: document.getElementById('dismiss-hotspot-warning')
+    dismissHotspotWarning: document.getElementById('dismiss-hotspot-warning'),
+    sparseSettingsBtn: document.getElementById('sparse-settings-btn'),
+    sparseSettingsPopup: document.getElementById('sparse-settings-popup'),
+    closeSparsePopup: document.getElementById('close-sparse-popup'),
+    trimSparseBtn: document.getElementById('trim-sparse-btn'),
+    sparseInfo: document.getElementById('sparse-info'),
+    restoreBtn: document.getElementById('restore-btn'),
+    uninstallBtn: document.getElementById('uninstall-btn'),
+    hotspotBtn: document.getElementById('hotspot-btn'),
+    hotspotPopup: document.getElementById('hotspot-popup'),
+    closeHotspotPopup: document.getElementById('close-hotspot-popup')
   };
 
   // Track running commands to prevent UI blocking
@@ -920,6 +925,148 @@
     }, 50);
   }
 
+  // Sparse image settings functions
+  function openSparseSettingsPopup(){
+    updateSparseInfo();
+    els.sparseSettingsPopup.classList.add('active');
+  }
+
+  function closeSparseSettingsPopup(){
+    els.sparseSettingsPopup.classList.remove('active');
+  }
+
+  // Helper function to format bytes to human readable format (base 1000, GB)
+  function formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1000; // Use base 1000 for GB instead of GiB
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  }
+
+  async function updateSparseInfo(){
+    if(!rootAccessConfirmed || !sparseMigrated){
+      if(els.sparseInfo) els.sparseInfo.innerHTML = 'Sparse image not detected';
+      return;
+    }
+
+    try{
+      // Get apparent size (visible to Android - the intended size)
+      const apparentSizeCmd = `ls -lh ${CHROOT_DIR}/rootfs.img | tr -s ' ' | cut -d' ' -f5`;
+      const apparentSizeStr = await runCmdSync(apparentSizeCmd);
+      const apparentSize = apparentSizeStr.trim().replace(/G$/, ' GB');
+
+      // Get actual usage (allocated space from du -h, then add proper unit)
+      const usageCmd = `du -h ${CHROOT_DIR}/rootfs.img | cut -f1`;
+      const actualUsageRaw = await runCmdSync(usageCmd);
+      const actualUsage = actualUsageRaw.trim().replace(/G$/, ' GB');
+
+      const info = `
+        <table class="storage-info-table">
+          <tbody>
+            <tr>
+              <td class="storage-label">Visible size to Android</td>
+              <td class="storage-value">${apparentSize}</td>
+            </tr>
+            <tr>
+              <td class="storage-label">Actual size of the image</td>
+              <td class="storage-value">${String(actualUsage||'').trim()}</td>
+            </tr>
+          </tbody>
+        </table>
+      `;
+      if(els.sparseInfo) els.sparseInfo.innerHTML = info;
+    }catch(e){
+      if(els.sparseInfo) els.sparseInfo.innerHTML = 'Unable to read sparse image information';
+    }
+  }
+
+  async function trimSparseImage(){
+    if(activeCommandId) {
+      appendConsole('⚠ Another command is already running. Please wait...', 'warn');
+      return;
+    }
+
+    if(!rootAccessConfirmed){
+      appendConsole('Cannot trim sparse image: root access not available', 'err');
+      return;
+    }
+
+    if(!sparseMigrated){
+      appendConsole('Sparse image not detected - cannot trim', 'err');
+      return;
+    }
+
+    // Confirmation dialog before trimming
+    const confirmed = await showConfirmDialog(
+      'Trim Sparse Image',
+      'This will run fstrim to reclaim unused space in the sparse image.\n\nThe operation may take a few seconds and space reclamation happens gradually. Continue?',
+      'Trim',
+      'Cancel'
+    );
+
+    if(!confirmed){
+      return;
+    }
+
+    // Close both popups with proper animation handling
+    closeSettingsPopup();
+    const sparsePopup = els.sparseSettingsPopup;
+    if(sparsePopup && sparsePopup.classList.contains('active')) {
+      sparsePopup.classList.remove('active');
+    }
+
+    // Wait for popup animation to complete (750ms for proper closing)
+    await new Promise(resolve => setTimeout(resolve, 750));
+
+    appendConsole('━━━ Trimming Sparse Image ━━━', 'info');
+
+    // Show progress indicator IMMEDIATELY
+    const progressLine = document.createElement('div');
+    progressLine.className = 'progress-indicator';
+    progressLine.textContent = '⏳ Trimming sparse image';
+    els.console.appendChild(progressLine);
+    els.console.scrollTop = els.console.scrollHeight;
+
+    let dotCount = 0;
+    const progressInterval = setInterval(() => {
+      dotCount = (dotCount + 1) % 4;
+      progressLine.textContent = '⏳ Trimming sparse image' + '.'.repeat(dotCount);
+    }, 400);
+
+    // Disable ALL UI elements during trim operation
+    disableAllActions(true);
+    disableSettingsPopup(true);
+
+    // Mark as active to prevent other commands
+    activeCommandId = 'sparse-trim';
+
+    const cmd = `sh ${PATH_CHROOT_SH} fstrim`;
+
+    // Use setTimeout to allow UI to update
+    setTimeout(() => {
+      runCmdAsync(cmd, (result) => {
+        clearInterval(progressInterval);
+        progressLine.remove();
+
+        if(result.success) {
+          appendConsole('✓ Sparse image trimmed successfully', 'success');
+          appendConsole('Space may be reclaimed after a few minutes', 'info');
+          appendConsole('━━━ Trim Complete ━━━', 'success');
+        } else {
+          appendConsole('✗ Sparse image trim failed', 'err');
+          appendConsole('This may be expected on some Android kernels', 'warn');
+        }
+
+        // Re-enable UI and refresh info
+        activeCommandId = null;
+        disableAllActions(false);
+        disableSettingsPopup(false, true);
+        updateSparseInfo();
+      });
+    }, 50);
+  }
+
   async function updateChroot(){
     if(activeCommandId) {
       appendConsole('⚠ Another command is already running. Please wait...', 'warn');
@@ -1489,6 +1636,12 @@
           migrateSparseBtn.textContent = 'Migrate to Sparse Image';
         }
       }
+
+      // Sparse settings button - only show when migrated to sparse image
+      if(els.sparseSettingsBtn) {
+        const sparseBtnVisible = !disabled && chrootExists && sparseMigrated;
+        els.sparseSettingsBtn.style.display = sparseBtnVisible ? 'inline-block' : 'none';
+      }
     }catch(e){}
   }
 
@@ -1582,7 +1735,7 @@
       dotCount = 0;
 
       setTimeout(() => {
-        runCmdAsync(`sh /data/local/ubuntu-chroot/sparsemgr.sh migrate ${sizeGb}`, (result) => {
+        runCmdAsync(`sh ${CHROOT_DIR}/sparsemgr.sh migrate ${sizeGb}`, (result) => {
           clearInterval(progressInterval);
           progressLine.remove();
 
@@ -2356,6 +2509,22 @@
   const migrateSparseBtn = document.getElementById('migrate-sparse-btn');
   if(migrateSparseBtn){
     migrateSparseBtn.addEventListener('click', () => migrateToSparseImage());
+  }
+
+  // Sparse settings event handlers
+  if(els.sparseSettingsBtn){
+    els.sparseSettingsBtn.addEventListener('click', () => openSparseSettingsPopup());
+  }
+  if(els.closeSparsePopup){
+    els.closeSparsePopup.addEventListener('click', () => closeSparseSettingsPopup());
+  }
+  if(els.sparseSettingsPopup){
+    els.sparseSettingsPopup.addEventListener('click', (e) => {
+      if(e.target === els.sparseSettingsPopup) closeSparseSettingsPopup();
+    });
+  }
+  if(els.trimSparseBtn){
+    els.trimSparseBtn.addEventListener('click', () => trimSparseImage());
   }
 
   // Hotspot event handlers
