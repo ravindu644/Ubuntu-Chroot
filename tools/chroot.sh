@@ -16,6 +16,7 @@ POST_EXEC_SCRIPT="/data/local/ubuntu-chroot/post_exec.sh"
 HOLDER_PID_FILE="/data/local/ubuntu-chroot/holder.pid"
 SILENT=0
 SKIP_POST_EXEC=0
+CHROOT_SETUP_IN_PROGRESS=0
 
 
 # --- Logging and Utility Functions ---
@@ -60,12 +61,18 @@ _get_ns_flags() {
     # short flags (-m) that busybox nsenter requires.
     local flags_file="$HOLDER_PID_FILE.flags"
     if [ ! -f "$flags_file" ]; then
+        warn "Namespace flags file not found, using fallback"
         echo "-m"; return # Fallback to mount only
     fi
     
     local long_flags short_flags
     long_flags=$(cat "$flags_file")
     
+    if [ -z "$long_flags" ]; then
+        warn "Empty namespace flags file, using fallback"
+        echo "-m"; return
+    fi
+
     for flag in $long_flags; do
         case "$flag" in
             --mount) short_flags="$short_flags -m" ;;
@@ -77,6 +84,12 @@ _get_ns_flags() {
             --cgroup|--fork) ;;
         esac
     done
+
+    if [ -z "$short_flags" ]; then
+        warn "No valid namespace flags found, using fallback"
+        echo "-m"; return
+    fi
+
     echo "$short_flags"
 }
 
@@ -105,12 +118,14 @@ run_in_chroot() {
     # Execute a command inside the chroot environment using full namespace isolation.
     local command="$*"
 
-    # Ensure chroot is started if not running
-    if ! is_chroot_running; then
-        start_chroot || {
-            error "Failed to start chroot for command execution"
-            return 1
-        }
+    # Ensure chroot is started if not running - but prevent recursion during setup
+    if [ "$CHROOT_SETUP_IN_PROGRESS" -eq 0 ]; then
+        if ! is_chroot_running; then
+            start_chroot || {
+                error "Failed to start chroot for command execution"
+                return 1
+            }
+        fi
     fi
 
     local common_exports="export PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/libexec:/opt/bin';"
@@ -217,8 +232,11 @@ apply_internet_fix() {
     grep -q "aid_net_raw" "$CHROOT_PATH/etc/group" || echo "aid_net_raw:x:3004:" >> "$CHROOT_PATH/etc/group"
     
     # These commands must run *inside* the chroot to find the users.
+    # Set flag to prevent recursion
+    CHROOT_SETUP_IN_PROGRESS=1
     run_in_chroot "/usr/sbin/usermod -aG aid_inet root 2>/dev/null"
     run_in_chroot "/usr/sbin/usermod -aG aid_inet,aid_net_raw _apt 2>/dev/null"
+    CHROOT_SETUP_IN_PROGRESS=0
     
     sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1
     echo "127.0.0.1    localhost $C_HOSTNAME" > "$CHROOT_PATH/etc/hosts"
@@ -278,18 +296,27 @@ create_namespace() {
     # "sleep" process, guaranteeing we target the process inside the namespaces.
     unshare $unshare_flags sh -c 'busybox sleep infinity & echo $! > "$1"' -- "$pid_file"
 
-    if [ -f "$pid_file" ] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then
-        return 0
-    else
-        error "Failed to create and capture namespace holder PID."
-        rm -f "$pid_file" "${pid_file}.flags"
-        return 1
-    fi
+    # Wait a moment for the PID file to be written
+    local attempts=0
+    while [ $attempts -lt 10 ]; do
+        if [ -f "$pid_file" ] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then
+            return 0
+        fi
+        sleep 0.1
+        attempts=$((attempts + 1))
+    done
+
+    error "Failed to create and capture namespace holder PID."
+    rm -f "$pid_file" "${pid_file}.flags"
+    return 1
 }
 
 start_chroot() {
     log "Setting up advanced chroot environment..."
     
+    # Set flag to prevent recursion
+    CHROOT_SETUP_IN_PROGRESS=1
+
     if ! check_sysv_ipc; then
         warn "System V IPC not enabled in kernel - some benchmarking tools (fio, kdiskmark) may fail"
     fi
@@ -298,12 +325,15 @@ start_chroot() {
         log "Namespace holder already running."
     else
         log "Creating new isolated namespace..."
-        create_namespace "$HOLDER_PID_FILE" || return 1
+        create_namespace "$HOLDER_PID_FILE" || {
+            CHROOT_SETUP_IN_PROGRESS=0
+            return 1
+        }
         sleep 0.5
         log "Running in isolated namespace (PID: $(cat "$HOLDER_PID_FILE"))"
     fi
     
-    [ -d "$CHROOT_PATH" ] || { error "Chroot directory not found at $CHROOT_PATH"; exit 1; }
+    [ -d "$CHROOT_PATH" ] || { error "Chroot directory not found at $CHROOT_PATH"; CHROOT_SETUP_IN_PROGRESS=0; exit 1; }
 
     if [ -f "$ROOTFS_IMG" ]; then
         log "Sparse image detected"
@@ -318,6 +348,7 @@ start_chroot() {
         log "Mounting sparse image to rootfs..."
         if ! run_in_ns mount -t ext4 -o loop,rw,noatime,nodiratime,barrier=0 "$ROOTFS_IMG" "$CHROOT_PATH"; then
             error "Failed to mount sparse image"
+            CHROOT_SETUP_IN_PROGRESS=0
             exit 1
         fi
         log "Sparse image mounted successfully"
@@ -377,6 +408,9 @@ start_chroot() {
     fi
 
     su -c 'dumpsys deviceidle disable' >/dev/null 2>&1 && log "Disabled Android Doze to prevent background slowdowns"
+
+    # Clear flag after setup is complete
+    CHROOT_SETUP_IN_PROGRESS=0
 
     log "Chroot environment setup completed successfully!"
 }
@@ -506,6 +540,12 @@ enter_chroot() {
 show_status() {
     if is_chroot_running; then
         echo "Status: RUNNING"
+        if [ -f "$HOLDER_PID_FILE" ]; then
+            echo "Namespace Holder PID: $(cat "$HOLDER_PID_FILE")"
+        fi
+        if [ -f "$HOLDER_PID_FILE.flags" ]; then
+            echo "Namespace Flags: $(cat "$HOLDER_PID_FILE.flags")"
+        fi
     else
         echo "Status: STOPPED"
     fi
