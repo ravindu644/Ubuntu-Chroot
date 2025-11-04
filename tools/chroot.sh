@@ -78,7 +78,6 @@ _get_ns_flags() {
             --mount) short_flags="$short_flags -m" ;;
             --uts)   short_flags="$short_flags -u" ;;
             --ipc)   short_flags="$short_flags -i" ;;
-            --net)   short_flags="$short_flags -n" ;;
             --pid)   short_flags="$short_flags -p" ;;
             # Ignore flags that nsenter doesn't need or support
             --cgroup|--fork) ;;
@@ -269,22 +268,22 @@ create_namespace() {
     local pid_file="$1"
     local unshare_flags="" # Flags for the unshare command
     local nsenter_flags="" # Flags to save for nsenter
-    local cfg
-    cfg=$(zcat /proc/config.gz 2>/dev/null || cat /proc/config 2>/dev/null)
 
-    # We must have --pid and --mount for isolation to work correctly.
-    unshare_flags="--pid --mount"
-    nsenter_flags="--pid --mount"
-
-    # Add other available namespaces (excluding network for internet access)
-    for ns in uts:UTS_NS ipc:IPC_NS cgroup:CGROUPS; do
-        flag="--${ns%%:*}"
-        config="CONFIG_${ns#*:}"
-        if echo "$cfg" | grep -q "^${config}=y" && unshare "$flag" true 2>/dev/null; then
-            unshare_flags="$unshare_flags $flag"
-            nsenter_flags="$nsenter_flags $flag"
+    # Test each namespace individually and build flags dynamically
+    for ns_flag in --pid --mount --uts --ipc; do
+        if unshare "$ns_flag" true 2>/dev/null; then
+            unshare_flags+=" $ns_flag"
         fi
     done
+
+    # nsenter_flags should be identical to unshare_flags
+    nsenter_flags="$unshare_flags"
+
+    # Ensure we have at least mount namespace
+    if ! echo "$unshare_flags" | grep -q -- "--mount"; then
+        error "Mount namespace not supported - cannot create chroot"
+        return 1
+    fi
 
     log "using flags: $unshare_flags"
     
