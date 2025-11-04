@@ -120,7 +120,8 @@ run_in_chroot() {
     # Ensure chroot is started if not running - but prevent recursion during setup
     if [ "$CHROOT_SETUP_IN_PROGRESS" -eq 0 ]; then
         if ! is_chroot_running; then
-            start_chroot || {
+            log "Starting chroot for command execution..."
+            start_chroot > /dev/null 2>&1 || {
                 error "Failed to start chroot for command execution"
                 return 1
             }
@@ -211,6 +212,26 @@ setup_storage() {
         fi
     else
         warn "Android storage not found at $storage_path"
+    fi
+}
+
+run_fstrim() {
+    log "Running fstrim to reclaim storage space from sparse image..."
+
+    # Try different fstrim approaches for Android compatibility
+    if run_in_chroot "fstrim -v /" 2>/dev/null; then
+        log "fstrim completed successfully - space should be reclaimed from sparse image"
+        log "Note: You may need to wait a few minutes for Android to fully reclaim the space"
+        return 0
+    elif run_in_chroot "fstrim -v /proc/self/root/" 2>/dev/null; then
+        log "fstrim on /proc/self/root/ completed successfully"
+        log "Note: You may need to wait a few minutes for Android to fully reclaim the space"
+        return 0
+    else
+        warn "fstrim failed or not supported on this system"
+        warn "This is expected on some Android kernels that don't support discard on loop devices"
+        warn "Space reclamation depends on the discard mount option for automatic operation"
+        return 1
     fi
 }
 
@@ -363,7 +384,7 @@ start_chroot() {
             fi
         fi
         log "Mounting sparse image to rootfs..."
-        if ! run_in_ns mount -t ext4 -o loop,rw,noatime,nodiratime,barrier=0 "$ROOTFS_IMG" "$CHROOT_PATH"; then
+        if ! run_in_ns mount -t ext4 -o loop,discard,rw,noatime,nodiratime,barrier=0 "$ROOTFS_IMG" "$CHROOT_PATH"; then
             error "Failed to mount sparse image"
             CHROOT_SETUP_IN_PROGRESS=0
             exit 1
@@ -678,7 +699,7 @@ WEBUI_MODE=0
 
 for arg in "$@"; do
     case "$arg" in
-        start|stop|restart|status|umount|backup|restore|list-users|run)
+        start|stop|restart|status|umount|fstrim|backup|restore|list-users|run)
             COMMAND="$arg" ;;
         --no-shell) NO_SHELL_FLAG=1 ;;
         --webui) WEBUI_MODE=1 ;;
@@ -712,6 +733,7 @@ case "$COMMAND" in
     status) show_status ;;
     umount)
         log "Umounting chroot filesystems..."; umount_chroot; log "Chroot filesystems unmounted successfully." ;;
+    fstrim) run_fstrim ;;
     list-users) list_users ;;
     run)
         if [ -z "$RUN_COMMAND" ]; then error "No command specified for run"; usage; fi
