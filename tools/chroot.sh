@@ -216,32 +216,50 @@ setup_storage() {
 
 apply_internet_fix() {
     log "Applying internet fix for chroot..."
-    
-    > "$CHROOT_PATH/etc/resolv.conf"
-    for i in 1 2 3 4; do
-        dns=$(getprop net.dns${i} 2>/dev/null)
-        [ -z "$dns" ] && break
-        echo "nameserver $dns" >> "$CHROOT_PATH/etc/resolv.conf"
-    done
-    echo "nameserver 8.8.8.8" >> "$CHROOT_PATH/etc/resolv.conf"
-    echo "nameserver 8.8.4.4" >> "$CHROOT_PATH/etc/resolv.conf"
-    chmod 644 "$CHROOT_PATH/etc/resolv.conf"
-    
-    grep -q "aid_inet" "$CHROOT_PATH/etc/group" || echo "aid_inet:x:3003:" >> "$CHROOT_PATH/etc/group"
-    grep -q "aid_net_raw" "$CHROOT_PATH/etc/group" || echo "aid_net_raw:x:3004:" >> "$CHROOT_PATH/etc/group"
-    
+
+    # Get DNS servers from Android system
+    local dns1=$(getprop net.dns1 2>/dev/null || echo '8.8.8.8')
+    local dns2=$(getprop net.dns2 2>/dev/null || echo '8.8.4.4')
+
+    # Run filesystem operations within namespace context where chroot is accessible
+    run_in_ns sh -c "
+        # Create resolv.conf with DNS servers
+        cat > '$CHROOT_PATH/etc/resolv.conf' << EOF
+nameserver $dns1
+nameserver $dns2
+nameserver 8.8.8.8
+nameserver 8.8.4.4
+EOF
+        chmod 644 '$CHROOT_PATH/etc/resolv.conf'
+
+        # Add required groups to /etc/group
+        if ! grep -q '^aid_inet:' '$CHROOT_PATH/etc/group' 2>/dev/null; then
+            echo 'aid_inet:x:3003:' >> '$CHROOT_PATH/etc/group'
+        fi
+        if ! grep -q '^aid_net_raw:' '$CHROOT_PATH/etc/group' 2>/dev/null; then
+            echo 'aid_net_raw:x:3004:' >> '$CHROOT_PATH/etc/group'
+        fi
+
+        # Create hosts file
+        cat > '$CHROOT_PATH/etc/hosts' << EOF
+127.0.0.1    localhost $C_HOSTNAME
+::1          localhost ip6-localhost ip6-loopback
+EOF
+
+        # Set hostname
+        echo '$C_HOSTNAME' > '$CHROOT_PATH/proc/sys/kernel/hostname' 2>/dev/null
+    "
+
     # These commands must run *inside* the chroot to find the users.
     # Set flag to prevent recursion
     CHROOT_SETUP_IN_PROGRESS=1
     run_in_chroot "/usr/sbin/usermod -aG aid_inet root 2>/dev/null"
     run_in_chroot "/usr/sbin/usermod -aG aid_inet,aid_net_raw _apt 2>/dev/null"
     CHROOT_SETUP_IN_PROGRESS=0
-    
+
+    # This must run on the host system
     sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1
-    echo "127.0.0.1    localhost $C_HOSTNAME" > "$CHROOT_PATH/etc/hosts"
-    echo "::1          localhost ip6-localhost ip6-loopback" >> "$CHROOT_PATH/etc/hosts"
-    run_in_ns sh -c "echo '$C_HOSTNAME' > '$CHROOT_PATH/proc/sys/kernel/hostname'" 2>/dev/null
-    
+
     log "Internet fix successfully applied."
 }
 
