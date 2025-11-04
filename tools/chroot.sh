@@ -276,8 +276,8 @@ create_namespace() {
     unshare_flags="--pid --mount"
     nsenter_flags="--pid --mount"
 
-    # Add other available namespaces
-    for ns in uts:UTS_NS ipc:IPC_NS net:NET_NS cgroup:CGROUPS; do
+    # Add other available namespaces (excluding network for internet access)
+    for ns in uts:UTS_NS ipc:IPC_NS cgroup:CGROUPS; do
         flag="--${ns%%:*}"
         config="CONFIG_${ns#*:}"
         if echo "$cfg" | grep -q "^${config}=y" && unshare "$flag" true 2>/dev/null; then
