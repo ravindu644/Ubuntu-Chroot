@@ -589,15 +589,27 @@
     // Save selected user
     try{ localStorage.setItem('chroot_selected_user', selectedUser); }catch(e){}
 
-    // Generate login command for selected user
-    const cmd = `su -c "sh ${PATH_CHROOT_SH} start -s ${selectedUser}"`;
+    // Check if ubuntu-chroot symlink exists, use short command if available
+    let loginCommand;
+    try {
+      const symlinkCheck = runCmdSync(`[ -x "/system/bin/ubuntu-chroot" ] && echo "exists" || echo "not_exists"`);
+      if(symlinkCheck && symlinkCheck.trim() === "exists") {
+        loginCommand = `su -c "ubuntu-chroot start ${selectedUser} -s"`;
+      } else {
+        loginCommand = `su -c "sh ${PATH_CHROOT_SH} start -s ${selectedUser}"`;
+      }
+    } catch(e) {
+      // Fallback to full path if check fails
+      loginCommand = `su -c "sh ${PATH_CHROOT_SH} start -s ${selectedUser}"`;
+    }
+
     if(navigator.clipboard && navigator.clipboard.writeText){
-      navigator.clipboard.writeText(cmd).then(()=> appendConsole(`Login command for user '${selectedUser}' copied to clipboard`))
+      navigator.clipboard.writeText(loginCommand).then(()=> appendConsole(`Login command for user '${selectedUser}' copied to clipboard`))
         .catch(()=> appendConsole('Failed to copy to clipboard'));
     } else {
       // fallback
-      appendConsole(cmd);
-      try{ window.prompt('Copy login command (Ctrl+C):', cmd); }catch(e){}
+      appendConsole(loginCommand);
+      try{ window.prompt('Copy login command (Ctrl+C):', loginCommand); }catch(e){}
     }
   }
 
