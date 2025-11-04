@@ -50,11 +50,21 @@ setup_ota() {
 
     # Record version for OTA updates
     if [ ! -f "$VERSION_FILE" ]; then
-        unzip -oj "$ZIPFILE" 'module.prop' -d "$TMPDIR" >&2
         local version_code
-        version_code=$(grep "^versionCode=" "$TMPDIR/module.prop" | cut -d'=' -f2)
+
+        # Check if module was previously installed
+        if [ -f "/data/adb/modules/ubuntu-chroot/module.prop" ]; then
+            # Record OLD version from existing installation for proper OTA tracking
+            version_code=$(grep "^versionCode=" "/data/adb/modules/ubuntu-chroot/module.prop" | cut -d'=' -f2)
+            echo "- Recording previous version $version_code for OTA updates"
+        else
+            # Fresh install - record version from zip file
+            unzip -oj "$ZIPFILE" 'module.prop' -d "$TMPDIR" >&2
+            version_code=$(grep "^versionCode=" "$TMPDIR/module.prop" | cut -d'=' -f2)
+            echo "- Fresh install - version $version_code recorded"
+        fi
+
         echo "$version_code" > "$VERSION_FILE"
-        echo "- Version $version_code recorded"
     fi
 }
 
