@@ -963,17 +963,52 @@
 
         if(result.success) {
           appendConsole('✓ Chroot update completed successfully', 'success');
-          appendConsole('━━━ Update Complete ━━━', 'success');
+          
+          // Show restart animation
+          const restartLine = document.createElement('div');
+          restartLine.className = 'progress-indicator';
+          restartLine.textContent = '⏳ Restarting chroot';
+          els.console.appendChild(restartLine);
+          els.console.scrollTop = els.console.scrollHeight;
+
+          let dotCount = 0;
+          const restartInterval = setInterval(() => {
+            dotCount = (dotCount + 1) % 4;
+            restartLine.textContent = '⏳ Restarting chroot' + '.'.repeat(dotCount);
+          }, 400);
+
+          // Restart chroot with suppressed output
+          setTimeout(() => {
+            runCmdAsync(`sh ${PATH_CHROOT_SH} restart >/dev/null 2>&1`, (restartResult) => {
+              clearInterval(restartInterval);
+              restartLine.remove();
+              
+              if(restartResult.success) {
+                appendConsole('✓ Chroot restarted successfully', 'success');
+              } else {
+                appendConsole('⚠ Chroot restart failed, but update was successful', 'warn');
+              }
+              
+              appendConsole('━━━ Update Complete ━━━', 'success');
+              
+              activeCommandId = null;
+              disableAllActions(false);
+              disableSettingsPopup(false, true);
+
+              // Refresh status after update and restart
+              setTimeout(() => refreshStatus(), 500);
+            });
+          }, 100);
         } else {
           appendConsole('✗ Chroot update failed', 'err');
+          
+          activeCommandId = null;
+          disableAllActions(false);
+          disableSettingsPopup(false, true);
+
+          // Refresh status after failed update
+          setTimeout(() => refreshStatus(), 500);
         }
-
-        activeCommandId = null;
-        disableAllActions(false);
-        disableSettingsPopup(false, true);
-
-        // Refresh status after update
-        setTimeout(() => refreshStatus(), 500);
       });
     }, 50);
   }
