@@ -186,6 +186,10 @@ extract_sparse() {
 # Create command symlink
 create_symlink() {
     mkdir -p "$MODPATH/system/bin"
-    ln -sf "$CHROOT_DIR/chroot.sh" "$MODPATH/system/bin/ubuntu-chroot" 2>/dev/null && \
-    echo "- Created symlink for ubuntu-chroot command"
+    if ln -sf "$CHROOT_DIR/chroot.sh" "$MODPATH/system/bin/ubuntu-chroot"; then
+        echo "- Created symlink for 'ubuntu-chroot' command"
+    else
+        echo "- Failed to create symlink for 'ubuntu-chroot' command"
+        exit 1
+    fi
 }
