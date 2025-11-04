@@ -127,7 +127,7 @@ run_in_chroot() {
         fi
     fi
 
-    local common_exports="export PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/libexec:/opt/bin';"
+    local common_exports="export PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/libexec:/opt/bin'; export TMPDIR='/tmp';"
     
     # If namespace holder is running, execute in isolated namespaces
     if [ -f "$HOLDER_PID_FILE" ] && kill -0 "$(cat "$HOLDER_PID_FILE")" 2>/dev/null; then
@@ -514,9 +514,10 @@ enter_chroot() {
     log "Entering chroot as user: $user"
     local common_exports="
         export PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/libexec:/opt/bin';
+        export TMPDIR='/tmp';
         export TERM='xterm';
     "
-    
+
     # Load holder PID
     if [ -f "$HOLDER_PID_FILE" ]; then
         HOLDER_PID=$(cat "$HOLDER_PID_FILE")
