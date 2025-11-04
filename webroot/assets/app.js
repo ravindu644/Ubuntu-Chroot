@@ -764,6 +764,9 @@
     saveHotspotSettings(); // Save settings before starting
 
     closeHotspotPopup();
+    // Wait for popup animation to complete (same timing as backup/restore)
+    await new Promise(resolve => setTimeout(resolve, 450));
+
     appendConsole(`━━━ Starting hotspot '${ssid}' ━━━`, 'info');
     
     // Show progress indicator IMMEDIATELY
@@ -781,10 +784,10 @@
       progressLine.textContent = '⏳ ' + actionText + ' ' + spinner[spinIndex];
     }, 200);
     
-    // Disable hotspot button during execution
-    els.hotspotBtn.disabled = true;
-    els.hotspotBtn.style.opacity = '0.5';
-    
+    // Disable ALL UI elements during hotspot operation (like chroot functions)
+    disableAllActions(true);
+    disableSettingsPopup(true);
+
     // Mark as active to prevent other commands
     activeCommandId = 'hotspot-start';
 
@@ -836,8 +839,11 @@
         appendConsole(`✗ Hotspot failed to start`, 'err');
       } finally {
         activeCommandId = null;
-        els.hotspotBtn.disabled = false;
-        els.hotspotBtn.style.opacity = '';
+        disableAllActions(false);
+        disableSettingsPopup(false, true);
+        
+        // Refresh status after hotspot operation
+        setTimeout(() => refreshStatus(), 500);
       }
     }, 50);
   }
@@ -854,6 +860,9 @@
     }
 
     closeHotspotPopup();
+    // Wait for popup animation to complete (same timing as backup/restore)
+    await new Promise(resolve => setTimeout(resolve, 450));
+
     appendConsole(`━━━ Stopping hotspot ━━━`, 'info');
 
     // Show progress indicator IMMEDIATELY
@@ -871,9 +880,12 @@
       progressLine.textContent = '⏳ ' + actionText + ' ' + spinner[spinIndex];
     }, 200);
 
-    // Disable hotspot button during execution
-    els.hotspotBtn.disabled = true;
-    els.hotspotBtn.style.opacity = '0.5';
+    // Disable ALL UI elements during hotspot operation (like chroot functions)
+    disableAllActions(true);
+    disableSettingsPopup(true);
+
+    // Mark as active to prevent other commands
+    activeCommandId = 'hotspot-stop';
 
     // Redirect stderr to stdout to capture all output
     const cmd = `sh ${HOTSPOT_SCRIPT} -k 2>&1`;
@@ -897,9 +909,13 @@
           appendConsole(`✗ Failed to stop hotspot (exit code: ${result.exitCode || 'unknown'})`, 'err');
         }
         
-        // Re-enable hotspot button
-        els.hotspotBtn.disabled = false;
-        els.hotspotBtn.style.opacity = '';
+        // Re-enable ALL UI elements (like chroot functions)
+        activeCommandId = null;
+        disableAllActions(false);
+        disableSettingsPopup(false, true);
+        
+        // Refresh status after hotspot operation
+        setTimeout(() => refreshStatus(), 500);
       });
     }, 50);
   }
