@@ -199,9 +199,9 @@ textarea {
 .console::-webkit-scrollbar-thumb{background:rgba(0,0,0,0.2);border-radius:4px}
 .console::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,0.3)}
 
-[data-theme="dark"] .console{border-color: rgba(255,255,255,0.08)}
 [data-theme="dark"] .console::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.2)}
 [data-theme="dark"] .console::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.3)}
+[data-theme="dark"] .console::-webkit-scrollbar-corner{background:transparent}
 
 /* header controls alignment tweaks */
 .top{border-bottom-color: rgba(0,0,0,0.05)}
@@ -609,6 +609,10 @@ textarea {
 .experimental-toggle {
   cursor: pointer;
   list-style: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .experimental-toggle::-webkit-details-marker {

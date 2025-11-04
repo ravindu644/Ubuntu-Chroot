@@ -1456,7 +1456,7 @@
     appendConsole('━━━ Starting Sparse Image Migration ━━━', 'warn');
     appendConsole(`Target size: ${sizeGb}GB sparse ext4 image`, 'info');
     appendConsole('', 'info'); // Empty line for spacing
-    appendConsole('This may take several minutes. Do not close this window.', 'info');
+    appendConsole('DO NOT CLOSE THIS WINDOW!', 'warn');
 
     // Create progress indicator (copy from restore function)
     const progressLine = document.createElement('div');
