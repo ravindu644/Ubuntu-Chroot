@@ -45,6 +45,7 @@ usage() {
     echo "  run <command> Execute a command inside the chroot environment."
     echo "  backup <path> Create a compressed backup of the chroot environment."
     echo "  restore <path> Restore chroot from a backup archive."
+    echo "  resize <size> Resize sparse image to specified size in GB (4-64GB)."
     echo ""
     echo "Options:"
     echo "  [user]        Username to log in as (default: root)."
@@ -633,6 +634,156 @@ backup_chroot() {
     stop_chroot >/dev/null 2>&1
 }
 
+resize_sparse() {
+    local new_size_gb="$1"
+    
+    # Validate input
+    if [ -z "$new_size_gb" ]; then
+        error "New size not specified. Usage: $SCRIPT_NAME resize <size_in_gb>"
+        echo "Example: $SCRIPT_NAME resize 16"
+        exit 1
+    fi
+    
+    if ! [ "$new_size_gb" -eq "$new_size_gb" ] 2>/dev/null || [ "$new_size_gb" -le 0 ]; then
+        error "Invalid size: $new_size_gb. Must be a positive integer."
+        exit 1
+    fi
+    
+    if [ "$new_size_gb" -lt 4 ] || [ "$new_size_gb" -gt 64 ]; then
+        error "Size must be between 4GB and 64GB"
+        exit 1
+    fi
+    
+    if [ ! -f "$ROOTFS_IMG" ]; then
+        error "Sparse image not found at $ROOTFS_IMG"
+        exit 1
+    fi
+    
+    # Get current sizes
+    local actual_size=$(du -h "$ROOTFS_IMG" 2>/dev/null | cut -f1)
+    local sparse_size=$(ls -lh "$ROOTFS_IMG" 2>/dev/null | tr -s ' ' | cut -d' ' -f5)
+    
+    if [ -z "$actual_size" ]; then
+        error "Failed to determine current size"
+        exit 1
+    fi
+    
+    # Calculate minimum safe size (actual content + 15% overhead)
+    local actual_value=$(echo "$actual_size" | sed 's/[^0-9.]//g')
+    local min_safe_gb
+    
+    if command -v awk >/dev/null 2>&1; then
+        min_safe_gb=$(awk "BEGIN { printf \"%.0f\", ($actual_value * 1.15) + 0.5 }")
+    else
+        # Fallback: multiply by 115 and divide by 100, round up
+        local int_part="${actual_value%.*}"
+        min_safe_gb=$(( (int_part * 115 + 99) / 100 ))
+    fi
+    
+    # Ensure minimum is at least current + 1GB
+    local actual_int=$(echo "$actual_value" | cut -d. -f1)
+    [ "$min_safe_gb" -le "$actual_int" ] && min_safe_gb=$((actual_int + 1))
+    
+    # Display current info
+    log "Current sparse image info:"
+    echo -e "  - Sparse size (Android shows): ${sparse_size}"
+    echo -e "  - Actual content size: ${actual_size}"
+    echo -e "  - Safe minimum size (+15%): ${min_safe_gb}G"
+    echo -e "  - Requested new size: ${new_size_gb}G"
+    
+    # Validate minimum size
+    if [ "$new_size_gb" -lt "$min_safe_gb" ]; then
+        error "Cannot resize below minimum safe size of ${min_safe_gb}G"
+        error "Current content: ${actual_size} + 15% overhead = ${min_safe_gb}G minimum"
+        exit 1
+    fi
+    
+    # Determine operation
+    local sparse_int=$(echo "$sparse_size" | sed 's/[^0-9].*//g')
+    local operation="GROWING"
+    [ "$new_size_gb" -lt "$sparse_int" ] && operation="SHRINKING"
+    
+    # Show warnings (skip in webui mode)
+    if [ "${WEBUI_MODE:-0}" -eq 0 ]; then
+        warn "EXTREME WARNING: RESIZING SPARSE IMAGE"
+        warn "This operation is VERY RISKY and can CORRUPT your filesystem!"
+        warn "- Make a FULL BACKUP before proceeding"
+        warn "- DO NOT interrupt the process"
+        warn ""
+        warn "Operation: $operation (${actual_size} → ${new_size_gb}G)"
+        
+        echo -n "Type 'YES' to confirm: "
+        read -r confirm
+        [ "$confirm" != "YES" ] && { log "Resize cancelled"; exit 0; }
+    fi
+    
+    log "Starting resize operation..."
+    
+    # Stop and unmount
+    is_chroot_running && { warn "Stopping chroot..."; stop_chroot; sleep 2; }
+    
+    if mountpoint -q "$CHROOT_PATH" 2>/dev/null; then
+        log "Unmounting filesystem..."
+        umount -f "$CHROOT_PATH" 2>/dev/null || umount -l "$CHROOT_PATH" 2>/dev/null || {
+            error "Failed to unmount filesystem"
+            exit 1
+        }
+        sleep 1
+    fi
+    
+    # Filesystem check
+    log "Checking filesystem integrity..."
+    local fsck_output=$(e2fsck -f -y "$ROOTFS_IMG" 2>&1)
+    local fsck_exit=$?
+    
+    # Exit codes: 0=no errors, 1=corrected, 2=corrected/reboot, 4+=failed
+    if [ $fsck_exit -ge 4 ]; then
+        error "Filesystem check failed (exit: $fsck_exit)"
+        error "Output: $fsck_output"
+        exit 1
+    fi
+    [ $fsck_exit -ne 0 ] && log "Filesystem check corrected issues (exit: $fsck_exit)"
+    
+    # Resize filesystem
+    log "Resizing filesystem to ${new_size_gb}G..."
+    local resize_output=$(resize2fs "$ROOTFS_IMG" "${new_size_gb}G" 2>&1)
+    local resize_exit=$?
+    
+    if [ $resize_exit -ne 0 ] && ! echo "$resize_output" | grep -q "is now.*blocks long"; then
+        error "Filesystem resize failed (exit: $resize_exit)"
+        error "Output: $resize_output"
+        error "Restore from backup immediately"
+        exit 1
+    fi
+    [ $resize_exit -ne 0 ] && log "Resize completed with warnings"
+    
+    # Truncate for shrinking
+    if [ "$operation" = "SHRINKING" ]; then
+        log "Truncating sparse file to ${new_size_gb}G..."
+        truncate -s "${new_size_gb}G" "$ROOTFS_IMG" 2>/dev/null || {
+            error "Failed to truncate file"
+            exit 1
+        }
+    fi
+    
+    # Verify by test mounting
+    log "Verifying filesystem integrity..."
+    if mount -t ext4 -o loop,ro "$ROOTFS_IMG" "$CHROOT_PATH" 2>/dev/null; then
+        umount "$CHROOT_PATH" 2>/dev/null
+        log "Filesystem verification successful"
+    else
+        error "Failed to mount resized filesystem - possible corruption"
+        error "Restore from backup immediately"
+        exit 1
+    fi
+    
+    sleep 1
+    local new_sparse=$(ls -lh "$ROOTFS_IMG" 2>/dev/null | tr -s ' ' | cut -d' ' -f5)
+    
+    log "   ${sparse_size} → ${new_sparse} ($operation)"    
+    log "✅ Resize operation completed!"
+}
+
 restore_chroot() {
     local backup_path="$1"
     
@@ -693,13 +844,14 @@ fi
 COMMAND=""
 USER_ARG="root"
 BACKUP_PATH=""
+RESIZE_SIZE=""
 RUN_COMMAND=""
 NO_SHELL_FLAG=0
 WEBUI_MODE=0
 
 for arg in "$@"; do
     case "$arg" in
-        start|stop|restart|status|umount|fstrim|backup|restore|list-users|run)
+        start|stop|restart|status|umount|fstrim|backup|restore|list-users|run|resize)
             COMMAND="$arg" ;;
         --no-shell) NO_SHELL_FLAG=1 ;;
         --webui) WEBUI_MODE=1 ;;
@@ -712,6 +864,8 @@ for arg in "$@"; do
                 if [ -z "$RUN_COMMAND" ]; then RUN_COMMAND="$arg"; else RUN_COMMAND="$RUN_COMMAND $arg"; fi
             elif [ "$COMMAND" = "backup" ] || [ "$COMMAND" = "restore" ]; then
                 BACKUP_PATH="$arg"
+            elif [ "$COMMAND" = "resize" ]; then
+                RESIZE_SIZE="$arg"
             else
                 USER_ARG="$arg"
             fi
@@ -740,5 +894,12 @@ case "$COMMAND" in
         run_command "$RUN_COMMAND" ;;
     backup) backup_chroot "$BACKUP_PATH" ;;
     restore) restore_chroot "$BACKUP_PATH" ;;
+    resize) 
+        if [ -z "$RESIZE_SIZE" ]; then
+            error "New size not specified. Usage: chroot.sh resize <size_in_gb>"
+            error "Example: chroot.sh resize 16"
+            exit 1
+        fi
+        resize_sparse "$RESIZE_SIZE" ;;
     *) error "Invalid command: $COMMAND"; usage ;;
 esac
