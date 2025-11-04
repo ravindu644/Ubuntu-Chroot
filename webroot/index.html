@@ -145,9 +145,50 @@
             <div class="setting-subsection">
               <h5>Migrate to Sparse Image</h5>
               <p class="setting-desc">Convert your current directory-based rootfs to a sparse ext4 image for better performance and space efficiency</p>
-              <button id="migrate-sparse-btn" class="btn warning">Migrate to Sparse Image</button>
+              <div style="display:flex;gap:12px;align-items:center">
+                <button id="migrate-sparse-btn" class="btn warning">Migrate to Sparse Image</button>
+                <button id="sparse-settings-btn" class="btn outline small" title="Sparse Image Settings" style="display:none;width:36px;height:36px;padding:6px;aspect-ratio:1;min-height:auto;display:flex;align-items:center;justify-content:center;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 24 24" style="width: 18px; height: 18px; opacity: 0.8;"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M20 7h-9m3 10H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></g></svg>
+                </button>
+              </div>
             </div>
           </details>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sparse Image Settings Popup -->
+    <div id="sparse-settings-popup" class="popup-overlay">
+      <div class="popup-content">
+        <div class="popup-header">
+          <h3>Sparse Image Settings</h3>
+          <button id="close-sparse-popup" class="close-btn" title="Close">×</button>
+        </div>
+        <div class="popup-body">
+          <div class="setting-section">
+            <h4>Storage Optimization</h4>
+            <p class="setting-desc">Optimize your sparse image storage usage</p>
+            
+            <div class="setting-subsection">
+              <h5>Trim Sparse Image</h5>
+              <p class="setting-desc">Reclaim unused space in the sparse image by running fstrim. This will shrink the image file by removing unused blocks.</p>
+              <button id="trim-sparse-btn" class="btn">Trim Sparse Image</button>
+            </div>
+            
+            <div class="setting-subsection">
+              <h5>Resize Sparse Image</h5>
+              <p class="setting-desc">Coming soon: Change the maximum size of your sparse image</p>
+              <button id="resize-sparse-btn" class="btn outline" disabled>Resize Sparse Image (Coming Soon)</button>
+            </div>
+          </div>
+          
+          <div class="setting-section">
+            <h4>Storage Information</h4>
+            <div id="sparse-info" class="setting-desc">
+              <!-- Info will be populated by JavaScript -->
+              Loading storage information...
+            </div>
+          </div>
         </div>
       </div>
     </div>
