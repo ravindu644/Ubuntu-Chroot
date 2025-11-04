@@ -589,19 +589,8 @@
     // Save selected user
     try{ localStorage.setItem('chroot_selected_user', selectedUser); }catch(e){}
 
-    // Check if ubuntu-chroot symlink exists, use short command if available
-    let loginCommand;
-    try {
-      const symlinkCheck = runCmdSync(`[ -x "/system/bin/ubuntu-chroot" ] && echo "exists" || echo "not_exists"`);
-      if(symlinkCheck && symlinkCheck.trim() === "exists") {
-        loginCommand = `su -c "ubuntu-chroot start ${selectedUser} -s"`;
-      } else {
-        loginCommand = `su -c "sh ${PATH_CHROOT_SH} start -s ${selectedUser}"`;
-      }
-    } catch(e) {
-      // Fallback to full path if check fails
-      loginCommand = `su -c "sh ${PATH_CHROOT_SH} start -s ${selectedUser}"`;
-    }
+    // Use short command - symlink should exist when module is installed
+    const loginCommand = `su -c "ubuntu-chroot start ${selectedUser} -s"`;
 
     if(navigator.clipboard && navigator.clipboard.writeText){
       navigator.clipboard.writeText(loginCommand).then(()=> appendConsole(`Login command for user '${selectedUser}' copied to clipboard`))
