@@ -109,6 +109,18 @@ is_chroot_running() {
     [ -f "$HOLDER_PID_FILE" ] && kill -0 "$(cat "$HOLDER_PID_FILE")" 2>/dev/null
 }
 
+check_sysv_ipc() {
+    # Check if System V IPC is enabled in the kernel
+    # This affects tools like fio, kdiskmark that require shared memory
+    local cfg
+    cfg=$(zcat /proc/config.gz 2>/dev/null || cat /proc/config 2>/dev/null)
+    if echo "$cfg" | grep -q "^CONFIG_SYSVIPC=y"; then
+        return 0  # IPC available
+    else
+        return 1  # IPC not available
+    fi
+}
+
 
 # --- Setup Helper Functions ---
 
@@ -248,6 +260,11 @@ create_namespace() {
 start_chroot() {
     log "Setting up advanced chroot environment..."
     
+    # Check System V IPC support and warn if not available
+    if ! check_sysv_ipc; then
+        warn "System V IPC not enabled in kernel - some benchmarking tools (fio, kdiskmark) may fail"
+    fi
+
     # Set up namespace isolation
     if [ -f "$HOLDER_PID_FILE" ] && kill -0 "$(cat "$HOLDER_PID_FILE")" 2>/dev/null; then
         log "Namespace holder already running."
