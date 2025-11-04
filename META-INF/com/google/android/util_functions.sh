@@ -152,7 +152,7 @@ extract_sparse() {
 
     # Get size from config
     SPARSE_IMAGE_SIZE=${SPARSE_IMAGE_SIZE:-8}
-    echo "- Creating sparse image: ${SPARSE_IMAGE_SIZE}GB"
+    echo -e "- Creating sparse image: ${SPARSE_IMAGE_SIZE}GB\n"
 
     # Create and format sparse image
     truncate -s "${SPARSE_IMAGE_SIZE}G" "$img_file" || return 1
@@ -170,6 +170,7 @@ extract_sparse() {
 
     # Extract rootfs
     mkdir -p "$TMPDIR"
+    echo -e "\n- Extracting rootfs to sparse image..."
     if unzip -oq "$ZIPFILE" "$rootfs_file" -d "$TMPDIR" && tar -xpf "$TMPDIR/$rootfs_file" -C "$rootfs_dir"; then
         echo "- Ubuntu rootfs extracted to sparse image"
         umount "$rootfs_dir"
