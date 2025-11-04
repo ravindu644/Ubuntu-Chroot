@@ -33,6 +33,56 @@ update_v2500() {
     log "Adding XDG environment variables for better GUI application support"
     run_in_chroot "echo 'TMPDIR=/tmp' >> /etc/environment"
     run_in_chroot "echo 'XDG_RUNTIME_DIR=/tmp/runtime' >> /etc/environment"
+    
+    log "Adding Docker support to existing chroot installation..."
+    
+    # Update package lists
+    if ! run_in_chroot "apt-get update"; then
+        error "Failed to update package lists"
+        return 1
+    fi
+    
+    # Install Docker
+    if ! run_in_chroot "apt-get install -y docker.io"; then
+        error "Failed to install Docker"
+        return 1
+    fi
+    
+    # Configure Docker daemon
+    run_in_chroot "mkdir -p /etc/docker"
+    run_in_chroot "echo '{\"iptables\": false, \"bridge\": \"none\"}' > /etc/docker/daemon.json"
+
+    # Add existing user to docker group if user exists
+    # Use a heredoc to pass the script to run_in_chroot
+    if ! run_in_chroot /bin/bash << 'EOF'
+#!/bin/bash
+SETUP_USER_FILE="/var/lib/.default-user"
+if [ -f "$SETUP_USER_FILE" ]; then
+    DEFAULT_USER=$(cat "$SETUP_USER_FILE" 2>/dev/null || echo '')
+    if [ -n "$DEFAULT_USER" ] && id "$DEFAULT_USER" >/dev/null 2>&1; then
+        echo "Adding user '$DEFAULT_USER' to docker group..."
+        if usermod -aG docker "$DEFAULT_USER"; then
+            echo "User '$DEFAULT_USER' added to docker group successfully"
+        else
+            echo "ERROR: Failed to add user '$DEFAULT_USER' to docker group"
+            exit 1
+        fi
+    else
+        echo "No valid user found in $SETUP_USER_FILE or user does not exist"
+    fi
+else
+    echo "Setup user file $SETUP_USER_FILE not found - user not created yet"
+fi
+EOF
+    then
+        error "Failed to execute user setup script"
+        return 1
+    fi
+    
+    # Clean up
+    run_in_chroot "apt-get autoremove -y && apt-get clean"
+    
+    log "Docker support and environment variables added successfully"
     return 0
 }
 

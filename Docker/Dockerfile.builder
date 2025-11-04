@@ -73,7 +73,8 @@ RUN apt-get install -y --no-install-recommends \
     valgrind \
     strace \
     ltrace \
-    heimdall-flash
+    heimdall-flash \
+    docker.io
 
 # Install XFCE Desktop Environment with proper icon support
 RUN apt-get install -y --no-install-recommends \
@@ -146,6 +147,10 @@ RUN echo 'TMPDIR=/tmp' >> /etc/environment && \
 RUN mkdir -p /var/run/sshd && \
     sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
     sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+
+# Configure Docker daemon
+RUN mkdir -p /etc/docker && \
+    echo '{"iptables": false, "bridge": "none"}' > /etc/docker/daemon.json
 
 # Create WSL-like first-run setup script with VNC auto-configuration
 RUN cat > /usr/local/bin/first-run-setup.sh << 'EOF'
@@ -237,6 +242,10 @@ if [ ! -f "$SETUP_FLAG" ]; then
     usermod -aG sudo "$username"
     echo "$username ALL=(ALL) NOPASSWD:ALL" > "/etc/sudoers.d/$username"
     chmod 0440 "/etc/sudoers.d/$username"
+
+    # Add to docker group for Docker access without sudo
+    usermod -aG docker "$username"
+    newgrp docker
 
     # Configure VNC for the new user
     echo "--- Configuring VNC for user $username ---"
