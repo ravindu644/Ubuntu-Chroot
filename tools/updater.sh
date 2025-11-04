@@ -89,7 +89,7 @@ run_in_ns() {
 
 run_in_chroot() {
     # Execute command and append all output to the global log file
-    run_in_ns chroot "$CHROOT_PATH" /bin/bash -c "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; exec 2>&1; $*" >> "$LOG_FILE" 2>&1
+    run_in_ns chroot "$CHROOT_PATH" /bin/bash -c "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; export TMPDIR=/tmp; exec 2>&1; $*" >> "$LOG_FILE" 2>&1
 }
 
 # --- Version Management ---
