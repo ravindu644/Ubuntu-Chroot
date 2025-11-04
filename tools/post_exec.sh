@@ -11,6 +11,10 @@ func_start_vnc(){
         if id "$DEFAULT_USER" &>/dev/null; then
             echo "[POST-EXEC] Starting VNC server for user '$DEFAULT_USER'..."
             su - $DEFAULT_USER -c "vncserver -geometry 1920x1080 -localhost no :1"
+            
+            # Allow root user access to the VNC display
+            echo "[POST-EXEC] Granting display access to root user..."
+            su - $DEFAULT_USER -c "DISPLAY=:1 xhost +si:localuser:root"
         fi
     else
         echo "[POST-EXEC] No default user found, skipping VNC startup."
