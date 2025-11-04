@@ -224,7 +224,7 @@ create_namespace() {
     local flags="--fork"
     local cfg=$(zcat /proc/config.gz 2>/dev/null || cat /proc/config 2>/dev/null)
 
-    for ns in mount:NAMESPACES uts:UTS_NS ipc:IPC_NS pid:PID_NS net:NET_NS user:USER_NS cgroup:CGROUPS; do
+    for ns in mount:NAMESPACES uts:UTS_NS ipc:IPC_NS pid:PID_NS net:NET_NS cgroup:CGROUPS; do
         flag="--${ns%%:*}"
         config="CONFIG_${ns#*:}"
         if echo "$cfg" | grep -q "^${config}=y" && unshare $flag true 2>/dev/null; then
