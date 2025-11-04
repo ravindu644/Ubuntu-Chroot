@@ -887,7 +887,7 @@ case "$COMMAND" in
     status) show_status ;;
     umount)
         log "Umounting chroot filesystems..."; umount_chroot; log "Chroot filesystems unmounted successfully." ;;
-    fstrim) run_fstrim ;;
+    fstrim) run_fstrim ; stop_chroot > /dev/null 2>&1 ;;
     list-users) list_users ;;
     run)
         if [ -z "$RUN_COMMAND" ]; then error "No command specified for run"; usage; fi
