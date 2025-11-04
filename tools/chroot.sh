@@ -20,12 +20,12 @@ SKIP_POST_EXEC=0
 
 # --- Logging and Utility Functions ---
 
-log() { 
+log() {
     if [ "$SILENT" -eq 0 ]; then
         echo "[INFO] $1"
     fi
 }
-warn() { 
+warn() {
     if [ "$SILENT" -eq 0 ]; then
         echo "[WARN] $1"
     fi
@@ -53,40 +53,77 @@ usage() {
     exit 1
 }
 
-run_in_ns() {
-    if [ -n "$HOLDER_PID" ] && kill -0 "$HOLDER_PID" 2>/dev/null; then
-        busybox nsenter --target "$HOLDER_PID" --mount -- "$@"
+# --- REWRITTEN NAMESPACE HANDLING ---
+_get_ns_flags() {
+    # Central place to read and prepare namespace flags for nsenter.
+    # This function now correctly translates long flags (--mount) to the
+    # short flags (-m) that busybox nsenter requires.
+    local flags_file="$HOLDER_PID_FILE.flags"
+    if [ ! -f "$flags_file" ]; then
+        echo "-m"; return # Fallback to mount only
+    fi
+    
+    local long_flags short_flags
+    long_flags=$(cat "$flags_file")
+    
+    for flag in $long_flags; do
+        case "$flag" in
+            --mount) short_flags="$short_flags -m" ;;
+            --uts)   short_flags="$short_flags -u" ;;
+            --ipc)   short_flags="$short_flags -i" ;;
+            --net)   short_flags="$short_flags -n" ;;
+            --pid)   short_flags="$short_flags -p" ;;
+            # Ignore flags that nsenter doesn't need or support
+            --cgroup|--fork) ;;
+        esac
+    done
+    echo "$short_flags"
+}
+
+_execute_in_ns() {
+    # Central execution function. Runs any given command inside the holder's namespaces.
+    local holder_pid
+    if [ -f "$HOLDER_PID_FILE" ] && kill -0 "$(cat "$HOLDER_PID_FILE")" 2>/dev/null; then
+        holder_pid=$(cat "$HOLDER_PID_FILE")
+        local ns_flags
+        ns_flags=$(_get_ns_flags)
+        
+        busybox nsenter --target "$holder_pid" $ns_flags -- "$@"
     else
+        # If no namespace holder is running, execute command directly.
         "$@"
     fi
 }
 
-run_in_chroot() {
-    # Execute a command inside the chroot environment using namespace isolation
-    local command="$*"
+run_in_ns() {
+    # Wrapper to execute a command in the namespace but not yet in the chroot.
+    # Primarily used for mounting filesystems.
+    _execute_in_ns "$@"
+}
 
-    # Common exports for chroot environment
-    local common_exports="export PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/libexec:/opt/bin';"
+run_in_chroot() {
+    # Execute a command inside the chroot environment using full namespace isolation.
+    local command="$*"
 
     # Ensure chroot is started if not running
     if ! is_chroot_running; then
-        start_chroot
+        start_chroot || {
+            error "Failed to start chroot for command execution"
+            return 1
+        }
     fi
 
-    # Load holder PID if available
-    if [ -f "$HOLDER_PID_FILE" ]; then
-        HOLDER_PID=$(cat "$HOLDER_PID_FILE")
-    fi
-
-    # If namespace holder is running, execute command in namespace with chroot
-    if [ -n "$HOLDER_PID" ] && kill -0 "$HOLDER_PID" 2>/dev/null; then
-        busybox nsenter --target "$HOLDER_PID" --mount -- \
-            chroot "$CHROOT_PATH" /bin/bash -c "
-                $common_exports
-                $command
-            "
+    local common_exports="export PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/libexec:/opt/bin';"
+    
+    # If namespace holder is running, execute in isolated namespaces
+    if [ -f "$HOLDER_PID_FILE" ] && kill -0 "$(cat "$HOLDER_PID_FILE")" 2>/dev/null; then
+        # Use the centralized namespace execution
+        _execute_in_ns chroot "$CHROOT_PATH" /bin/bash -c "
+            $common_exports
+            $command
+        "
     else
-        # Fallback to direct chroot if namespace not available
+        # Fallback to direct chroot if namespace not available (maintains compatibility)
         chroot "$CHROOT_PATH" /bin/bash -c "
             $common_exports
             $command
@@ -99,8 +136,6 @@ run_in_chroot() {
 
 is_mounted() {
     # Check if a given path is a mountpoint in the isolated namespace.
-    # The output of mountpoint is "path is a mountpoint" on success.
-    # We grep for 'is a' to confirm.
     run_in_ns mountpoint "$1" 2>/dev/null | grep -q 'is a'
 }
 
@@ -111,7 +146,6 @@ is_chroot_running() {
 
 check_sysv_ipc() {
     # Check if System V IPC is enabled in the kernel
-    # This affects tools like fio, kdiskmark that require shared memory
     local cfg
     cfg=$(zcat /proc/config.gz 2>/dev/null || cat /proc/config 2>/dev/null)
     if echo "$cfg" | grep -q "^CONFIG_SYSVIPC=y"; then
@@ -127,7 +161,6 @@ check_sysv_ipc() {
 advanced_mount() {
     local src="$1" tgt="$2" type="$3" opts="$4"
     
-    # Create target directory for non-bind mounts or if source doesn't exist for bind
     if [ "$type" = "tmpfs" ] || [ "$type" = "devpts" ] || [ ! -e "$src" ]; then
         run_in_ns mkdir -p "$tgt" 2>/dev/null
     else
@@ -150,7 +183,6 @@ advanced_mount() {
 }
 
 setup_storage() {
-    # Mount storage at /storage/emulated/0 inside chroot for safe access.
     local storage_path="/storage/emulated/0"
     local chroot_storage="$CHROOT_PATH/storage/emulated/0"
     
@@ -171,7 +203,6 @@ setup_storage() {
 apply_internet_fix() {
     log "Applying internet fix for chroot..."
     
-    # Generate resolv.conf from Android properties with fallbacks.
     > "$CHROOT_PATH/etc/resolv.conf"
     for i in 1 2 3 4; do
         dns=$(getprop net.dns${i} 2>/dev/null)
@@ -182,17 +213,13 @@ apply_internet_fix() {
     echo "nameserver 8.8.4.4" >> "$CHROOT_PATH/etc/resolv.conf"
     chmod 644 "$CHROOT_PATH/etc/resolv.conf"
     
-    # Add necessary network groups for apps like apt.
     grep -q "aid_inet" "$CHROOT_PATH/etc/group" || echo "aid_inet:x:3003:" >> "$CHROOT_PATH/etc/group"
     grep -q "aid_net_raw" "$CHROOT_PATH/etc/group" || echo "aid_net_raw:x:3004:" >> "$CHROOT_PATH/etc/group"
-    if run_in_ns chroot "$CHROOT_PATH" id root >/dev/null 2>&1; then
-        run_in_ns chroot "$CHROOT_PATH" /usr/sbin/usermod -aG aid_inet root 2>/dev/null
-    fi
-    if run_in_ns chroot "$CHROOT_PATH" id _apt >/dev/null 2>&1; then
-        run_in_ns chroot "$CHROOT_PATH" /usr/sbin/usermod -aG aid_inet,aid_net_raw _apt 2>/dev/null
-    fi
     
-    # Set up hosts file and enable IP forwarding.
+    # These commands must run *inside* the chroot to find the users.
+    run_in_chroot "/usr/sbin/usermod -aG aid_inet root 2>/dev/null"
+    run_in_chroot "/usr/sbin/usermod -aG aid_inet,aid_net_raw _apt 2>/dev/null"
+    
     sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1
     echo "127.0.0.1    localhost $C_HOSTNAME" > "$CHROOT_PATH/etc/hosts"
     echo "::1          localhost ip6-localhost ip6-loopback" >> "$CHROOT_PATH/etc/hosts"
@@ -219,40 +246,43 @@ kill_chroot_processes() {
     fi
 }
 
+# --- REWRITTEN create_namespace ---
 create_namespace() {
     local pid_file="$1"
-    local flags="--fork"
-    local cfg=$(zcat /proc/config.gz 2>/dev/null || cat /proc/config 2>/dev/null)
+    local unshare_flags="" # Flags for the unshare command
+    local nsenter_flags="" # Flags to save for nsenter
+    local cfg
+    cfg=$(zcat /proc/config.gz 2>/dev/null || cat /proc/config 2>/dev/null)
 
-    for ns in mount:NAMESPACES uts:UTS_NS ipc:IPC_NS pid:PID_NS net:NET_NS cgroup:CGROUPS; do
+    # We must have --pid and --mount for isolation to work correctly.
+    unshare_flags="--pid --mount"
+    nsenter_flags="--pid --mount"
+
+    # Add other available namespaces
+    for ns in uts:UTS_NS ipc:IPC_NS net:NET_NS cgroup:CGROUPS; do
         flag="--${ns%%:*}"
         config="CONFIG_${ns#*:}"
-        if echo "$cfg" | grep -q "^${config}=y" && unshare $flag true 2>/dev/null; then
-            flags="$flags $flag"
+        if echo "$cfg" | grep -q "^${config}=y" && unshare "$flag" true 2>/dev/null; then
+            unshare_flags="$unshare_flags $flag"
+            nsenter_flags="$nsenter_flags $flag"
         fi
     done
 
-    log "using flags: $flags"
+    log "using flags: $unshare_flags"
+    
+    # Save the long-form flags. _get_ns_flags will translate them later.
+    echo "$nsenter_flags" > "${pid_file}.flags"
 
-    # Try regular unshare first
-    unshare $flags busybox sleep infinity &
-    local pid=$!
-    if kill -0 $pid 2>/dev/null; then
-        echo $pid > "$pid_file"
-        return 0
-    fi
+    # This is the crucial fix: Run a subshell within the new namespaces.
+    # This subshell backgrounds "sleep" and then echoes the correct PID of the
+    # "sleep" process, guaranteeing we target the process inside the namespaces.
+    unshare $unshare_flags sh -c 'busybox sleep infinity & echo $! > "$1"' -- "$pid_file"
 
-    # Fallback to busybox unshare, remove --cgroups if present
-    local busybox_flags=$(echo "$flags" | sed 's/--cgroups//g')
-    log "Regular unshare failed, trying busybox unshare with flags: $busybox_flags"
-
-    busybox unshare $busybox_flags busybox sleep infinity &
-    pid=$!
-    if kill -0 $pid 2>/dev/null; then
-        echo $pid > "$pid_file"
+    if [ -f "$pid_file" ] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then
         return 0
     else
-        error "Failed to create namespace with both unshare implementations"
+        error "Failed to create and capture namespace holder PID."
+        rm -f "$pid_file" "${pid_file}.flags"
         return 1
     fi
 }
@@ -260,30 +290,23 @@ create_namespace() {
 start_chroot() {
     log "Setting up advanced chroot environment..."
     
-    # Check System V IPC support and warn if not available
     if ! check_sysv_ipc; then
         warn "System V IPC not enabled in kernel - some benchmarking tools (fio, kdiskmark) may fail"
     fi
 
-    # Set up namespace isolation
     if [ -f "$HOLDER_PID_FILE" ] && kill -0 "$(cat "$HOLDER_PID_FILE")" 2>/dev/null; then
         log "Namespace holder already running."
-        HOLDER_PID=$(cat "$HOLDER_PID_FILE")
     else
         log "Creating new isolated namespace..."
-        create_namespace "$HOLDER_PID_FILE"
-        HOLDER_PID=$(cat "$HOLDER_PID_FILE")
-        sleep 0.5  # Give namespace time to initialize
-        log "Running in isolated namespace (PID: $HOLDER_PID)"
+        create_namespace "$HOLDER_PID_FILE" || return 1
+        sleep 0.5
+        log "Running in isolated namespace (PID: $(cat "$HOLDER_PID_FILE"))"
     fi
     
     [ -d "$CHROOT_PATH" ] || { error "Chroot directory not found at $CHROOT_PATH"; exit 1; }
 
-    # Check if sparse image exists - mount it
     if [ -f "$ROOTFS_IMG" ]; then
         log "Sparse image detected"
-        
-        # Check if already mounted (from unclean shutdown) and unmount first
         if mountpoint -q "$CHROOT_PATH" 2>/dev/null; then
             log "Sparse image already mounted, unmounting first..."
             if umount -f "$CHROOT_PATH" 2>/dev/null || umount -l "$CHROOT_PATH" 2>/dev/null; then
@@ -292,7 +315,6 @@ start_chroot() {
                 warn "Failed to unmount previous mount, continuing anyway"
             fi
         fi
-        
         log "Mounting sparse image to rootfs..."
         if ! run_in_ns mount -t ext4 -o loop,rw,noatime,nodiratime,barrier=0 "$ROOTFS_IMG" "$CHROOT_PATH"; then
             error "Failed to mount sparse image"
@@ -301,17 +323,14 @@ start_chroot() {
         log "Sparse image mounted successfully"
     fi
 
-    # Clean up previous mount tracking file if it exists.
     rm -f "$MOUNTED_FILE"
 
-    # Store original SELinux status and set to permissive.
     local og_selinux_file="/data/local/ubuntu-chroot/og-selinux"
     if [ ! -f "$og_selinux_file" ]; then
         getenforce > "$og_selinux_file" 2>/dev/null && log "Stored original SELinux status" || warn "Failed to store SELinux status"
     fi
     (setenforce 0 && log "SELinux set to permissive mode") || warn "Failed to set SELinux to permissive mode"
 
-    # Remount /data with suid to fix sudo issues for non-root users.
     run_in_ns mount -o remount,suid /data 2>/dev/null && log "Remounted /data with suid" || warn "Failed to remount /data with suid"
 
     log "Setting up system mounts..."
@@ -323,14 +342,10 @@ start_chroot() {
     advanced_mount "tmpfs" "$CHROOT_PATH/run" "tmpfs" "-o rw,nosuid,nodev,relatime,size=50M"
     advanced_mount "tmpfs" "$CHROOT_PATH/dev/shm" "tmpfs" "-o mode=1777"
 
-    # Mount /config if possible
     [ -d "/config" ] && run_in_ns mount -t bind "/config" "$CHROOT_PATH/config" 2>/dev/null && log "Mounted $CHROOT_PATH/config" && echo "$CHROOT_PATH/config" >> "$MOUNTED_FILE"
-
-    # Optional mounts for better compatibility.
     [ -d "/dev/binderfs" ] && advanced_mount "/dev/binderfs" "$CHROOT_PATH/dev/binderfs" "bind"
     [ -d "/dev/bus/usb" ] && advanced_mount "/dev/bus/usb" "$CHROOT_PATH/dev/bus/usb" "bind"
 
-    # Minimal cgroup setup for Docker support.
     log "Setting up minimal cgroups for Docker..."
     run_in_ns mkdir -p "$CHROOT_PATH/sys/fs/cgroup"
     if run_in_ns mount -t tmpfs -o mode=755 tmpfs "$CHROOT_PATH/sys/fs/cgroup" 2>/dev/null; then
@@ -353,18 +368,14 @@ start_chroot() {
     setup_storage
     apply_internet_fix
 
-    # Increase shared memory for services like PostgreSQL.
     sysctl -w kernel.shmmax=268435456 >/dev/null 2>&1
 
-    # Run post-execution script if it exists and we're not skipping it.
     if [ "$SKIP_POST_EXEC" -eq 0 ] && [ -f "$POST_EXEC_SCRIPT" ] && [ -x "$POST_EXEC_SCRIPT" ]; then
         log "Running post-execution script..."
-        # Convert script to base64 and execute it directly in chroot without copying
         SCRIPT_B64=$(busybox base64 -w 0 "$POST_EXEC_SCRIPT")
         run_in_chroot "echo '$SCRIPT_B64' | base64 -d | bash"
     fi
 
-    # Disable Android Doze to prevent background process slowdowns when screen is off
     su -c 'dumpsys deviceidle disable' >/dev/null 2>&1 && log "Disabled Android Doze to prevent background slowdowns"
 
     log "Chroot environment setup completed successfully!"
@@ -374,8 +385,6 @@ stop_chroot() {
     log "Stopping chroot environment..."
     
     kill_chroot_processes
-    
-    # Unmount all filesystems (including sparse image if present)
     umount_chroot
     
     # Restore original SELinux status.
@@ -392,21 +401,20 @@ stop_chroot() {
     
     # Kill namespace holder process
     if [ -f "$HOLDER_PID_FILE" ]; then
-        HOLDER_PID=$(cat "$HOLDER_PID_FILE")
-        if kill -0 "$HOLDER_PID" 2>/dev/null; then
-            kill "$HOLDER_PID" 2>/dev/null && log "Killed namespace holder process." || warn "Failed to kill holder process."
+        local holder_pid
+        holder_pid=$(cat "$HOLDER_PID_FILE")
+        if kill -0 "$holder_pid" 2>/dev/null; then
+            kill "$holder_pid" 2>/dev/null && log "Killed namespace holder process." || warn "Failed to kill holder process."
         fi
-        rm -f "$HOLDER_PID_FILE"
+        rm -f "$HOLDER_PID_FILE" "$HOLDER_PID_FILE.flags"
     fi
     
-    # Re-enable Android Doze
     su -c 'dumpsys deviceidle enable' >/dev/null 2>&1 && log "Re-enabled Android Doze"
 
     log "Chroot stopped successfully."
 }
 
 umount_chroot() {
-    # Unmount sparse image if it's mounted and image file exists
     if [ -f "$ROOTFS_IMG" ] && mountpoint -q "$CHROOT_PATH" 2>/dev/null; then
         log "Force unmounting sparse image..."
         if umount -f "$CHROOT_PATH" 2>/dev/null; then
@@ -418,7 +426,6 @@ umount_chroot() {
         fi
     fi
     
-    # Special handling for storage - normal unmount only to avoid breaking Android storage
     local chroot_storage="$CHROOT_PATH/storage/emulated/0"
     if is_mounted "$chroot_storage"; then
         log "Unmounting storage safely..."
@@ -431,11 +438,9 @@ umount_chroot() {
         done
     fi
     
-    # Unmount tracked mount points in reverse order for safety.
     if [ -f "$MOUNTED_FILE" ]; then
         log "Unmounting filesystems..."
         sort -r "$MOUNTED_FILE" | while read -r mount_point; do
-            # Use lazy unmount for /sys as it can be busy.
             case "$mount_point" in
                 "$CHROOT_PATH"/sys*) run_in_ns umount -l "$mount_point" 2>/dev/null ;;
                 *) run_in_ns umount "$mount_point" 2>/dev/null ;;
@@ -460,44 +465,45 @@ enter_chroot() {
         export PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/libexec:/opt/bin';
         export TERM='xterm';
     "
-
+    
     # Load holder PID
     if [ -f "$HOLDER_PID_FILE" ]; then
         HOLDER_PID=$(cat "$HOLDER_PID_FILE")
     fi
-
+    
+    local shell_command
     if [ "$user" = "root" ]; then
-        # For root, directly execute a login shell inside the namespace
-        exec busybox nsenter --target "$HOLDER_PID" --mount -- \
-            chroot "$CHROOT_PATH" /bin/bash -c "
-                $common_exports
-                export HOME='/root';
-                cd /root;
-                exec /bin/bash --login;
-            "
+        shell_command="
+            $common_exports
+            export HOME='/root';
+            cd /root;
+            exec /bin/bash --login;
+        "
     else
-        # For non-root users, bypass PAM by using chroot with su's --session-command
-        # This avoids PAM session errors in isolated namespaces
-        exec busybox nsenter --target "$HOLDER_PID" --mount -- \
-            chroot "$CHROOT_PATH" /bin/bash -c "
-                $common_exports
-                # Create user runtime directory if it doesn't exist
-                user_uid=\$(id -u '$user' 2>/dev/null)
-                if [ -n \"\$user_uid\" ]; then
-                    mkdir -p /run/user/\$user_uid 2>/dev/null
-                    chown '$user':'$user' /run/user/\$user_uid 2>/dev/null
-                    chmod 700 /run/user/\$user_uid 2>/dev/null
-                fi
-                export HOME=\"/home/$user\";
-                cd \"/home/$user\" 2>/dev/null || export HOME='/root';
-                # Use su without login to avoid PAM session issues
-                exec /bin/su '$user' -s /bin/bash;
-            "
+        shell_command="
+            $common_exports
+            user_uid=\$(id -u '$user' 2>/dev/null)
+            if [ -n \"\$user_uid\" ]; then
+                mkdir -p /run/user/\$user_uid 2>/dev/null
+                chown '$user':'$user' /run/user/\$user_uid 2>/dev/null
+                chmod 700 /run/user/\$user_uid 2>/dev/null
+            fi
+            export HOME=\"/home/$user\";
+            cd \"/home/$user\" 2>/dev/null || export HOME='/root';
+            exec /bin/su '$user' -s /bin/bash;
+        "
+    fi
+
+    # Use exec to replace the script's process with the shell inside the chroot.
+    # Check if namespace holder is available, otherwise fallback to direct chroot.
+    if [ -f "$HOLDER_PID_FILE" ] && kill -0 "$(cat "$HOLDER_PID_FILE")" 2>/dev/null; then
+        exec _execute_in_ns chroot "$CHROOT_PATH" /bin/bash -c "$shell_command"
+    else
+        exec chroot "$CHROOT_PATH" /bin/bash -c "$shell_command"
     fi
 }
 
 show_status() {
-    # Status output for webui detection
     if is_chroot_running; then
         echo "Status: RUNNING"
     else
@@ -506,15 +512,12 @@ show_status() {
 }
 
 list_users() {
-    # Get users from the chroot filesystem (regular users with UID >= 1000)
-    # run_in_chroot will start chroot if needed and execute with proper namespace isolation
     run_in_chroot "grep -E ':x:1[0-9][0-9][0-9]:' /etc/passwd 2>/dev/null | cut -d: -f1 | head -20 | tr '\n' ',' | sed 's/,$//'"
 }
 
 run_command() {
     local command="$*"
     log "Running command in chroot: $command"
-    # run_in_chroot will start chroot if needed and execute with proper namespace isolation
     run_in_chroot "$command"
 }
 
@@ -526,25 +529,19 @@ backup_chroot() {
         exit 1
     fi
     
-    # Ensure backup path directory exists
-    local backup_dir="$(dirname "$backup_path")"
+    local backup_dir
+    backup_dir="$(dirname "$backup_path")"
     if ! run_in_ns mkdir -p "$backup_dir"; then
         error "Failed to create backup directory: $backup_dir"
         exit 1
     fi
     
     log "Creating backup archive: $backup_path"
-
-    # Unified backup logic for both sparse and regular rootfs
-    # 1. Ensure chroot is restarted
     stop_chroot >/dev/null 2>&1
     start_chroot >/dev/null 2>&1
-
-    # 2. Umount filesystems for clean backup
     umount_chroot >/dev/null 2>&1
-    sleep 1  # Brief pause to ensure clean unmount
+    sleep 1
     
-    # 3. Create compressed tar archive
     if run_in_ns busybox tar -czf "$backup_path" -C "$CHROOT_PATH" . 2>/dev/null; then
         local size
         size=$(run_in_ns du -h "$backup_path" 2>/dev/null | cut -f1)
@@ -554,7 +551,6 @@ backup_chroot() {
         exit 1
     fi
     
-    # 4. Always stop chroot after backup (whether successful or failed)
     stop_chroot >/dev/null 2>&1
 }
 
@@ -562,16 +558,11 @@ restore_chroot() {
     local backup_path="$1"
     
     if [ -z "$backup_path" ]; then
-        error "Backup path not specified"
-        exit 1
+        error "Backup path not specified"; exit 1;
     fi
-    
     if [ ! -f "$backup_path" ]; then
-        error "Backup file does not exist: $backup_path"
-        exit 1
+        error "Backup file does not exist: $backup_path"; exit 1;
     fi
-    
-    # Check if backup file has .tar.gz extension
     case "$backup_path" in
         *.tar.gz) ;;
         *) error "Backup file must have .tar.gz extension"; exit 1 ;;
@@ -579,76 +570,47 @@ restore_chroot() {
     
     log "Extracting backup archive from: $backup_path"
     
-    # Stop and clean up current chroot if running (only in manual mode)
     if [ "$WEBUI_MODE" -eq 0 ]; then
         if is_chroot_running; then
-            log "Stopping running chroot..."
-            stop_chroot
+            log "Stopping running chroot..."; stop_chroot;
         fi
-
-        # Check for sparse image and force unmount if mounted
         if [ -f "$ROOTFS_IMG" ] && mountpoint -q "$CHROOT_PATH" 2>/dev/null; then
             log "Force unmounting sparse image..."
             umount -f "$CHROOT_PATH" 2>/dev/null || umount -l "$CHROOT_PATH" 2>/dev/null || {
-                error "Failed to unmount sparse image"
-                exit 1
+                error "Failed to unmount sparse image"; exit 1;
             }
         fi
-
-        # Remove sparse image file if it exists
         if [ -f "$ROOTFS_IMG" ]; then
-            log "Removing sparse image file..."
-            rm -f "$ROOTFS_IMG" || {
-                error "Failed to remove sparse image file"
-                exit 1
-            }
+            log "Removing sparse image file..."; rm -f "$ROOTFS_IMG" || { error "Failed to remove sparse image file"; exit 1; };
         fi
-
-        # Remove existing chroot directory
         if [ -d "$CHROOT_PATH" ]; then
-            log "Removing existing chroot directory..."
-            if ! run_in_ns rm -rf "$CHROOT_PATH"; then
-                error "Failed to remove existing chroot directory"
-                exit 1
-            fi
+            log "Removing existing chroot directory...";
+            if ! run_in_ns rm -rf "$CHROOT_PATH"; then error "Failed to remove existing chroot directory"; exit 1; fi
         fi
     fi
     
-    # Create rootfs directory
     if ! run_in_ns mkdir -p "$CHROOT_PATH"; then
-        error "Failed to create rootfs directory: $CHROOT_PATH"
-        exit 1
+        error "Failed to create rootfs directory: $CHROOT_PATH"; exit 1;
     fi
-
-    # Extract the tar.gz archive
     if run_in_ns busybox tar -xzf "$backup_path" -C "$CHROOT_PATH" 2>/dev/null; then
         log "Chroot restored successfully from: $backup_path"
     else
-        error "Failed to extract backup archive"
-        exit 1
+        error "Failed to extract backup archive"; exit 1;
     fi
 }
 
 # --- Main Script Logic ---
 
-# Must be run as root.
 if [ "$(id -u)" -ne 0 ]; then
-    error "This script must be run as root."
-    exit 1
+    error "This script must be run as root."; exit 1;
 fi
-
-# Check if busybox is available
 if ! command -v busybox >/dev/null 2>&1; then
-    error "busybox command not found. Please install busybox."
-    exit 1
+    error "busybox command not found. Please install busybox."; exit 1;
 fi
-
-# Set default command if none is provided.
 if [ $# -eq 0 ]; then
     set -- start
 fi
 
-# Centralized argument parsing.
 COMMAND=""
 USER_ARG="root"
 BACKUP_PATH=""
@@ -659,36 +621,16 @@ WEBUI_MODE=0
 for arg in "$@"; do
     case "$arg" in
         start|stop|restart|status|umount|backup|restore|list-users|run)
-            COMMAND="$arg"
-            ;;
-        --no-shell)
-            NO_SHELL_FLAG=1
-            ;;
-        --webui)
-            WEBUI_MODE=1
-            ;;
-        --skip-post-exec)
-            SKIP_POST_EXEC=1
-            ;;
-        -s)
-            SILENT=1
-            ;;
-        -h|--help)
-            usage
-            ;;
-        -*)
-            echo "Unknown option: $arg"
-            usage
-            ;;
+            COMMAND="$arg" ;;
+        --no-shell) NO_SHELL_FLAG=1 ;;
+        --webui) WEBUI_MODE=1 ;;
+        --skip-post-exec) SKIP_POST_EXEC=1 ;;
+        -s) SILENT=1 ;;
+        -h|--help) usage ;;
+        -*) echo "Unknown option: $arg"; usage ;;
         *)
-            # For run command, collect all remaining arguments as the command
             if [ "$COMMAND" = "run" ]; then
-                if [ -z "$RUN_COMMAND" ]; then
-                    RUN_COMMAND="$arg"
-                else
-                    RUN_COMMAND="$RUN_COMMAND $arg"
-                fi
-            # For backup/restore commands, the next argument is the path
+                if [ -z "$RUN_COMMAND" ]; then RUN_COMMAND="$arg"; else RUN_COMMAND="$RUN_COMMAND $arg"; fi
             elif [ "$COMMAND" = "backup" ] || [ "$COMMAND" = "restore" ]; then
                 BACKUP_PATH="$arg"
             else
@@ -698,61 +640,25 @@ for arg in "$@"; do
     esac
 done
 
-# Execute command.
 case "$COMMAND" in
     start)
-        if is_chroot_running; then
-            log "Chroot is already running."
-        else
-            start_chroot
-        fi
-
-        if [ "$NO_SHELL_FLAG" -eq 0 ]; then
-            enter_chroot "$USER_ARG"
-        else
-            log "Chroot setup complete (no-shell mode). Use 'sh $0 start' to enter."
-        fi
+        if is_chroot_running; then log "Chroot is already running."; else start_chroot; fi
+        if [ "$NO_SHELL_FLAG" -eq 0 ]; then enter_chroot "$USER_ARG"; else log "Chroot setup complete (no-shell mode). Use 'sh $0 start' to enter."; fi
         ;;
-    stop)
-        stop_chroot
-        ;;
+    stop) stop_chroot ;;
     restart)
         log "Restarting chroot environment..."
-        stop_chroot
-        start_chroot
-        
-        if [ "$NO_SHELL_FLAG" -eq 0 ]; then
-            enter_chroot "$USER_ARG"
-        else
-            log "Chroot setup complete (no-shell mode). Use 'sh $0 start' to enter."
-        fi
+        stop_chroot; start_chroot
+        if [ "$NO_SHELL_FLAG" -eq 0 ]; then enter_chroot "$USER_ARG"; else log "Chroot setup complete (no-shell mode). Use 'sh $0 start' to enter."; fi
         ;;
-    status)
-        show_status
-        ;;
+    status) show_status ;;
     umount)
-        log "Umounting chroot filesystems..."
-        umount_chroot
-        log "Chroot filesystems unmounted successfully."
-        ;;
-    list-users)
-        list_users
-        ;;
+        log "Umounting chroot filesystems..."; umount_chroot; log "Chroot filesystems unmounted successfully." ;;
+    list-users) list_users ;;
     run)
-        if [ -z "$RUN_COMMAND" ]; then
-            error "No command specified for run"
-            usage
-        fi
-        run_command "$RUN_COMMAND"
-        ;;
-    backup)
-        backup_chroot "$BACKUP_PATH"
-        ;;
-    restore)
-        restore_chroot "$BACKUP_PATH"
-        ;;
-    *)
-        error "Invalid command: $COMMAND"
-        usage
-        ;;
+        if [ -z "$RUN_COMMAND" ]; then error "No command specified for run"; usage; fi
+        run_command "$RUN_COMMAND" ;;
+    backup) backup_chroot "$BACKUP_PATH" ;;
+    restore) restore_chroot "$BACKUP_PATH" ;;
+    *) error "Invalid command: $COMMAND"; usage ;;
 esac
