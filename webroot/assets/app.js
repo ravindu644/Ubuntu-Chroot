@@ -38,6 +38,7 @@
     sparseSettingsPopup: document.getElementById('sparse-settings-popup'),
     closeSparsePopup: document.getElementById('close-sparse-popup'),
     trimSparseBtn: document.getElementById('trim-sparse-btn'),
+    resizeSparseBtn: document.getElementById('resize-sparse-btn'),
     sparseInfo: document.getElementById('sparse-info'),
     restoreBtn: document.getElementById('restore-btn'),
     uninstallBtn: document.getElementById('uninstall-btn'),
@@ -1067,6 +1068,102 @@
     }, 50);
   }
 
+  async function resizeSparseImage(){
+    if(activeCommandId) {
+      appendConsole('⚠ Another command is already running. Please wait...', 'warn');
+      return;
+    }
+
+    if(!rootAccessConfirmed){
+      appendConsole('Cannot resize sparse image: root access not available', 'err');
+      return;
+    }
+
+    // Show size selection dialog first
+    const newSizeGb = await showSizeSelectionDialog();
+    if(!newSizeGb) return;
+
+    // Get current allocated size for warning message
+    let currentAllocatedGb = 'Unknown';
+    try {
+      const usageBytesCmd = `du -b ${CHROOT_DIR}/rootfs.img | cut -f1`;
+      const actualUsageBytes = await runCmdSync(usageBytesCmd);
+      currentAllocatedGb = Math.ceil(parseInt(actualUsageBytes.trim()) / 1024 / 1024 / 1024) + 'GB';
+    } catch(e) {
+      // Keep as 'Unknown' if we can't determine
+    }
+
+    // Show extreme warnings about backup and risks
+    const confirmed = await showConfirmDialog(
+      'Resize Sparse Image',
+      `⚠️ EXTREME WARNING: This operation can CORRUPT your filesystem!\n\nYou MUST create a backup before proceeding.\n\nDO NOT close this window or interrupt the process.\n\nCurrent allocated: ${currentAllocatedGb}\nNew size: ${newSizeGb}GB\n\n${parseInt(newSizeGb) > parseInt(currentAllocatedGb) ? 'Operation: GROWING (safer)' : 'Operation: SHRINKING (VERY RISKY)'}\n\nContinue?`,
+      'Resize',
+      'Cancel'
+    );
+
+    if(!confirmed){
+      return;
+    }
+
+    // Close both popups with proper animation handling
+    closeSettingsPopup();
+    const sparsePopup = els.sparseSettingsPopup;
+    if(sparsePopup && sparsePopup.classList.contains('active')) {
+      sparsePopup.classList.remove('active');
+    }
+
+    // Wait for popup animation to complete (750ms for proper closing)
+    await new Promise(resolve => setTimeout(resolve, 750));
+
+    appendConsole(`━━━ Resizing Sparse Image to ${newSizeGb}GB ━━━`, 'warn');
+
+    // Show progress indicator IMMEDIATELY
+    const progressLine = document.createElement('div');
+    progressLine.className = 'progress-indicator';
+    progressLine.textContent = '⏳ Preparing resize operation';
+    els.console.appendChild(progressLine);
+    els.console.scrollTop = els.console.scrollHeight;
+
+    let dotCount = 0;
+    const progressInterval = setInterval(() => {
+      dotCount = (dotCount + 1) % 4;
+      progressLine.textContent = '⏳ Preparing resize operation' + '.'.repeat(dotCount);
+    }, 400);
+
+    // Disable ALL UI elements during resize operation
+    disableAllActions(true);
+    disableSettingsPopup(true);
+
+    // Mark as active to prevent other commands
+    activeCommandId = 'sparse-resize';
+
+    const cmd = `sh ${PATH_CHROOT_SH} resize --webui ${newSizeGb}`;
+
+    // Use setTimeout to allow UI to update
+    setTimeout(() => {
+      runCmdAsync(cmd, (result) => {
+        clearInterval(progressInterval);
+        progressLine.remove();
+
+        if(result.success) {
+          appendConsole('✅ Sparse image resized successfully', 'success');
+          appendConsole(`New size: ${newSizeGb}GB`, 'info');
+          appendConsole('━━━ Resize Complete ━━━', 'success');
+        } else {
+          appendConsole('✗ Sparse image resize failed', 'err');
+          appendConsole('Check the logs above for details', 'err');
+          appendConsole('━━━ Resize Failed ━━━', 'err');
+        }
+
+        // Re-enable UI and refresh info
+        activeCommandId = null;
+        disableAllActions(false);
+        disableSettingsPopup(false, true);
+        updateSparseInfo();
+      });
+    }, 50);
+  }
+
   async function updateChroot(){
     if(activeCommandId) {
       appendConsole('⚠ Another command is already running. Please wait...', 'warn');
@@ -1641,6 +1738,15 @@
       if(els.sparseSettingsBtn) {
         const sparseBtnVisible = !disabled && chrootExists && sparseMigrated;
         els.sparseSettingsBtn.style.display = sparseBtnVisible ? 'inline-block' : 'none';
+      }
+      
+      // Disable/enable resize button based on sparse migration status
+      if(els.resizeSparseBtn) {
+        const resizeDisabled = disabled || !chrootExists || !sparseMigrated;
+        els.resizeSparseBtn.disabled = resizeDisabled;
+        els.resizeSparseBtn.style.opacity = resizeDisabled ? '0.5' : '';
+        els.resizeSparseBtn.style.cursor = resizeDisabled ? 'not-allowed' : '';
+        els.resizeSparseBtn.style.pointerEvents = resizeDisabled ? 'none' : '';
       }
     }catch(e){}
   }
@@ -2525,6 +2631,9 @@
   }
   if(els.trimSparseBtn){
     els.trimSparseBtn.addEventListener('click', () => trimSparseImage());
+  }
+  if(els.resizeSparseBtn){
+    els.resizeSparseBtn.addEventListener('click', () => resizeSparseImage());
   }
 
   // Hotspot event handlers
