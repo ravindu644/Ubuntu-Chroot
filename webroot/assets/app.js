@@ -47,6 +47,9 @@
   // Track hotspot state - much more reliable than filesystem checks
   let hotspotActive = false;
 
+  // Track sparse image migration status
+  let sparseMigrated = false;
+
   /**
    * Load hotspot status from localStorage on page load
    */
@@ -436,6 +439,11 @@
           els.userSelect.disabled = false;
           els.userSelect.style.opacity = '';
         }
+
+        // Check if sparse image exists FIRST
+        const sparseCheck = await runCmdSync(`[ -f "${CHROOT_DIR}/rootfs.img" ] && echo "sparse" || echo "directory"`);
+        sparseMigrated = sparseCheck && sparseCheck.trim() === 'sparse';
+
         disableSettingsPopup(false, true); // chroot exists
       }
 
@@ -1412,14 +1420,20 @@
         els.uninstallBtn.style.pointerEvents = uninstallDisabled ? 'none' : '';
       }
       
-      // Experimental features - disable when chroot doesn't exist OR no root access
+      // Experimental features - disable when chroot doesn't exist OR no root access OR already migrated
       const migrateSparseBtn = document.getElementById('migrate-sparse-btn');
       if(migrateSparseBtn) {
-        const migrateDisabled = disabled || !chrootExists;
+        const migrateDisabled = disabled || !chrootExists || sparseMigrated;
         migrateSparseBtn.disabled = migrateDisabled;
         migrateSparseBtn.style.opacity = migrateDisabled ? '0.5' : '';
         migrateSparseBtn.style.cursor = migrateDisabled ? 'not-allowed' : '';
         migrateSparseBtn.style.pointerEvents = migrateDisabled ? 'none' : '';
+        // Change text if already migrated
+        if(sparseMigrated) {
+          migrateSparseBtn.textContent = 'Already Migrated';
+        } else {
+          migrateSparseBtn.textContent = 'Migrate to Sparse Image';
+        }
       }
     }catch(e){}
   }
@@ -1522,6 +1536,9 @@
             appendConsole('✅ Sparse image migration completed successfully!', 'success');
             appendConsole('Your rootfs has been converted to a sparse image.', 'info');
             appendConsole('━━━ Migration Complete ━━━', 'success');
+
+            // Update sparse status
+            sparseMigrated = true;
 
             // Refresh status to show new state
             setTimeout(() => refreshStatus(), 1000);
