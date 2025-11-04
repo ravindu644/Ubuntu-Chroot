@@ -658,14 +658,18 @@ textarea {
 }
 
 .btn.warning {
-  background: #f59e0b;
-  color: #92400e;
-  border: 1px solid #f59e0b;
+  background: #f59e0b !important;
+  color: #92400e !important;
+  border: 1px solid #f59e0b !important;
+  font-weight: 600 !important;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3) !important;
 }
 
 .btn.warning:hover {
-  background: #d97706;
-  border-color: #d97706;
+  background: #d97706 !important;
+  border-color: #d97706 !important;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4) !important;
+  transform: translateY(-1px) !important;
 }
 
 [data-theme="dark"] .btn.warning {
