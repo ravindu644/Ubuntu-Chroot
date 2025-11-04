@@ -222,8 +222,27 @@ create_namespace() {
 
     log "using flags: $flags"
 
+    # Try regular unshare first
     unshare $flags busybox sleep infinity &
-    echo $! > "$pid_file"
+    local pid=$!
+    if kill -0 $pid 2>/dev/null; then
+        echo $pid > "$pid_file"
+        return 0
+    fi
+
+    # Fallback to busybox unshare, remove --cgroups if present
+    local busybox_flags=$(echo "$flags" | sed 's/--cgroups//g')
+    log "Regular unshare failed, trying busybox unshare with flags: $busybox_flags"
+
+    busybox unshare $busybox_flags busybox sleep infinity &
+    pid=$!
+    if kill -0 $pid 2>/dev/null; then
+        echo $pid > "$pid_file"
+        return 0
+    else
+        error "Failed to create namespace with both unshare implementations"
+        return 1
+    fi
 }
 
 start_chroot() {
