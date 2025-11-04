@@ -1,9 +1,44 @@
 #!/system/bin/sh
 # Sparse Image Manager for Chroot Migration
 # Copyright (c) 2025 ravindu644
+# Usage: sparsemgr.sh [options] <command> [args]
 
-# Configuration
-CHROOT_DIR="/data/local/ubuntu-chroot"
+# Default configuration - can be overridden
+DEFAULT_CHROOT_DIR="/data/local/ubuntu-chroot"
+CHROOT_DIR="${CHROOT_DIR:-$DEFAULT_CHROOT_DIR}"
+
+# Parse command line arguments
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --chroot-dir|-d)
+            CHROOT_DIR="$2"
+            shift 2
+            ;;
+        --help|-h)
+            echo "Usage: $0 [options] <command> [args]"
+            echo ""
+            echo "Options:"
+            echo "  --chroot-dir DIR, -d DIR    Set chroot directory (default: $DEFAULT_CHROOT_DIR)"
+            echo ""
+            echo "Commands:"
+            echo "  migrate <size_gb>           Migrate to sparse image"
+            echo ""
+            echo "Environment Variables:"
+            echo "  CHROOT_DIR                  Override default chroot directory"
+            echo ""
+            echo "Examples:"
+            echo "  $0 migrate 8"
+            echo "  $0 --chroot-dir /custom/path migrate 16"
+            echo "  CHROOT_DIR=/custom/path $0 migrate 8"
+            exit 0
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+# Set derived paths
 ROOTFS_DIR="$CHROOT_DIR/rootfs"
 ROOTFS_IMG="$CHROOT_DIR/rootfs.img"
 ROOTFS_SPARSE="$CHROOT_DIR/rootfs.sparse"
@@ -302,27 +337,35 @@ case "$1" in
         check_requirements
         if [ -z "$2" ]; then
             error "Size parameter required"
-            echo "Usage: $0 migrate <size_in_gb>"
+            echo "Usage: $0 [options] migrate <size_in_gb>"
             echo "Example: $0 migrate 8"
             exit 1
         fi
         migrate_to_sparse "$2"
         ;;
     *)
-        echo "Usage: $0 migrate <size_in_gb>"
-        echo "Example: $0 migrate 8"
+        echo "Sparse Image Manager for Chroot Migration"
+        echo "Usage: $0 [options] <command> [args]"
+        echo ""
+        echo "Options:"
+        echo "  --chroot-dir DIR, -d DIR    Set chroot directory (default: $DEFAULT_CHROOT_DIR)"
+        echo "  --help, -h                  Show this help message"
+        echo ""
+        echo "Commands:"
+        echo "  migrate <size_gb>           Migrate to sparse image (size: 4-64 GB)"
+        echo ""
+        echo "Environment Variables:"
+        echo "  CHROOT_DIR                  Override default chroot directory"
+        echo ""
+        echo "Examples:"
+        echo "  $0 migrate 8"
+        echo "  $0 --chroot-dir /custom/path migrate 16"
+        echo "  CHROOT_DIR=/custom/path $0 migrate 8"
         echo ""
         echo "Description:"
         echo "  Migrates your existing Ubuntu chroot from a directory-based"
         echo "  rootfs to a sparse ext4 image for better performance and"
         echo "  space efficiency."
-        echo ""
-        echo "Options:"
-        echo "  migrate <size>  - Migrate to sparse image (size: 4-64 GB)"
-        echo ""
-        echo "Examples:"
-        echo "  $0 migrate 8    - Create 8GB sparse image"
-        echo "  $0 migrate 16   - Create 16GB sparse image"
         echo ""
         echo "Requirements:"
         echo "  - busybox"
