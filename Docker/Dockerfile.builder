@@ -138,6 +138,9 @@ RUN add-apt-repository ppa:mozillateam/ppa -y && \
 # Update locales
 RUN locale-gen en_US.UTF-8 && update-locale LANG=en_US.UTF-8 && update-locale LC_ALL=en_US.UTF-8
 
+# Set global environment variables for all users and processes
+RUN echo 'TMPDIR=/tmp' >> /etc/environment
+
 # Configure SSH
 RUN mkdir -p /var/run/sshd && \
     sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \

@@ -31,6 +31,7 @@ update_v2000() {
 
 update_v2500() {
     log "Nothing new buddy ! Everything is up-to date 🎉"
+    run_in_chroot "echo 'TMPDIR=/tmp' >> /etc/environment"
     return 0
 }
 
