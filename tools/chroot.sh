@@ -207,6 +207,25 @@ kill_chroot_processes() {
     fi
 }
 
+create_namespace() {
+    local pid_file="$1"
+    local flags="--fork"
+    local cfg=$(zcat /proc/config.gz 2>/dev/null || cat /proc/config 2>/dev/null)
+
+    for ns in mount:NAMESPACES uts:UTS_NS ipc:IPC_NS pid:PID_NS net:NET_NS user:USER_NS cgroup:CGROUPS; do
+        flag="--${ns%%:*}"
+        config="CONFIG_${ns#*:}"
+        if echo "$cfg" | grep -q "^${config}=y" && unshare $flag true 2>/dev/null; then
+            flags="$flags $flag"
+        fi
+    done
+
+    log "using flags: $flags"
+
+    unshare $flags busybox sleep infinity &
+    echo $! > "$pid_file"
+}
+
 start_chroot() {
     log "Setting up advanced chroot environment..."
     
@@ -215,12 +234,11 @@ start_chroot() {
         log "Namespace holder already running."
         HOLDER_PID=$(cat "$HOLDER_PID_FILE")
     else
-        log "Creating new mount namespace..."
-        unshare --fork --mount busybox sleep infinity &
-        HOLDER_PID=$!
-        echo $HOLDER_PID > "$HOLDER_PID_FILE"
+        log "Creating new isolated namespace..."
+        create_namespace "$HOLDER_PID_FILE"
+        HOLDER_PID=$(cat "$HOLDER_PID_FILE")
         sleep 0.5  # Give namespace time to initialize
-        log "Running in isolated mount namespace (PID: $HOLDER_PID)"
+        log "Running in isolated namespace (PID: $HOLDER_PID)"
     fi
     
     [ -d "$CHROOT_PATH" ] || { error "Chroot directory not found at $CHROOT_PATH"; exit 1; }
