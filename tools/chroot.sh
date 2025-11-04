@@ -264,7 +264,19 @@ start_chroot() {
 
     # Check if sparse image exists - mount it
     if [ -f "$ROOTFS_IMG" ]; then
-        log "Sparse image detected, mounting to rootfs..."
+        log "Sparse image detected"
+        
+        # Check if already mounted (from unclean shutdown) and unmount first
+        if mountpoint -q "$CHROOT_PATH" 2>/dev/null; then
+            log "Sparse image already mounted, unmounting first..."
+            if umount -f "$CHROOT_PATH" 2>/dev/null || umount -l "$CHROOT_PATH" 2>/dev/null; then
+                log "Previous mount cleaned up"
+            else
+                warn "Failed to unmount previous mount, continuing anyway"
+            fi
+        fi
+        
+        log "Mounting sparse image to rootfs..."
         if ! run_in_ns mount -t ext4 -o loop,rw,noatime,nodiratime,barrier=0 "$ROOTFS_IMG" "$CHROOT_PATH"; then
             error "Failed to mount sparse image"
             exit 1
