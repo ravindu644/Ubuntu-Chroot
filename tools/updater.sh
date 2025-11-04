@@ -30,7 +30,17 @@ error() { echo "[UPDATER ERROR] $1"; }
 # --- Namespace Functions (copied from chroot.sh) ---
 run_in_ns() {
     if [ -n "$HOLDER_PID" ] && kill -0 "$HOLDER_PID" 2>/dev/null; then
-        busybox nsenter --target "$HOLDER_PID" --mount -- "$@"
+        # Read the namespace flags that were used to create the namespace
+        local flags_file="$HOLDER_PID_FILE.flags"
+        local ns_flags="--mount"  # Default fallback
+        
+        if [ -f "$flags_file" ]; then
+            ns_flags=$(cat "$flags_file")
+            # Remove --cgroup flag since busybox nsenter doesn't support it
+            ns_flags=$(echo "$ns_flags" | sed 's/--cgroup//g')
+        fi
+        
+        busybox nsenter --target "$HOLDER_PID" $ns_flags -- "$@"
     else
         "$@"
     fi
