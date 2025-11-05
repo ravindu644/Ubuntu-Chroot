@@ -74,7 +74,10 @@ RUN apt-get install -y --no-install-recommends \
     strace \
     ltrace \
     heimdall-flash \
-    docker.io
+    docker.io \
+    qemu \
+    binfmt-support \
+    qemu-user-static
     
 # Install fastfetch (neofetch alternative)
 RUN apt-get install -y --no-install-recommends \

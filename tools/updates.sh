@@ -6,7 +6,7 @@
 
 # --- Update Functions ---
 
-# Version 2000: Add wireless networking packages (iw, hostapd, isc-dhcp-server)
+# Version 2000: Add wireless networking packages and set up bash completion
 update_v2000() {
     log "Installing wireless networking packages..."
 
@@ -26,6 +26,34 @@ update_v2000() {
     run_in_chroot "apt-get autoremove -y -qq && apt-get clean -qq"
 
     log "Wireless networking packages installed successfully"
+
+    log "Setting up bash completion for better shell experience"
+
+    # Add bash completion to root's .bashrc
+    run_in_chroot "if ! grep -q 'bash_completion' /root/.bashrc; then echo 'if [ -f /etc/bash_completion ]; then' >> /root/.bashrc; echo '    . /etc/bash_completion' >> /root/.bashrc; echo 'fi' >> /root/.bashrc; fi"
+
+    # Add to user's .bashrc if user exists
+    if ! run_in_chroot /bin/bash << 'EOF'
+SETUP_USER_FILE="/var/lib/.default-user"
+if [ -f "$SETUP_USER_FILE" ]; then
+    DEFAULT_USER=$(cat "$SETUP_USER_FILE" 2>/dev/null || echo '')
+    if [ -n "$DEFAULT_USER" ] && id "$DEFAULT_USER" >/dev/null 2>&1; then
+        USER_BASHRC="/home/$DEFAULT_USER/.bashrc"
+        if [ -f "$USER_BASHRC" ] && ! grep -q 'bash_completion' "$USER_BASHRC"; then
+            echo 'if [ -f /etc/bash_completion ]; then' >> "$USER_BASHRC"
+            echo '    . /etc/bash_completion' >> "$USER_BASHRC"
+            echo 'fi' >> "$USER_BASHRC"
+            chown "$DEFAULT_USER:$DEFAULT_USER" "$USER_BASHRC"
+        fi
+    fi
+fi
+EOF
+    then
+        error "Failed to set up bash completion for user"
+        return 1
+    fi
+
+    log "Bash completion setup completed successfully"
     return 0
 }
 
@@ -42,9 +70,9 @@ update_v2500() {
         return 1
     fi
     
-    # Install Docker
-    if ! run_in_chroot "apt-get install -y docker.io"; then
-        error "Failed to install Docker"
+    # Install Docker and QEMU
+    if ! run_in_chroot "apt-get install -y docker.io qemu binfmt-support qemu-user-static"; then
+        error "Failed to install Docker and QEMU"
         return 1
     fi
     
