@@ -414,6 +414,28 @@ start_chroot() {
                 warn "Failed to unmount previous mount, continuing anyway"
             fi
         fi
+        
+        # Check and repair filesystem before mounting to prevent kernel panics
+        log "Checking filesystem integrity..."
+        local fsck_output=$(e2fsck -f -y "$ROOTFS_IMG" 2>&1)
+        local fsck_exit=$?
+        
+        # Exit codes: 0=no errors, 1=corrected, 2=corrected/reboot, 4+=failed
+        if [ $fsck_exit -ge 4 ]; then
+            error "Filesystem check failed (exit: $fsck_exit)"
+            error "Output: $fsck_output"
+            error "Filesystem corruption detected - cannot safely mount"
+            CHROOT_SETUP_IN_PROGRESS=0
+            exit 1
+        elif [ $fsck_exit -ne 0 ]; then
+            log "Filesystem check corrected issues (exit: $fsck_exit)"
+        else
+            log "Filesystem integrity verified"
+        fi
+        
+        # Small delay to ensure filesystem operations complete
+        sleep 1
+        
         log "Mounting sparse image to rootfs..."
         if ! run_in_ns mount -t ext4 -o loop,discard,rw,noatime,nodiratime,barrier=0 "$ROOTFS_IMG" "$CHROOT_PATH"; then
             error "Failed to mount sparse image"
