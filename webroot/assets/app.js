@@ -434,161 +434,153 @@
       return; // Don't attempt commands - root check already printed error
     }
 
+    // DISABLE ALL UI ELEMENTS FIRST to prevent flicker
+    disableAllActions(true);
+
     try{
       // Check if chroot directory exists
       let exists = await cmdExec.execute(`test -d ${CHROOT_PATH_UI} && echo 1 || echo 0`, true);
+      const chrootExists = String(exists||'').trim() === '1';
+      let running = false;
 
-      if(String(exists||'').trim() !== '1'){
-        if(!_chrootMissingLogged){
-          appendConsole(`⚠ Chroot directory not found at ${CHROOT_PATH_UI}`, 'err');
-          _chrootMissingLogged = true;
-        }
-        updateStatus('stopped');
-        // When chroot doesn't exist: disable start/hotspot buttons but enable other main UI elements
-        disableAllActions(false); // Enable clear, refresh, dark mode, settings button
-        // But disable start and hotspot buttons since they can't work without chroot
-        if(els.startBtn) {
-          els.startBtn.disabled = true;
-          els.startBtn.style.opacity = '0.5';
-        }
-        if(els.stopBtn) {
-          els.stopBtn.disabled = true;
-          els.stopBtn.style.opacity = '0.5';
-        }
-        if(els.restartBtn) {
-          els.restartBtn.disabled = true;
-          els.restartBtn.style.opacity = '0.5';
-        }
-        if(els.hotspotBtn) {
-          els.hotspotBtn.disabled = true;
-          els.hotspotBtn.style.opacity = '0.5';
-        }
-        // Also disable boot toggle and user select when chroot doesn't exist
-        if(els.bootToggle) {
-          els.bootToggle.disabled = true;
-          const toggleContainer = els.bootToggle.closest('.toggle-inline');
-          if(toggleContainer) {
-            toggleContainer.style.opacity = '0.5';
-            toggleContainer.style.pointerEvents = 'none';
-          }
-        }
-        if(els.userSelect) {
-          els.userSelect.disabled = true;
-          els.userSelect.style.opacity = '0.5';
-        }
-        disableSettingsPopup(false, false); // Enable popup but disable chroot-dependent elements
-        try{ document.getElementById('copy-login').disabled = true; }catch(e){}
-        return;
-      } else {
+      // COLLECT ALL STATUS INFO WITHOUT TOUCHING UI
+
+      if(chrootExists){
         _chrootMissingLogged = false;
 
         // Check if sparse image exists FIRST
         const sparseCheck = await runCmdSync(`[ -f "${CHROOT_DIR}/rootfs.img" ] && echo "sparse" || echo "directory"`);
         sparseMigrated = sparseCheck && sparseCheck.trim() === 'sparse';
 
-        disableSettingsPopup(false, true); // chroot exists
-      }
+        // Get status without blocking UI
+        const out = await runCmdSync(`sh ${PATH_CHROOT_SH} status`);
+        const s = String(out || '');
+        // Check for "Status: RUNNING" from the status output
+        running = /Status:\s*RUNNING/i.test(s);
 
-      // Get status without blocking UI
-      const out = await runCmdSync(`sh ${PATH_CHROOT_SH} status`);
-      const s = String(out || '');
-      // Check for "Status: RUNNING" from the status output
-      const running = /Status:\s*RUNNING/i.test(s);
+        // Fetch users if running (do this before UI updates to avoid flicker)
+        if(running){
+          await fetchUsers();
+        }
 
-      // COLLECT ALL STATUS INFO FIRST BEFORE CHANGING UI
-
-      // Fetch users if running (do this before UI updates to avoid flicker)
-      if(running){
-        await fetchUsers();
-      }
-
-      // Check hotspot state if running
-      let currentHotspotActive = false;
-      if(running && rootAccessConfirmed){
-        currentHotspotActive = await checkAp0Interface();
-        if(currentHotspotActive !== hotspotActive){
-          // State mismatch - update our saved state to match reality
-          hotspotActive = currentHotspotActive;
-          saveHotspotStatus();
-          appendConsole(`Hotspot state corrected: ${currentHotspotActive ? 'running' : 'stopped'}`, currentHotspotActive ? 'info' : 'warn');
+        // Check hotspot state if running
+        let currentHotspotActive = false;
+        if(running && rootAccessConfirmed){
+          currentHotspotActive = await checkAp0Interface();
+          if(currentHotspotActive !== hotspotActive){
+            // State mismatch - update our saved state to match reality
+            hotspotActive = currentHotspotActive;
+            saveHotspotStatus();
+            appendConsole(`Hotspot state corrected: ${currentHotspotActive ? 'running' : 'stopped'}`, currentHotspotActive ? 'info' : 'warn');
+          }
         }
       }
 
-      // NOW APPLY ALL UI CHANGES AT ONCE
+      // NOW APPLY ALL UI CHANGES AT ONCE - NO MORE CHANGES AFTER THIS
 
-      updateStatus(running ? 'running' : 'stopped');
+      // Status update
+      const status = chrootExists ? (running ? 'running' : 'stopped') : 'not_found';
+      updateStatus(status);
 
-      // Enable copy-login button when running
-      try{ document.getElementById('copy-login').disabled = !running; }catch(e){}
-
-      // Handle user select dropdown
-      if(running){
-        els.userSelect.disabled = false;
-        if(rootAccessConfirmed){
-          // Hotspot button enabled, but individual start/stop buttons depend on hotspot state
-          els.hotspotBtn.disabled = false;
-          els.hotspotBtn.style.opacity = '';
-
-          // Disable individual hotspot buttons based on hotspot state
-          els.startHotspotBtn.disabled = hotspotActive;
-          els.stopHotspotBtn.disabled = !hotspotActive;
-          els.startHotspotBtn.style.opacity = hotspotActive ? '0.5' : '';
-          els.stopHotspotBtn.style.opacity = !hotspotActive ? '0.5' : '';
-        }
-      } else {
-        els.userSelect.disabled = true;
-        els.hotspotBtn.disabled = true;
-        els.hotspotBtn.style.opacity = '0.5';
-        // Disable individual hotspot buttons when chroot not running
-        els.startHotspotBtn.disabled = true;
-        els.stopHotspotBtn.disabled = true;
-        els.startHotspotBtn.style.opacity = '0.5';
-        els.stopHotspotBtn.style.opacity = '0.5';
-        // Reset to root when not running
-        els.userSelect.innerHTML = '<option value="root">root</option>';
-        // Reset hotspot state when chroot stops
-        hotspotActive = false;
-        saveHotspotStatus(); // Save to localStorage
-      }
-
-      // Enable/disable main action buttons and other UI elements based on chroot existence and root access
-      if(rootAccessConfirmed){
-        // Enable main action buttons when root is available and chroot exists
+      // Main action buttons
+      if(rootAccessConfirmed && chrootExists){
         els.startBtn.disabled = running;
         els.stopBtn.disabled = !running;
         els.restartBtn.disabled = !running;
         els.startBtn.style.opacity = running ? '0.5' : '';
         els.stopBtn.style.opacity = !running ? '0.5' : '';
         els.restartBtn.style.opacity = !running ? '0.5' : '';
+      } else if(!chrootExists){
+        // When chroot doesn't exist: disable all action buttons
+        els.startBtn.disabled = true;
+        els.stopBtn.disabled = true;
+        els.restartBtn.disabled = true;
+        els.startBtn.style.opacity = '0.5';
+        els.stopBtn.style.opacity = '0.5';
+        els.restartBtn.style.opacity = '0.5';
+      }
 
-        // Enable other UI elements
-        els.settingsBtn.disabled = false;
-        els.settingsBtn.style.opacity = '';
-        els.hotspotBtn.disabled = !running;
-        els.hotspotBtn.style.opacity = running ? '' : '0.5';
-        els.clearConsole.disabled = false;
-        els.clearConsole.style.opacity = '';
-        els.refreshStatus.disabled = false;
-        els.refreshStatus.style.opacity = '';
-        if(els.themeToggle){
-          els.themeToggle.disabled = false;
-          els.themeToggle.style.opacity = '';
+      // User select
+      if(chrootExists && running){
+        els.userSelect.disabled = false;
+      } else {
+        els.userSelect.disabled = true;
+        if(!chrootExists){
+          els.userSelect.innerHTML = '<option value="root">root</option>';
         }
-        try{ document.getElementById('copy-login').disabled = !running; }catch(e){}
+      }
 
-        // Boot toggle
-        if(els.bootToggle) {
+      // Copy login button
+      const copyLoginBtn = document.getElementById('copy-login');
+      if(copyLoginBtn) {
+        const isEnabled = chrootExists && running;
+        copyLoginBtn.disabled = !isEnabled;
+        copyLoginBtn.style.opacity = isEnabled ? '' : '0.5';
+        copyLoginBtn.style.display = '';
+      }
+
+      // Hotspot button
+      if(chrootExists && running && rootAccessConfirmed){
+        els.hotspotBtn.disabled = false;
+        els.hotspotBtn.style.opacity = '';
+        els.hotspotBtn.style.display = '';
+        // Individual hotspot buttons
+        els.startHotspotBtn.disabled = hotspotActive;
+        els.stopHotspotBtn.disabled = !hotspotActive;
+        els.startHotspotBtn.style.opacity = hotspotActive ? '0.5' : '';
+        els.stopHotspotBtn.style.opacity = !hotspotActive ? '0.5' : '';
+      } else {
+        els.hotspotBtn.disabled = true;
+        els.hotspotBtn.style.opacity = '0.5';
+        els.hotspotBtn.style.display = '';
+        // Individual hotspot buttons
+        els.startHotspotBtn.disabled = true;
+        els.stopHotspotBtn.disabled = true;
+        els.startHotspotBtn.style.opacity = '0.5';
+        els.stopHotspotBtn.style.opacity = '0.5';
+      }
+
+      // Boot toggle
+      if(els.bootToggle) {
+        const toggleContainer = els.bootToggle.closest('.toggle-inline');
+        if(chrootExists && rootAccessConfirmed){
           els.bootToggle.disabled = false;
-          const toggleContainer = els.bootToggle.closest('.toggle-inline');
           if(toggleContainer) {
             toggleContainer.style.opacity = '';
             toggleContainer.style.pointerEvents = '';
+            toggleContainer.style.display = '';
+          }
+        } else {
+          els.bootToggle.disabled = true;
+          if(toggleContainer) {
+            toggleContainer.style.opacity = '0.5';
+            toggleContainer.style.pointerEvents = 'none';
+            toggleContainer.style.display = '';
           }
         }
-
-        // User select
-        els.userSelect.disabled = !running;
       }
+
+      // Settings popup
+      if(chrootExists){
+        disableSettingsPopup(false, true);
+      } else {
+        disableSettingsPopup(false, false);
+      }
+
+      // Re-enable basic UI elements
+      els.clearConsole.disabled = false;
+      els.clearConsole.style.opacity = '';
+      els.copyConsole.disabled = false;
+      els.copyConsole.style.opacity = '';
+      els.refreshStatus.disabled = false;
+      els.refreshStatus.style.opacity = '';
+      if(els.themeToggle){
+        els.themeToggle.disabled = false;
+        els.themeToggle.style.opacity = '';
+      }
+      els.settingsBtn.disabled = false;
+      els.settingsBtn.style.opacity = '';
+
     }catch(e){
       updateStatus('unknown');
       disableAllActions(true);
@@ -603,6 +595,9 @@
     } else if(state === 'stopped'){
       dot.className = 'dot dot-off';
       text.textContent = 'stopped';
+    } else if(state === 'not_found'){
+      dot.className = 'dot dot-off';
+      text.textContent = 'chroot not found';
     } else {
       dot.className = 'dot dot-unknown';
       text.textContent = 'unknown';
@@ -628,6 +623,16 @@
         els.stopBtn.style.opacity = '0.5';
         els.restartBtn.style.opacity = '0.5';
         els.startBtn.style.opacity = '';
+      } else if(state === 'not_found'){
+        // Similar to stopped, but start button also disabled since no chroot to start
+        els.stopBtn.disabled = true;
+        els.restartBtn.disabled = true;
+        els.startBtn.disabled = true;
+        els.userSelect.disabled = true;
+        // Visual feedback
+        els.stopBtn.style.opacity = '0.5';
+        els.restartBtn.style.opacity = '0.5';
+        els.startBtn.style.opacity = '0.5';
       } else {
         // unknown
         els.stopBtn.disabled = true;
