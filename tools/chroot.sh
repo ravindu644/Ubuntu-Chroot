@@ -437,7 +437,7 @@ start_chroot() {
         sleep 1
         
         log "Mounting sparse image to rootfs..."
-        if ! run_in_ns mount -t ext4 -o loop,discard,rw,noatime,nodiratime,barrier=0 "$ROOTFS_IMG" "$CHROOT_PATH"; then
+        if ! run_in_ns mount -t ext4 -o loop,rw,noatime,nodiratime "$ROOTFS_IMG" "$CHROOT_PATH"; then
             error "Failed to mount sparse image"
             CHROOT_SETUP_IN_PROGRESS=0
             exit 1
@@ -508,6 +508,12 @@ start_chroot() {
 
 stop_chroot() {
     log "Stopping chroot environment..."
+    
+    # Run fstrim on sparse image before stopping if using sparse method
+    if [ -f "$ROOTFS_IMG" ]; then
+        log "Running fstrim on sparse image before stopping..."
+        run_fstrim >/dev/null 2>&1 || warn "fstrim failed during stop operation"
+    fi
     
     kill_chroot_processes
     umount_chroot
