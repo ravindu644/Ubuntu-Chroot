@@ -1,0 +1,79 @@
+name: Build and Release GUI and CLI
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release Version (e.g., v3.1)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - name: GUI
+            branch: gui
+            suffix: -GUI
+          - name: CLI
+            branch: main
+            suffix: -CLI
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.branch }}
+
+      - name: Build Ubuntu RootFS
+        run: |
+          cd Docker
+          VERSION="${{ github.event.inputs.version || github.ref_name }}" ./build.sh
+
+      - name: Prepare Package
+        run: |
+          VERSION="${{ github.event.inputs.version || github.ref_name }}"
+          DATE=$(date +%Y%m%d)
+          ZIP_NAME="Ubuntu-Chroot-${VERSION}-${DATE}${{ matrix.suffix }}.zip"
+          echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
+
+          rm -rf .git .github .gitignore .gitattributes
+          find . -name ".git*" -delete
+
+      - name: Create Zip Archive
+        run: |
+          zip -r -9 "${{ env.ZIP_NAME }}" . -x "Docker/*"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}-zip
+          path: ${{ env.ZIP_NAME }}
+
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./zips
+
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "./zips/**/*.zip"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ github.event.inputs.version || github.ref_name }}
+          name: "Ubuntu Chroot ${{ github.event.inputs.version || github.ref_name }}"
+          body: |
+            Ubuntu Chroot Environment ${{ github.event.inputs.version || github.ref_name }}
+
+            Flashable Magisk/KernelSU/APatch module for Ubuntu ARM64 chroot environment.
+            
+            Includes GUI and CLI variants.
