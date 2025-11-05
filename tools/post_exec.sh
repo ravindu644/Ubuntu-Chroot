@@ -11,6 +11,9 @@ service dbus start
 # Example: Start SSH server
 # service ssh start
 
+# start docker service if your kernel is supported
+# dockerd > /dev/null 2>&1 &
+
 # Example: Start other services if installed
 # service postgresql start
 # service nginx start
