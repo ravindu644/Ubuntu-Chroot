@@ -79,7 +79,14 @@ textarea {
 .toggle-inline{display:inline-flex;gap:8px;align-items:center;font-size:14px}
 .note{color:var(--muted);font-size:14px}
 .console-card{display:flex;flex-direction:column;min-height:200px;max-height:400px;min-width:0}
-.console-header{font-weight:600;margin-bottom:8px;font-size:16px;color:var(--muted)}
+.console-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.console-title{font-weight:600;font-size:16px;color:var(--muted)}
+.console-copy-btn{background:transparent;border:1px solid rgba(15,23,32,0.08);color:var(--text);border-radius:4px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:13px;transition:all 0.2s ease;padding:0;min-height:auto}
+.console-copy-btn:hover{background:rgba(0,0,0,0.05);border-color:rgba(15,23,32,0.15)}
+.console-copy-btn svg{width:16px;height:16px}
+
+[data-theme="dark"] .console-copy-btn{border-color:rgba(255,255,255,0.08)}
+[data-theme="dark"] .console-copy-btn:hover{background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.15)}
 .console{flex:1;background:var(--console-bg);border-radius:10px;padding:12px;min-height:200px;max-height:300px;overflow:auto;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;border:1px solid rgba(0,0,0,0.06);font-size:13px;line-height:1.5;white-space:pre;box-sizing:border-box;min-width:0;width:100%}
 .console-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
 .foot{margin-top:12px;color:var(--muted);font-size:14px;text-align:center;display:flex;align-items:center;justify-content:center;gap:12px;font-weight:500}

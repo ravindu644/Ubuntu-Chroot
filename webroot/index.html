@@ -85,7 +85,17 @@
       </section>
 
       <section class="card console-card">
-        <div class="console-header">Console</div>
+        <div class="console-header">
+          <span class="console-title">Console</span>
+          <button id="copy-console" class="btn outline small console-copy-btn" title="Copy console logs">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <g fill="none" stroke="var(--muted)" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
+                <path d="M8 10a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2z"/>
+                <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>
+              </g>
+            </svg>
+          </button>
+        </div>
         <pre id="console" class="console"></pre>
         <div class="console-actions">
           <button id="clear-console" class="btn outline small">Clear</button>
