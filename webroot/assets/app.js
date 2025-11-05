@@ -18,6 +18,7 @@
     restartBtn: document.getElementById('restart-btn'),
     console: document.getElementById('console'),
     clearConsole: document.getElementById('clear-console'),
+    copyConsole: document.getElementById('copy-console'),
     refreshStatus: document.getElementById('refresh-status'),
     bootToggle: document.getElementById('boot-toggle'),
     themeToggle: document.getElementById('theme-toggle'),
@@ -189,7 +190,7 @@
     const pre = els.console;
     const line = document.createElement('div');
     if(cls) line.className = cls;
-    line.textContent = text;
+    line.textContent = text + '\n';
     pre.appendChild(line);
     
     // Auto-scroll to bottom for real-time feel
@@ -283,7 +284,7 @@
     }
   }
 
-  function disableAllActions(disabled){
+  function disableAllActions(disabled, isErrorCondition = false){
     try{
       // Main action buttons
       els.startBtn.disabled = disabled;
@@ -296,13 +297,17 @@
       els.hotspotBtn.style.opacity = disabled ? '0.5' : '';
       
       // Additional UI elements that should be disabled during operations
-      els.clearConsole.disabled = disabled;
-      els.clearConsole.style.opacity = disabled ? '0.5' : '';
-      els.refreshStatus.disabled = disabled;
-      els.refreshStatus.style.opacity = disabled ? '0.5' : '';
+      // But kept enabled during error conditions (root access failed, chroot not found)
+      const shouldDisableAlwaysAvailable = disabled && !isErrorCondition;
+      els.clearConsole.disabled = shouldDisableAlwaysAvailable;
+      els.clearConsole.style.opacity = shouldDisableAlwaysAvailable ? '0.5' : '';
+      els.copyConsole.disabled = shouldDisableAlwaysAvailable;
+      els.copyConsole.style.opacity = shouldDisableAlwaysAvailable ? '0.5' : '';
+      els.refreshStatus.disabled = shouldDisableAlwaysAvailable;
+      els.refreshStatus.style.opacity = shouldDisableAlwaysAvailable ? '0.5' : '';
       if(els.themeToggle){
-        els.themeToggle.disabled = disabled;
-        els.themeToggle.style.opacity = disabled ? '0.5' : '';
+        els.themeToggle.disabled = shouldDisableAlwaysAvailable;
+        els.themeToggle.style.opacity = shouldDisableAlwaysAvailable ? '0.5' : '';
       }
       
       const copyBtn = document.getElementById('copy-login');
@@ -409,7 +414,10 @@
           appendConsole(`✗ ${action} failed`, 'err');
         }
         
-        // Re-enable buttons and refresh status after completion
+        // Re-enable buttons immediately, then refresh status
+        activeCommandId = null;
+        disableAllActions(false);
+        disableSettingsPopup(false, true);
         setTimeout(() => refreshStatus(), 500);
       });
     }, 50);
@@ -422,7 +430,7 @@
   async function refreshStatus(){
     if(!rootAccessConfirmed){
       updateStatus('unknown');
-      disableAllActions(true);
+      disableAllActions(true, true);
       return; // Don't attempt commands - root check already printed error
     }
 
@@ -694,11 +702,64 @@
     }
   }
 
+  // copy console logs
+  function copyConsoleLogs(){
+    const consoleText = els.console.textContent || '';
+
+    // If console is empty, show a message
+    if(!consoleText.trim()){
+      appendConsole('Console is empty - nothing to copy', 'warn');
+      return;
+    }
+
+    // Try modern clipboard API first
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(consoleText).then(() => {
+        appendConsole('Console logs copied to clipboard');
+      }).catch((err) => {
+        console.warn('Clipboard API failed:', err);
+        // Fall back to older methods
+        fallbackCopy(consoleText);
+      });
+    } else {
+      // No clipboard API available, use fallback
+      fallbackCopy(consoleText);
+    }
+
+    function fallbackCopy(text){
+      try {
+        // Try to create a temporary textarea for selection
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+
+        const successful = document.execCommand('copy');
+        document.body.removeChild(textArea);
+
+        if(successful){
+          appendConsole('Console logs copied to clipboard');
+        } else {
+          appendConsole('Failed to copy console logs - please copy manually:', 'warn');
+          appendConsole(text);
+        }
+      } catch(err) {
+        console.warn('Fallback copy failed:', err);
+        appendConsole('Failed to copy console logs - please copy manually:', 'warn');
+        appendConsole(text);
+      }
+    }
+  }
+
   // Master root detection function - checks backend once and sets UI state
   async function checkRootAccess(){
     if(!window.cmdExec || typeof cmdExec.execute !== 'function'){
       appendConsole('No root bridge detected — running offline. Actions disabled.');
-      disableAllActions(true);
+      disableAllActions(true, true);
       disableSettingsPopup(true, true); // assume chroot exists for now
       return;
     }
@@ -715,7 +776,7 @@
       rootAccessConfirmed = false;
       appendConsole(`Failed to detect root execution method: ${e.message}`, 'err');
       // Then disable all root-dependent UI elements
-      disableAllActions(true);
+      disableAllActions(true, true);
       // Also disable boot toggle when no root access
       if(els.bootToggle) {
         els.bootToggle.disabled = true;
@@ -2688,10 +2749,18 @@
       appendConsole('Console cleared', 'info');
     }
   });
-  els.refreshStatus.addEventListener('click', (e) => {
+  els.copyConsole.addEventListener('click', (e) => {
     animateButton(e.target);
-    appendConsole('Refreshing status...', 'info');
-    refreshStatus();
+    copyConsoleLogs();
+  });
+  els.refreshStatus.addEventListener('click', async (e) => {
+    animateButton(e.target);
+    appendConsole('Refreshing...', 'info');
+    
+    // Do a comprehensive refresh: re-check root access, then refresh status
+    await checkRootAccess();
+    await refreshStatus();
+    await readBootFile(); // Also refresh boot toggle status
   });
   els.bootToggle.addEventListener('change', () => writeBootFile(els.bootToggle.checked ? 1 : 0));
   els.debugToggle.addEventListener('change', () => {
