@@ -464,7 +464,7 @@ textarea {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
   font-size: 13px;
   line-height: 1.5;
-  resize: vertical;
+  resize: none;
   transition: border-color 0.2s ease;
   min-height: 120px;
 }
