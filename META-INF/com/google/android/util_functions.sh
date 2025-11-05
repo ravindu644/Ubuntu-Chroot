@@ -166,7 +166,7 @@ extract_sparse() {
 
     # Mount and extract
     mkdir -p "$rootfs_dir"
-    mount -t ext4 -o loop,rw,noatime,nodiratime,barrier=0 "$img_file" "$rootfs_dir" || {
+    mount -t ext4 -o loop,rw,noatime,nodiratime "$img_file" "$rootfs_dir" || {
         rm -f "$img_file"
         return 1
     }
