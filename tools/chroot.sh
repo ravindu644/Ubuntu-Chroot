@@ -795,12 +795,15 @@ resize_sparse() {
     # Truncate for shrinking
     if [ "$operation" = "SHRINKING" ]; then
         log "Truncating sparse file to ${new_size_gb}G..."
-        truncate -s "${new_size_gb}G" "$ROOTFS_IMG" 2>/dev/null || {
-            error "Failed to truncate file"
-            exit 1
-        }
+        if ! truncate -s "${new_size_gb}G" "$ROOTFS_IMG" 2>/dev/null; then
+            log "Built-in truncate failed, trying busybox truncate..."
+            busybox truncate -s "${new_size_gb}G" "$ROOTFS_IMG" 2>/dev/null || {
+                error "Failed to truncate file with both truncate and busybox truncate"
+                exit 1
+            }
+        fi
     fi
-    
+
     # Verify by test mounting
     log "Verifying filesystem integrity..."
     if mount -t ext4 -o loop,ro "$ROOTFS_IMG" "$CHROOT_PATH" 2>/dev/null; then

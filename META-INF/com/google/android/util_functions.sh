@@ -155,7 +155,10 @@ extract_sparse() {
     echo -e "- Creating sparse image: ${SPARSE_IMAGE_SIZE}GB\n"
 
     # Create and format sparse image
-    truncate -s "${SPARSE_IMAGE_SIZE}G" "$img_file" || return 1
+    if ! truncate -s "${SPARSE_IMAGE_SIZE}G" "$img_file"; then
+        echo "- Built-in truncate failed, trying busybox truncate..."
+        busybox truncate -s "${SPARSE_IMAGE_SIZE}G" "$img_file" || return 1
+    fi
     mkfs.ext4 -F -O ^has_journal,^resize_inode -m 0 -L "ubuntu-chroot" "$img_file" || {
         rm -f "$img_file"
         return 1
