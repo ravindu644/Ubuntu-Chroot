@@ -82,7 +82,10 @@ textarea {
 .console-header{font-weight:600;margin-bottom:8px;font-size:16px;color:var(--muted)}
 .console{flex:1;background:var(--console-bg);border-radius:10px;padding:12px;min-height:200px;max-height:300px;overflow:auto;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;border:1px solid rgba(0,0,0,0.06);font-size:13px;line-height:1.5;white-space:pre;box-sizing:border-box;min-width:0;width:100%}
 .console-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
-.foot{margin-top:12px;color:var(--muted);font-size:14px;text-align:center}
+.foot{margin-top:12px;color:var(--muted);font-size:14px;text-align:center;display:flex;align-items:center;justify-content:center;gap:12px;font-weight:500}
+.foot a{color:var(--muted);text-decoration:none;transition:color 0.2s ease;font-weight:500;-webkit-tap-highlight-color:transparent}
+.foot a:hover{color:var(--accent);text-decoration:underline}
+.foot .separator{color:var(--muted);font-weight:400}
 .switch{position:relative;display:inline-block;width:48px;height:26px;border-radius:13px;background:var(--muted);border:1px solid rgba(0,0,0,0.08);transition:all 0.3s cubic-bezier(0.4, 0, 0.2, 1);cursor:pointer;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 .switch input{display:none}
 .slider{position:absolute;top:1px;left:1px;width:22px;height:22px;background:white;border-radius:50%;transition:all 0.3s cubic-bezier(0.4, 0, 0.2, 1);box-shadow:0 2px 4px rgba(0,0,0,0.2)}
