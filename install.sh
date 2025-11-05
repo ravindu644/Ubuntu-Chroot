@@ -30,6 +30,7 @@ on_install() {
     # Extract web interface files
     unzip -o "$ZIPFILE" 'webroot/*' -d $MODPATH >&2
     unzip -oj "$ZIPFILE" 'service.sh' -d $MODPATH >&2
+    unzip -oj "$ZIPFILE" 'update.json' -d $MODPATH >&2
 
     # Extract and setup chroot components
     setup_chroot

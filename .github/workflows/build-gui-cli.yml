@@ -2,7 +2,8 @@ name: Build and Release GUI and CLI
 
 on:
   push:
-    tags: ['v*']
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       version:
@@ -30,30 +31,31 @@ jobs:
         with:
           ref: ${{ matrix.branch }}
 
+      - name: Install dependencies
+        run: sudo apt update && sudo apt install -y rsync python3
+
       - name: Build Ubuntu RootFS
         run: |
           cd Docker
           VERSION="${{ github.event.inputs.version || github.ref_name }}" ./build.sh
 
-      - name: Prepare Package
-        run: |
-          VERSION="${{ github.event.inputs.version || github.ref_name }}"
-          DATE=$(date +%Y%m%d)
-          ZIP_NAME="Ubuntu-Chroot-${VERSION}-${DATE}${{ matrix.suffix }}.zip"
-          echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
+      - name: Build Update ZIP
+        run: ./build_zip.sh ${{ matrix.name }} "${{ github.event.inputs.version || github.ref_name }}" --update
 
-          rm -rf .git .github .gitignore .gitattributes
-          find . -name ".git*" -delete
-
-      - name: Create Zip Archive
-        run: |
-          zip -r -9 "${{ env.ZIP_NAME }}" . -x "Docker/*"
+      - name: Build Full ZIP
+        run: ./build_zip.sh ${{ matrix.name }} "${{ github.event.inputs.version || github.ref_name }}"
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}-zip
-          path: ${{ env.ZIP_NAME }}
+          path: update${{ matrix.suffix }}.zip
+
+      - name: Upload Full Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}-full-zip
+          path: Ubuntu-Chroot-${{ github.event.inputs.version || github.ref_name }}-*${{ matrix.suffix }}.zip
 
   release:
     runs-on: ubuntu-latest
@@ -71,9 +73,19 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ github.event.inputs.version || github.ref_name }}
           name: "Ubuntu Chroot ${{ github.event.inputs.version || github.ref_name }}"
-          body: |
-            Ubuntu Chroot Environment ${{ github.event.inputs.version || github.ref_name }}
+  update-json:
+    runs-on: ubuntu-latest
+    needs: release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-            Flashable Magisk/KernelSU/APatch module for Ubuntu ARM64 chroot environment.
-            
-            Includes GUI and CLI variants.
+      - name: Update JSONs and Changelog
+        run: ./update_meta.sh
+
+      - name: Commit and push
+        run: |
+          git config user.name 'GitHub Actions'
+          git config user.email 'actions@github.com'
+          git add CHANGELOG.md update-*.json
