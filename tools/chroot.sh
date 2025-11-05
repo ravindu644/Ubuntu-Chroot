@@ -175,16 +175,13 @@ is_chroot_running() {
 }
 
 check_sysv_ipc() {
-    # Check if System V IPC is enabled in the kernel
-    local cfg
-    cfg=$(zcat /proc/config.gz 2>/dev/null || cat /proc/config 2>/dev/null)
-    if echo "$cfg" | grep -q "^CONFIG_SYSVIPC=y"; then
+    # If SysV IPC is enabled, these proc entries exist
+    if [ -d "/proc/sysvipc" ]; then
         return 0  # IPC available
     else
         return 1  # IPC not available
     fi
 }
-
 
 # --- Setup Helper Functions ---
 
@@ -339,6 +336,23 @@ create_namespace() {
         return 1
     fi
 
+    # Report unsupported namespaces if debug mode is enabled
+    if [ "$LOGGING_ENABLED" -eq 1 ]; then
+        for ns in --pid --mount --uts --ipc; do
+            if ! echo "$unshare_flags" | grep -qw -- "$ns"; then
+                # Map namespace flag to config name
+                local config_name=""
+                case "$ns" in
+                    --pid) config_name="CONFIG_PID_NS" ;;
+                    --mount) config_name="CONFIG_MNT_NS" ;;
+                    --uts) config_name="CONFIG_UTS_NS" ;;
+                    --ipc) config_name="CONFIG_IPC_NS" ;;
+                esac
+                warn "${ns#--} namespace not enabled in the kernel ($config_name)"
+            fi
+        done
+    fi
+
     log "using flags: $unshare_flags"
     
     # Save the long-form flags. _get_ns_flags will translate them later.
@@ -370,8 +384,10 @@ start_chroot() {
     # Set flag to prevent recursion
     CHROOT_SETUP_IN_PROGRESS=1
 
-    if ! check_sysv_ipc; then
-        warn "System V IPC not enabled in kernel - some benchmarking tools (fio, kdiskmark) may fail"
+    if [ "$LOGGING_ENABLED" -eq 1 ]; then
+        if ! check_sysv_ipc; then
+            warn "CONFIG_SYSVIPC not enabled in kernel - some benchmarking tools (fio, kdiskmark) may fail"
+        fi
     fi
 
     if [ -f "$HOLDER_PID_FILE" ] && kill -0 "$(cat "$HOLDER_PID_FILE")" 2>/dev/null; then
