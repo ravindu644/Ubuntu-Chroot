@@ -411,31 +411,37 @@ while [ $# -gt 0 ]; do
             IP_NET_ADDR="192.168.42.0"
             IP_SUB_CDIR="24"
             kill_proc
+            shift
             ;;
         -o)
             shift
             UPSTREAM_IFACE="$1"
+            shift
             ;;
         -s)
-            if [ "$2" ]; then
-                shift
-                SSID="$1"
-            else
-                error "SSID not specified"
-                exit 1
-            fi
+            shift
+            SSID=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    -o|-p|-b|-c|-k|-h|--help) break ;;
+                    *) SSID="$SSID${SSID:+ }$1"; shift ;;
+                esac
+            done
             ;;
         -p)
             shift
             PASSWORD="$1"
+            shift
             ;;
         -b)
             shift
             BAND="$1"
+            shift
             ;;
         -c)
             shift
             CHANNEL="$1"
+            shift
             ;;
         *)
             error "Unknown option: $1"
@@ -443,7 +449,6 @@ while [ $# -gt 0 ]; do
             exit 1
             ;;
     esac
-    shift
 done
 
 # --- Main Part ---

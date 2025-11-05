@@ -845,7 +845,7 @@
     activeCommandId = 'hotspot-start';
 
     // Redirect stderr to stdout to capture all output
-    const cmd = `sh ${HOTSPOT_SCRIPT} -o ${iface} -s ${ssid} -p ${password} -b ${band} -c ${channel} 2>&1`;
+    const cmd = `sh ${HOTSPOT_SCRIPT} -o "${iface}" -s "${ssid}" -p "${password}" -b "${band}" -c "${channel}" 2>&1`;
     
     // Use setTimeout to allow UI to update, then run sync command wrapped as async
     setTimeout(async () => {
