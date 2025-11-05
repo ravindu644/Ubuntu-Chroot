@@ -29,6 +29,23 @@ IP_NET_ADDR="192.168.42.0"
 IP_BEGIN="192.168.42.10"
 IP_END="192.168.42.50"
 
+SCRIPT_NAME="$(basename "$0")"
+
+# --- Debug mode ---
+LOGGING_ENABLED=${LOGGING_ENABLED:-0}
+
+if [ "$LOGGING_ENABLED" -eq 1 ]; then
+    LOG_DIR="${CHROOT_PATH%/*}/logs"
+    mkdir -p "$LOG_DIR"
+    LOG_FILE="$LOG_DIR/$SCRIPT_NAME.txt"
+    LOG_FIFO="$LOG_DIR/$SCRIPT_NAME.fifo"
+    rm -f "$LOG_FIFO" && mkfifo "$LOG_FIFO" 2>/dev/null
+    echo "=== Logging started at $(date) ===" >> "$LOG_FILE"
+    busybox tee -a "$LOG_FILE" < "$LOG_FIFO" &
+    exec >> "$LOG_FIFO" 2>> "$LOG_FILE"
+    set -x
+fi
+
 # --- Logging and Utility Functions ---
 
 log() { echo "$1"; }

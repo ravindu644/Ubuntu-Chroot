@@ -1,13 +1,14 @@
 // Chroot Control UI - Real-time async execution with non-blocking interface
 (function(){
   // Use hardcoded paths provided by install.sh
-  const PATH_CHROOT_SH = '/data/local/ubuntu-chroot/chroot.sh';
-  const CHROOT_PATH_UI = '/data/local/ubuntu-chroot/rootfs';
-  const BOOT_FILE = '/data/local/ubuntu-chroot/boot-service';
   const CHROOT_DIR = '/data/local/ubuntu-chroot';
-  const POST_EXEC_SCRIPT = '/data/local/ubuntu-chroot/post_exec.sh';
-  const HOTSPOT_SCRIPT = '/data/local/ubuntu-chroot/start-hotspot';
-  const OTA_UPDATER = '/data/local/ubuntu-chroot/ota/updater.sh';
+  const PATH_CHROOT_SH = `${CHROOT_DIR}/chroot.sh`;
+  const CHROOT_PATH_UI = `${CHROOT_DIR}/rootfs`;
+  const BOOT_FILE = `${CHROOT_DIR}/boot-service`;
+  const POST_EXEC_SCRIPT = `${CHROOT_DIR}/post_exec.sh`;
+  const HOTSPOT_SCRIPT = `${CHROOT_DIR}/start-hotspot`;
+  const OTA_UPDATER = `${CHROOT_DIR}/ota/updater.sh`;
+  const LOG_DIR = `${CHROOT_DIR}/logs`;
 
   const els = {
     statusDot: document.getElementById('status-dot'),
@@ -29,6 +30,7 @@
     clearScript: document.getElementById('clear-script'),
     updateBtn: document.getElementById('update-btn'),
     backupBtn: document.getElementById('backup-btn'),
+    debugToggle: document.getElementById('debug-toggle'),
     startHotspotBtn: document.getElementById('start-hotspot-btn'),
     stopHotspotBtn: document.getElementById('stop-hotspot-btn'),
     hotspotForm: document.getElementById('hotspot-form'),
@@ -53,6 +55,9 @@
   // Track hotspot state - much more reliable than filesystem checks
   let hotspotActive = false;
 
+  // Track debug mode state
+  let debugModeActive = false;
+
   // Track sparse image migration status
   let sparseMigrated = false;
 
@@ -75,6 +80,38 @@
     try{
       localStorage.setItem('hotspot_active', hotspotActive.toString());
     }catch(e){/* ignore storage errors */}
+  }
+
+  /**
+   * Load debug mode status from localStorage on page load
+   */
+  function loadDebugMode(){
+    try{
+      const saved = localStorage.getItem('debug_mode_active');
+      debugModeActive = saved === 'true';
+      updateDebugIndicator();
+    }catch(e){
+      debugModeActive = false;
+    }
+  }
+
+  /**
+   * Save debug mode status to localStorage
+   */
+  function saveDebugMode(){
+    try{
+      localStorage.setItem('debug_mode_active', debugModeActive.toString());
+    }catch(e){/* ignore storage errors */}
+  }
+
+  /**
+   * Update the debug indicator visibility in the header
+   */
+  function updateDebugIndicator(){
+    const indicator = document.getElementById('debug-indicator');
+    if(indicator){
+      indicator.style.display = debugModeActive ? 'block' : 'none';
+    }
   }
 
   // Track if chroot missing message was logged
@@ -189,7 +226,10 @@
       return null;
     }
 
-    const commandId = cmdExec.executeAsync(cmd, true, {
+    // Prepend LOGGING_ENABLED=1 if debug mode is active
+    const finalCmd = debugModeActive ? `LOGGING_ENABLED=1 ${cmd}` : cmd;
+
+    const commandId = cmdExec.executeAsync(finalCmd, true, {
       onOutput: (output) => {
         // Display output, but filter out executing messages
         if(output) {
@@ -228,8 +268,11 @@
       throw new Error(msg);
     }
 
+    // Prepend LOGGING_ENABLED=1 if debug mode is active
+    const finalCmd = debugModeActive ? `LOGGING_ENABLED=1 ${cmd}` : cmd;
+
     try {
-      const out = await cmdExec.execute(cmd, true);
+      const out = await cmdExec.execute(finalCmd, true);
       return out;
     } catch(err) {
       // Don't print duplicate error if root check already failed
@@ -655,6 +698,10 @@
   async function openSettingsPopup(){
     // Load current post-exec script
     await loadPostExecScript();
+    // Update debug toggle state
+    if(els.debugToggle) {
+      els.debugToggle.checked = debugModeActive;
+    }
     // Show popup with animation
     els.settingsPopup.classList.add('active');
   }
@@ -1758,6 +1805,12 @@
       // For now, always show experimental features (can be made conditional later)
       experimentalSection.style.display = 'block';
     }
+
+    const optionalSection = document.querySelector('.optional-section');
+    if(optionalSection){
+      // Always show optional section
+      optionalSection.style.display = 'block';
+    }
   }
 
   // Sparse image migration function
@@ -2587,9 +2640,18 @@
   els.clearConsole.addEventListener('click', (e) => { 
     animateButton(e.target);
     els.console.innerHTML = ''; 
-    appendConsole('Console cleared', 'info');
     // Clear saved logs
     try{ localStorage.removeItem('chroot_console_logs'); }catch(e){}
+    
+    // If debug mode is enabled, also clear the logs folder
+    if(debugModeActive){
+      appendConsole('Console and logs are cleared', 'info');
+      setTimeout(() => {
+        runCmdAsync(`rm -rf ${LOG_DIR}`, () => {});
+      }, 100);
+    } else {
+      appendConsole('Console cleared', 'info');
+    }
   });
   els.refreshStatus.addEventListener('click', (e) => {
     animateButton(e.target);
@@ -2597,6 +2659,16 @@
     refreshStatus();
   });
   els.bootToggle.addEventListener('change', () => writeBootFile(els.bootToggle.checked ? 1 : 0));
+  els.debugToggle.addEventListener('change', () => {
+    debugModeActive = els.debugToggle.checked;
+    saveDebugMode();
+    updateDebugIndicator();
+    if(debugModeActive){
+      appendConsole('Debug mode enabled. All scripts will now log to /data/logs/ubuntu-chroot/logs', 'warn');
+    } else {
+      appendConsole('Debug mode disabled', 'info');
+    }
+  });
 
   // Settings popup event handlers
   els.settingsBtn.addEventListener('click', () => openSettingsPopup());
@@ -2736,6 +2808,7 @@
   loadConsoleLogs(); // Restore previous console logs
   loadHotspotSettings(); // Load hotspot settings
   loadHotspotStatus(); // Load hotspot status
+  loadDebugMode(); // Load debug mode status
   updateChannelLimits(); // Initialize channel options based on default/loaded band
   
   initExperimentalFeatures(); // Initialize experimental features
