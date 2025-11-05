@@ -136,11 +136,14 @@ create_sparse_image() {
     
     log "Creating sparse image: ${size_gb}GB"
     
-    # Use busybox truncate with G suffix to avoid arithmetic overflow
-    log "Using busybox truncate to create ${size_gb}GB sparse file..."
-    if ! busybox truncate -s "${size_gb}G" "$img_path" 2>/dev/null; then
-        error "Failed to create sparse image with busybox truncate"
-        return 1
+    # Try Android's built-in truncate first, fallback to busybox
+    log "Using truncate to create ${size_gb}GB sparse file..."
+    if ! truncate -s "${size_gb}G" "$img_path" 2>/dev/null; then
+        log "Built-in truncate failed, trying busybox truncate..."
+        if ! busybox truncate -s "${size_gb}G" "$img_path" 2>/dev/null; then
+            error "Failed to create sparse image with both truncate and busybox truncate"
+            return 1
+        fi
     fi
     
     # Force filesystem sync - CRITICAL for Android
