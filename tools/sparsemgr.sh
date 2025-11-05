@@ -6,6 +6,22 @@
 # Default configuration - can be overridden
 DEFAULT_CHROOT_DIR="/data/local/ubuntu-chroot"
 CHROOT_DIR="${CHROOT_DIR:-$DEFAULT_CHROOT_DIR}"
+SCRIPT_NAME="$(basename "$0")"
+
+# --- Debug mode ---
+LOGGING_ENABLED=${LOGGING_ENABLED:-0}
+
+if [ "$LOGGING_ENABLED" -eq 1 ]; then
+    LOG_DIR="${CHROOT_DIR%/*}/logs"
+    mkdir -p "$LOG_DIR"
+    LOG_FILE="$LOG_DIR/$SCRIPT_NAME.txt"
+    LOG_FIFO="$LOG_DIR/$SCRIPT_NAME.fifo"
+    rm -f "$LOG_FIFO" && mkfifo "$LOG_FIFO" 2>/dev/null
+    echo "=== Logging started at $(date) ===" >> "$LOG_FILE"
+    busybox tee -a "$LOG_FILE" < "$LOG_FIFO" &
+    exec >> "$LOG_FIFO" 2>> "$LOG_FILE"
+    set -x
+fi
 
 # Parse command line arguments
 while [ $# -gt 0 ]; do

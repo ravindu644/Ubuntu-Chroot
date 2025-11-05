@@ -51,7 +51,7 @@ textarea {
 .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;position:fixed;top:0;left:50%;transform:translateX(-50%);padding:calc(var(--top-inset) + 8px) 12px 8px;background:var(--bg);z-index:10;width:100%;max-width:1200px;box-sizing:border-box;border-bottom:1px solid rgba(0,0,0,0.05)}
 .panel{display:grid;grid-template-columns:1fr;gap:14px;min-width:0;margin-top:calc(60px + var(--top-inset))}
 .card{background:var(--card);border-radius:var(--surface-radius);padding:16px;box-shadow:0 6px 20px rgba(6,8,14,0.06);box-sizing:border-box;min-width:0}
-.title{margin:0 0 10px 0}
+.title{margin:0 0 10px 0;display:flex;align-items:center}
 .row{display:flex;align-items:center;justify-content:space-between;margin-top:8px}
 .status-row{align-items:center}
 .status-pill{display:flex;align-items:center;gap:10px}
@@ -168,6 +168,31 @@ textarea {
 /* Ensure outline buttons remain visible in dark mode (lighten the border) */
 [data-theme="dark"] .btn.outline{border-color: rgba(255,255,255,0.15); color:var(--text);}
 
+/* Debug indicator styling */
+.debug-indicator-tiny {
+  display: inline-block;
+  background: #fbbf24;
+  color: #92400e;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 5px;
+  margin-left: 8px;
+  border-radius: 2px;
+  border: 1px solid #d97706;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  line-height: 1;
+  white-space: nowrap;
+  vertical-align: text-top;
+  flex-shrink: 0;
+}
+
+[data-theme="dark"] .debug-indicator-tiny {
+  background: #f59e0b;
+  color: #92400e;
+  border-color: #d97706;
+}
+
 /* Console message styling */
 .console > div{margin:2px 0;padding:2px 0}
 .console .err{color:#ef4444;font-weight:500}
@@ -209,6 +234,7 @@ textarea {
 
 /* Logo styles */
 .brand{display:flex;align-items:center;font-weight:700;font-size:18px}
+.controls{flex:0 0 auto}
 .header-logo{height:32px;width:auto;max-width:200px;object-fit:contain;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.1))}
 [data-theme="dark"] .header-logo{filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5)) brightness(1.2) contrast(1.1)}
 
@@ -633,6 +659,42 @@ textarea {
 }
 
 .experimental-toggle h4 {
+  display: inline;
+  margin-right: 8px;
+}
+
+/* Optional Section Styling */
+.optional-section {
+  border-color: rgba(0,0,0,0.08);
+}
+
+.optional-toggle {
+  cursor: pointer;
+  list-style: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.optional-toggle::-webkit-details-marker {
+  display: none;
+}
+
+.optional-toggle::after {
+  content: "▶";
+  float: right;
+  transform: rotate(0deg);
+  transition: transform 0.2s ease;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.optional-section[open] .optional-toggle::after {
+  transform: rotate(90deg);
+}
+
+.optional-toggle h4 {
   display: inline;
   margin-right: 8px;
 }

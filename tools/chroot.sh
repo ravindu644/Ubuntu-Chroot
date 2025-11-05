@@ -18,6 +18,20 @@ SILENT=0
 SKIP_POST_EXEC=0
 CHROOT_SETUP_IN_PROGRESS=0
 
+# --- Debug mode ---
+LOGGING_ENABLED=${LOGGING_ENABLED:-0}
+
+if [ "$LOGGING_ENABLED" -eq 1 ]; then
+    LOG_DIR="${CHROOT_PATH%/*}/logs"
+    mkdir -p "$LOG_DIR"
+    LOG_FILE="$LOG_DIR/$SCRIPT_NAME.txt"
+    LOG_FIFO="$LOG_DIR/$SCRIPT_NAME.fifo"
+    rm -f "$LOG_FIFO" && mkfifo "$LOG_FIFO" 2>/dev/null
+    echo "=== Logging started at $(date) ===" >> "$LOG_FILE"
+    busybox tee -a "$LOG_FILE" < "$LOG_FIFO" &
+    exec >> "$LOG_FIFO" 2>> "$LOG_FILE"
+    set -x
+fi
 
 # --- Logging and Utility Functions ---
 
@@ -526,6 +540,11 @@ umount_chroot() {
 
 enter_chroot() {
     local user="$1"
+
+    if [ "$LOGGING_ENABLED" -eq 1 ]; then
+        warn "DEBUG MODE ENABLED. CAN'T ENTER AN INTERACTIVE CHROOT SHELL UNTIL WE DISABLE"
+        return
+    fi
 
     # Check if we are running in an interactive terminal.
     if ! [ -t 1 ]; then

@@ -44,7 +44,10 @@
     </header>
     <main class="panel">
       <section class="card">
-        <h2 class="title">Ubuntu chroot</h2>
+        <h2 class="title">
+          Ubuntu Chroot
+          <span id="debug-indicator" class="debug-indicator-tiny" style="display:none">DEBUG</span>
+        </h2>
         <div class="row status-row">
           <div class="status-pill">
             <span id="status-dot" class="dot dot-unknown" aria-hidden></span>
@@ -78,7 +81,7 @@
                 </label>
               </div>
             </div>
-
+        </div>
       </section>
 
       <section class="card console-card">
@@ -150,6 +153,27 @@
                 <button id="sparse-settings-btn" class="btn outline small" title="Sparse Image Settings" style="display:none;width:36px;height:36px;padding:6px;aspect-ratio:1;min-height:auto;display:flex;align-items:center;justify-content:center;">
                   <svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 24 24" style="width: 18px; height: 18px; opacity: 0.8;"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M20 7h-9m3 10H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></g></svg>
                 </button>
+              </div>
+            </div>
+          </details>
+
+          <!-- Optional Section -->
+          <details class="setting-section optional-section">
+            <summary class="optional-toggle">
+              <h4>Optional</h4>
+            </summary>
+            <p class="setting-desc"><br>Additional options for advanced users</p>
+
+            <!-- Debug Mode -->
+            <div class="setting-subsection">
+              <h5>Debug Mode</h5>
+              <p class="setting-desc">Enable detailed logging for troubleshooting. Logs will be saved to /data/logs/ubuntu-chroot/logs</p>
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+                <label class="row-label" style="margin:0">Enable debug logging:</label>
+                <label class="toggle-inline">
+                  <input id="debug-toggle" type="checkbox">
+                  <span>Enable</span>
+                </label>
               </div>
             </div>
           </details>
