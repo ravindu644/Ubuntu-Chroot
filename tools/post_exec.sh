@@ -23,11 +23,14 @@ func_start_vnc(){
 
 echo "[POST-EXEC] Running post-execution script..."
 
-# Example: Start SSH server
-# service ssh start
-
 # Start dbus service by default
 service dbus start
 func_start_vnc
+
+# Example: Start SSH server
+# service ssh start
+
+# start docker service if your kernel is supported
+# dockerd > /dev/null 2>&1 &
 
 echo "[POST-EXEC] Post-execution complete"
