@@ -473,21 +473,6 @@
         return;
       } else {
         _chrootMissingLogged = false;
-        // Re-enable actions when chroot exists
-        disableAllActions(false);
-        // Re-enable boot toggle and user select
-        if(els.bootToggle) {
-          els.bootToggle.disabled = false;
-          const toggleContainer = els.bootToggle.closest('.toggle-inline');
-          if(toggleContainer) {
-            toggleContainer.style.opacity = '';
-            toggleContainer.style.pointerEvents = '';
-          }
-        }
-        if(els.userSelect) {
-          els.userSelect.disabled = false;
-          els.userSelect.style.opacity = '';
-        }
 
         // Check if sparse image exists FIRST
         const sparseCheck = await runCmdSync(`[ -f "${CHROOT_DIR}/rootfs.img" ] && echo "sparse" || echo "directory"`);
@@ -501,6 +486,28 @@
       const s = String(out || '');
       // Check for "Status: RUNNING" from the status output
       const running = /Status:\s*RUNNING/i.test(s);
+
+      // COLLECT ALL STATUS INFO FIRST BEFORE CHANGING UI
+
+      // Fetch users if running (do this before UI updates to avoid flicker)
+      if(running){
+        await fetchUsers();
+      }
+
+      // Check hotspot state if running
+      let currentHotspotActive = false;
+      if(running && rootAccessConfirmed){
+        currentHotspotActive = await checkAp0Interface();
+        if(currentHotspotActive !== hotspotActive){
+          // State mismatch - update our saved state to match reality
+          hotspotActive = currentHotspotActive;
+          saveHotspotStatus();
+          appendConsole(`Hotspot state corrected: ${currentHotspotActive ? 'running' : 'stopped'}`, currentHotspotActive ? 'info' : 'warn');
+        }
+      }
+
+      // NOW APPLY ALL UI CHANGES AT ONCE
+
       updateStatus(running ? 'running' : 'stopped');
 
       // Enable copy-login button when running
@@ -513,24 +520,13 @@
           // Hotspot button enabled, but individual start/stop buttons depend on hotspot state
           els.hotspotBtn.disabled = false;
           els.hotspotBtn.style.opacity = '';
-          
-          // Check actual ap0 interface status to validate our saved state
-          const ap0Exists = await checkAp0Interface();
-          if(ap0Exists !== hotspotActive){
-            // State mismatch - update our saved state to match reality
-            hotspotActive = ap0Exists;
-            saveHotspotStatus();
-            appendConsole(`Hotspot state corrected: ${ap0Exists ? 'running' : 'stopped'}`, ap0Exists ? 'info' : 'warn');
-          }
-          
+
           // Disable individual hotspot buttons based on hotspot state
           els.startHotspotBtn.disabled = hotspotActive;
           els.stopHotspotBtn.disabled = !hotspotActive;
           els.startHotspotBtn.style.opacity = hotspotActive ? '0.5' : '';
           els.stopHotspotBtn.style.opacity = !hotspotActive ? '0.5' : '';
         }
-        // Fetch users when chroot is running
-        fetchUsers();
       } else {
         els.userSelect.disabled = true;
         els.hotspotBtn.disabled = true;
@@ -545,6 +541,45 @@
         // Reset hotspot state when chroot stops
         hotspotActive = false;
         saveHotspotStatus(); // Save to localStorage
+      }
+
+      // Enable/disable main action buttons and other UI elements based on chroot existence and root access
+      if(rootAccessConfirmed){
+        // Enable main action buttons when root is available and chroot exists
+        els.startBtn.disabled = running;
+        els.stopBtn.disabled = !running;
+        els.restartBtn.disabled = !running;
+        els.startBtn.style.opacity = running ? '0.5' : '';
+        els.stopBtn.style.opacity = !running ? '0.5' : '';
+        els.restartBtn.style.opacity = !running ? '0.5' : '';
+
+        // Enable other UI elements
+        els.settingsBtn.disabled = false;
+        els.settingsBtn.style.opacity = '';
+        els.hotspotBtn.disabled = !running;
+        els.hotspotBtn.style.opacity = running ? '' : '0.5';
+        els.clearConsole.disabled = false;
+        els.clearConsole.style.opacity = '';
+        els.refreshStatus.disabled = false;
+        els.refreshStatus.style.opacity = '';
+        if(els.themeToggle){
+          els.themeToggle.disabled = false;
+          els.themeToggle.style.opacity = '';
+        }
+        try{ document.getElementById('copy-login').disabled = !running; }catch(e){}
+
+        // Boot toggle
+        if(els.bootToggle) {
+          els.bootToggle.disabled = false;
+          const toggleContainer = els.bootToggle.closest('.toggle-inline');
+          if(toggleContainer) {
+            toggleContainer.style.opacity = '';
+            toggleContainer.style.pointerEvents = '';
+          }
+        }
+
+        // User select
+        els.userSelect.disabled = !running;
       }
     }catch(e){
       updateStatus('unknown');
