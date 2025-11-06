@@ -27,6 +27,9 @@ echo "[POST-EXEC] Running post-execution script..."
 service dbus start
 func_start_vnc
 
+# Start binfmt service by default (for running x86_64 binaries)
+service binfmt-support start
+
 # Example: Start SSH server
 # service ssh start
 
