@@ -159,6 +159,66 @@ EOF
     return 0
 }
 
+update_v2510() {
+
+    # Update package lists
+    if ! run_in_chroot "apt-get update"; then
+        error "Failed to update package lists"
+        return 1
+    fi
+    
+    # Install dbus
+    if ! run_in_chroot "apt-get install -y dbus"; then
+        error "Failed to install dbus"
+        return 1
+    fi
+
+    log "dbus installed successfully"
+
+    # Install at-spi2-core
+    if ! run_in_chroot "apt-get install -y at-spi2-core"; then
+        error "Failed to install at-spi2-core"
+        return 1
+    fi
+
+    log "at-spi2-core installed successfully"
+
+    # Add to user's .bashrc if user exists
+    if run_in_chroot /bin/bash << 'EOF'
+SETUP_USER_FILE="/var/lib/.default-user"
+if [ -f "$SETUP_USER_FILE" ]; then
+    DEFAULT_USER=$(cat "$SETUP_USER_FILE" 2>/dev/null || echo '')
+    if [ -n "$DEFAULT_USER" ] && id "$DEFAULT_USER" >/dev/null 2>&1; then
+cat > /home/$DEFAULT_USER/.vnc/xstartup << 'VNC_EOF'
+#!/bin/sh
+# Unset these to prevent session conflicts
+unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
+
+# Load user resources if available
+[ -r $HOME/.Xresources ] && xrdb $HOME/.Xresources
+
+# Set solid background (better VNC performance than wallpaper)
+xsetroot -solid grey
+
+# Start XFCE with proper dbus session
+exec dbus-launch --exit-with-session xfce4-session
+VNC_EOF
+        chmod +x /home/$DEFAULT_USER/.vnc/xstartup
+    fi
+fi
+EOF
+    then
+        log "VNC startup script updated successfully"
+    else
+        error "Failed to update VNC startup script"
+        return 1
+    fi
+
+    return 0
+}
+
+
 # Add new updates below following the pattern:
 # update_v{VERSION_CODE}() {
 #     log "Description of what this update does..."
