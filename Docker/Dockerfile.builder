@@ -105,9 +105,7 @@ RUN apt-get install -y --no-install-recommends \
     docker.io \
     qemu \
     binfmt-support \
-    qemu-user-static \
-    openjdk-21-jdk \
-    openjdk-17-jdk
+    qemu-user-static
     
 # Install fastfetch (neofetch alternative) and clean up all apt lists
 RUN apt-get install -y --no-install-recommends software-properties-common && \
