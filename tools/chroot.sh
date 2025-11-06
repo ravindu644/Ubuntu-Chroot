@@ -675,27 +675,61 @@ backup_chroot() {
     
     local backup_dir
     backup_dir="$(dirname "$backup_path")"
-    if ! run_in_ns mkdir -p "$backup_dir"; then
+    # Use a direct command, not run_in_ns, as namespaces might not exist yet.
+    if ! mkdir -p "$backup_dir"; then
         error "Failed to create backup directory: $backup_dir"
         exit 1
     fi
     
+    log "Preparing for backup: Stopping and unmounting chroot environment..."
+    stop_chroot
+    sync && sleep 1
+
     log "Creating backup archive: $backup_path"
-    stop_chroot >/dev/null 2>&1
-    start_chroot >/dev/null 2>&1
-    umount_chroot >/dev/null 2>&1
-    sleep 1
     
-    if run_in_ns busybox tar -czf "$backup_path" -C "$CHROOT_PATH" . 2>/dev/null; then
-        local size
-        size=$(run_in_ns du -h "$backup_path" 2>/dev/null | cut -f1)
-        log "Backup created successfully: $backup_path (${size:-unknown size})"
+    local tar_exit_code=1 # Default to failure
+
+    if [ -f "$ROOTFS_IMG" ]; then
+        # --- Sparse Image Method ---
+        # Mount the image cleanly and temporarily, outside of any namespace.
+        log "Using sparse image backup method."
+        local temp_mount_point="${CHROOT_PATH}_bkmnt"
+        mkdir -p "$temp_mount_point"
+
+        # Mount the image read-only for safety.
+        if mount -t ext4 -o loop,ro "$ROOTFS_IMG" "$temp_mount_point"; then
+            log "Sparse image mounted cleanly for backup."
+            
+            # Run tar on the clean, temporary mount without any namespace.
+            busybox tar -czf "$backup_path" -C "$temp_mount_point" .
+            tar_exit_code=$?
+            
+            # Clean up immediately.
+            sync
+            umount "$temp_mount_point"
+            rmdir "$temp_mount_point"
+        else
+            error "Failed to create a clean mount of the sparse image for backup."
+            rmdir "$temp_mount_point" >/dev/null 2>&1
+            tar_exit_code=1
+        fi
     else
-        error "Failed to create backup archive"
-        exit 1
+        # --- Directory Method (the simple, traditional case) ---
+        log "Using directory backup method."
+        # No namespace needed, as stop_chroot should have cleaned everything.
+        busybox tar -czf "$backup_path" -C "$CHROOT_PATH" .
+        tar_exit_code=$?
     fi
     
-    stop_chroot >/dev/null 2>&1
+    # --- Check result and provide feedback ---
+    if [ "$tar_exit_code" -eq 0 ]; then
+        local size=$(du -h "$backup_path" 2>/dev/null | cut -f1)
+        log "Backup created successfully: $backup_path (${size:-unknown size})"
+    else
+        error "Failed to create backup archive. Removing incomplete file."
+        rm -f "$backup_path" # Clean up the failed/partial archive
+        exit 1
+    fi
 }
 
 resize_sparse() {
