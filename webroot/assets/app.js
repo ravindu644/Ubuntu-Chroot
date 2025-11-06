@@ -1561,120 +1561,32 @@
     disableAllActions(true);
     disableSettingsPopup(true);
 
-    // Check if chroot is running
-    const isRunning = els.statusText.textContent.trim() === 'running';
+    // Mark as active to prevent other commands
+    activeCommandId = 'chroot-restore';
 
-    if(isRunning){
-      // Stop chroot first
-      progressLine.textContent = '⏳ Stopping chroot';
-      dotCount = 0;
+    setTimeout(() => {
+      runCmdAsync(`sh ${PATH_CHROOT_SH} restore --webui "${backupPath}"`, (result) => {
+        clearInterval(progressInterval);
+        progressLine.remove();
 
-      setTimeout(() => {
-        runCmdAsync(`sh ${PATH_CHROOT_SH} stop >/dev/null 2>&1`, (result) => {
-          if(result.success) {
-            appendConsole('✓ Chroot stopped for restore', 'success');
-            // Now proceed to remove
-            proceedToRemove();
-          } else {
-            clearInterval(progressInterval);
-            progressLine.remove();
-            appendConsole('✗ Failed to stop chroot', 'err');
-            appendConsole('Restore aborted - please stop the chroot manually first', 'err');
-            activeCommandId = null;
-            disableAllActions(false);
-            disableSettingsPopup(false, true);
-          }
-        });
-      }, 50);
-    } else {
-      // Chroot not running, proceed directly to remove
-      proceedToRemove();
-    }
+        if(result.success) {
+          appendConsole('✓ Restore completed successfully', 'success');
+          appendConsole('The chroot environment has been restored', 'info');
+          appendConsole('━━━ Restore Complete ━━━', 'success');
 
-    function proceedToRemove(){
-      progressLine.textContent = '⏳ Removing current chroot';
-      dotCount = 0;
+          updateStatus('stopped');
+          disableAllActions(true);
+        } else {
+          appendConsole('✗ Restore failed', 'err');
+          disableAllActions(false);
+        }
 
-      setTimeout(() => {
-        // First check if directory exists
-        runCmdSync(`[ -d "${CHROOT_PATH_UI}" ] && echo "exists" || echo "not_exists"`).then((checkResult) => {
-          const dirExists = checkResult && checkResult.trim() === 'exists';
-          
-          if(dirExists) {
-            // Check if sparse image is mounted and force unmount it first
-            runCmdAsync(`mountpoint -q "${CHROOT_PATH_UI}" && (umount -f "${CHROOT_PATH_UI}" || umount -l "${CHROOT_PATH_UI}")`, (umountResult) => {
-              // Now remove directory
-              runCmdAsync(`rm -rf ${CHROOT_PATH_UI}`, (result) => {
-                if(result.success) {
-                  if(dirExists) {
-                    appendConsole('✓ Existing chroot directory removed', 'success');
-                  }
-                  // Now proceed to restore
-                  proceedToRestore();
-                } else {
-                  clearInterval(progressInterval);
-                  progressLine.remove();
-                  appendConsole('✗ Failed to remove existing chroot directory', 'err');
-                  appendConsole('Restore aborted - please remove the directory manually first', 'err');
-                  activeCommandId = null;
-                  disableAllActions(false);
-                  disableSettingsPopup(false, false);
-                }
-              });
-            });
-          } else {
-            // Directory doesn't exist, proceed directly to restore
-            proceedToRestore();
-          }
-        }).catch(() => {
-          // If check fails, assume directory exists and proceed with removal
-          runCmdAsync(`mountpoint -q "${CHROOT_PATH_UI}" && (umount -f "${CHROOT_PATH_UI}" || umount -l "${CHROOT_PATH_UI}"); rm -rf ${CHROOT_PATH_UI}`, (result) => {
-            if(result.success) {
-              appendConsole('✓ Existing chroot directory removed', 'success');
-              // Now proceed to restore
-              proceedToRestore();
-            } else {
-              clearInterval(progressInterval);
-              progressLine.remove();
-              appendConsole('✗ Failed to remove existing chroot directory', 'err');
-              appendConsole('Restore aborted - please remove the directory manually first', 'err');
-              activeCommandId = null;
-              disableAllActions(false);
-              disableSettingsPopup(false, false);
-            }
-          });
-        });
-      }, 50);
-    }
+        activeCommandId = null;
+        disableSettingsPopup(false, true);
 
-    function proceedToRestore(){
-      progressLine.textContent = '⏳ Extracting backup';
-      dotCount = 0;
-
-      setTimeout(() => {
-        runCmdAsync(`sh ${PATH_CHROOT_SH} restore --webui "${backupPath}"`, (result) => {
-          clearInterval(progressInterval);
-          progressLine.remove();
-
-          if(result.success) {
-            appendConsole('✓ Restore completed successfully', 'success');
-            appendConsole('The chroot environment has been restored', 'info');
-            appendConsole('━━━ Restore Complete ━━━', 'success');
-
-            updateStatus('stopped');
-            disableAllActions(true);
-          } else {
-            appendConsole('✗ Restore failed', 'err');
-            disableAllActions(false);
-          }
-
-          activeCommandId = null;
-          disableSettingsPopup(false, true);
-
-          setTimeout(() => refreshStatus(), 1000);
-        });
-      }, 50);
-    }
+        setTimeout(() => refreshStatus(), 1000);
+      });
+    }, 50);
   }
 
   async function uninstallChroot(){ 
@@ -1724,77 +1636,35 @@
     disableAllActions(true);
     disableSettingsPopup(true);
 
-    // Check current status from UI state - no need for additional command
-    const currentStatus = els.statusText.textContent.trim();
-    const isRunning = currentStatus === 'running';
-    
-    if(isRunning){
-      progressLine.textContent = '⏳ Stopping chroot';
-      dotCount = 0; // reset dots
-      
-      // Stop chroot first
-      setTimeout(() => {
-        runCmdAsync(`sh ${PATH_CHROOT_SH} stop >/dev/null 2>&1`, (result) => {
-          if(result.success) {
-            // Proceed to removal after successful stop
-            proceedToRemove();
-          } else {
-            clearInterval(progressInterval);
-            progressLine.remove();
-            
-            appendConsole('✗ Failed to stop chroot', 'err');
-            appendConsole('Uninstallation aborted - please stop the chroot manually first', 'err');
-            disableAllActions(false);
-            disableSettingsPopup(false, false); // chroot no longer exists after uninstall
-          }
-        });
-      }, 50);
-    } else {
-      // Chroot not running - proceed directly to removal
-      proceedToRemove();
-    }
+    // Mark as active to prevent other commands
+    activeCommandId = 'chroot-uninstall';
 
-    // Helper function to remove chroot files
-    function proceedToRemove(){
-      progressLine.textContent = '⏳ Removing files';
-      dotCount = 0; // reset dots
-      
-      // Remove chroot directory
-      setTimeout(() => {
-        runCmdAsync(`rm -rf ${CHROOT_PATH_UI}`, (result) => {
-          clearInterval(progressInterval);
-          progressLine.remove();
+    setTimeout(() => {
+      runCmdAsync(`sh ${PATH_CHROOT_SH} uninstall --webui`, (result) => {
+        clearInterval(progressInterval);
+        progressLine.remove();
+
+        if(result.success) {
+          appendConsole('✅ Chroot uninstalled successfully!', 'success');
+          appendConsole('All chroot data has been removed.', 'info');
+          appendConsole('━━━ Uninstallation Complete ━━━', 'success');
           
-          if(result.success) {
-            // Also remove sparse image if it exists
-            runCmdAsync(`[ -f "${CHROOT_DIR}/rootfs.img" ] && rm -f "${CHROOT_DIR}/rootfs.img" || true`, (imgResult) => {
-              // Log image removal but don't fail if it doesn't exist
-              if(imgResult.success) {
-                appendConsole('Sparse image file removed.', 'info');
-              }
-              
-              appendConsole('✅ Chroot uninstalled successfully!', 'success');
-              appendConsole('All chroot data has been removed.', 'info');
-              appendConsole('━━━ Uninstallation Complete ━━━', 'success');
-              
-              // Update UI to reflect removal
-              updateStatus('stopped');
-              disableAllActions(true);
-            });
-          } else {
-            appendConsole('✗ Failed to remove chroot files', 'err');
-            appendConsole('You may need to manually remove the directory', 'warn');
-            disableAllActions(false);
-          }
-          
-          // Always re-enable settings popup after completion
-          disableSettingsPopup(false, false); // chroot no longer exists after uninstall
-          
-          // Refresh status to update UI
-          setTimeout(() => refreshStatus(), 1000);
-        });
-      }, 50);
-    }
+          // Update UI to reflect removal
+          updateStatus('stopped');
+          disableAllActions(true);
+        } else {
+          appendConsole('✗ Uninstallation failed', 'err');
+          appendConsole('Check the logs above for details.', 'err');
+          disableAllActions(false);
+        }
+        
+        activeCommandId = null;
+        disableSettingsPopup(false, false); // chroot no longer exists after uninstall
+        
+        // Refresh status to update UI
+        setTimeout(() => refreshStatus(), 1000);
+      });
+    }, 50);
   }
 
   // Disable settings popup when no root available

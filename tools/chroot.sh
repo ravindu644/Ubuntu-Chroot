@@ -59,6 +59,7 @@ usage() {
     echo "  run <command> Execute a command inside the chroot environment."
     echo "  backup <path> Create a compressed backup of the chroot environment."
     echo "  restore <path> Restore chroot from a backup archive."
+    echo "  uninstall     Completely remove the chroot environment and all data."
     echo "  resize <size> Resize sparse image to specified size in GB (4-64GB)."
     echo ""
     echo "Options:"
@@ -901,23 +902,21 @@ restore_chroot() {
     
     log "Extracting backup archive from: $backup_path"
     
-    if [ "$WEBUI_MODE" -eq 0 ]; then
-        if is_chroot_running; then
-            log "Stopping running chroot..."; stop_chroot;
-        fi
-        if [ -f "$ROOTFS_IMG" ] && mountpoint -q "$CHROOT_PATH" 2>/dev/null; then
-            log "Force unmounting sparse image..."
-            umount -f "$CHROOT_PATH" 2>/dev/null || umount -l "$CHROOT_PATH" 2>/dev/null || {
-                error "Failed to unmount sparse image"; exit 1;
-            }
-        fi
-        if [ -f "$ROOTFS_IMG" ]; then
-            log "Removing sparse image file..."; rm -f "$ROOTFS_IMG" || { error "Failed to remove sparse image file"; exit 1; };
-        fi
-        if [ -d "$CHROOT_PATH" ]; then
-            log "Removing existing chroot directory...";
-            if ! run_in_ns rm -rf "$CHROOT_PATH"; then error "Failed to remove existing chroot directory"; exit 1; fi
-        fi
+    if is_chroot_running; then
+        log "Stopping running chroot..."; stop_chroot;
+    fi
+    if [ -f "$ROOTFS_IMG" ] && mountpoint -q "$CHROOT_PATH" 2>/dev/null; then
+        log "Force unmounting sparse image..."
+        umount -f "$CHROOT_PATH" 2>/dev/null || umount -l "$CHROOT_PATH" 2>/dev/null || {
+            error "Failed to unmount sparse image"; exit 1;
+        }
+    fi
+    if [ -f "$ROOTFS_IMG" ]; then
+        log "Removing sparse image file..."; rm -f "$ROOTFS_IMG" || { error "Failed to remove sparse image file"; exit 1; };
+    fi
+    if [ -d "$CHROOT_PATH" ]; then
+        log "Removing existing chroot directory...";
+        if ! run_in_ns rm -rf "$CHROOT_PATH"; then error "Failed to remove existing chroot directory"; exit 1; fi
     fi
     
     if ! run_in_ns mkdir -p "$CHROOT_PATH"; then
@@ -928,6 +927,39 @@ restore_chroot() {
     else
         error "Failed to extract backup archive"; exit 1;
     fi
+}
+
+uninstall_chroot() {
+    log "Uninstalling chroot environment..."
+    
+    # Stop chroot if it's running
+    if is_chroot_running; then
+        log "Stopping running chroot..."; stop_chroot;
+    fi
+    
+    # Handle sparse image if it exists
+    if [ -f "$ROOTFS_IMG" ]; then
+        log "Detected sparse image: $ROOTFS_IMG"
+        # Force unmount if mounted
+        if mountpoint -q "$CHROOT_PATH" 2>/dev/null; then
+            log "Force unmounting sparse image..."
+            umount -f "$CHROOT_PATH" 2>/dev/null || umount -l "$CHROOT_PATH" 2>/dev/null || {
+                error "Failed to unmount sparse image"; exit 1;
+            }
+        fi
+        # Remove sparse image file
+        log "Removing sparse image file..."; rm -f "$ROOTFS_IMG" || { error "Failed to remove sparse image file"; exit 1; };
+    else
+        log "Using directory-based chroot"
+    fi
+    
+    # Remove chroot directory if it exists
+    if [ -d "$CHROOT_PATH" ]; then
+        log "Removing chroot directory...";
+        if ! run_in_ns rm -rf "$CHROOT_PATH"; then error "Failed to remove chroot directory"; exit 1; fi
+    fi
+    
+    log "Chroot environment uninstalled successfully"
 }
 
 # --- Main Script Logic ---
@@ -952,7 +984,7 @@ WEBUI_MODE=0
 
 for arg in "$@"; do
     case "$arg" in
-        start|stop|restart|status|umount|fstrim|backup|restore|list-users|run|resize)
+        start|stop|restart|status|umount|fstrim|backup|restore|uninstall|list-users|run|resize)
             COMMAND="$arg" ;;
         --no-shell) NO_SHELL_FLAG=1 ;;
         --webui) WEBUI_MODE=1 ;;
@@ -1008,6 +1040,7 @@ case "$COMMAND" in
         run_command "$RUN_COMMAND" ;;
     backup) backup_chroot "$BACKUP_PATH" ;;
     restore) restore_chroot "$BACKUP_PATH" ;;
+    uninstall) uninstall_chroot ;; 
     resize) 
         if [ -z "$RESIZE_SIZE" ]; then
             error "New size not specified. Usage: chroot.sh resize <size_in_gb>"
