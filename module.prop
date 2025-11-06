@@ -4,3 +4,4 @@ version=v2.5
 versionCode=2500
 author=ravindu644
 description=A module for installing Ubuntu 22.04 rootfs on Android and managing it with a modern WebUI, featuring full hardware access and proper namespace isolation
+updateJson=https://raw.githubusercontent.com/ravindu644/Ubuntu-Chroot/refs/heads/main/update-CLI.json
