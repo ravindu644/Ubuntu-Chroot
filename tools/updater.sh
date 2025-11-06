@@ -43,69 +43,9 @@ warn() {
 }
 error() { echo "[UPDATER ERROR] $1"; }
 
-# --- Namespace Functions (synced with chroot.sh) ---
-_get_ns_flags() {
-    # Central place to read and prepare namespace flags for nsenter.
-    # This function now correctly translates long flags (--mount) to the
-    # short flags (-m) that busybox nsenter requires.
-    local flags_file="$HOLDER_PID_FILE.flags"
-    if [ ! -f "$flags_file" ]; then
-        warn "Namespace flags file not found, using fallback"
-        echo "-m"; return # Fallback to mount only
-    fi
-
-    local long_flags short_flags
-    long_flags=$(cat "$flags_file")
-
-    if [ -z "$long_flags" ]; then
-        warn "Empty namespace flags file, using fallback"
-        echo "-m"; return
-    fi
-
-    for flag in $long_flags; do
-        case "$flag" in
-            --mount) short_flags="$short_flags -m" ;;
-            --uts)   short_flags="$short_flags -u" ;;
-            --ipc)   short_flags="$short_flags -i" ;;
-            --net)   short_flags="$short_flags -n" ;;
-            --pid)   short_flags="$short_flags -p" ;;
-            # Ignore flags that nsenter doesn't need or support
-            --cgroup|--fork) ;;
-        esac
-    done
-
-    if [ -z "$short_flags" ]; then
-        warn "No valid namespace flags found, using fallback"
-        echo "-m"; return
-    fi
-
-    echo "$short_flags"
-}
-
-_execute_in_ns() {
-    # Central execution function. Runs any given command inside the holder's namespaces.
-    local holder_pid
-    if [ -f "$HOLDER_PID_FILE" ] && kill -0 "$(cat "$HOLDER_PID_FILE")" 2>/dev/null; then
-        holder_pid=$(cat "$HOLDER_PID_FILE")
-        local ns_flags
-        ns_flags=$(_get_ns_flags)
-        
-        busybox nsenter --target "$holder_pid" $ns_flags -- "$@"
-    else
-        # If no namespace holder is running, execute command directly.
-        "$@"
-    fi
-}
-
-run_in_ns() {
-    # Wrapper to execute a command in the namespace but not yet in the chroot.
-    # Primarily used for mounting filesystems.
-    _execute_in_ns "$@"
-}
-
 run_in_chroot() {
-    # Execute command and append all output to the global log file
-    run_in_ns chroot "$CHROOT_PATH" /bin/bash -c "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; export TMPDIR=/tmp; exec 2>&1; $*" >> "$LOG_FILE" 2>&1
+    # Execute command using chroot.sh run and append all output to the global log file
+    "$(dirname "$OTA_DIR")/chroot.sh" run "$*" >> "$LOG_FILE" 2>&1
 }
 
 # --- Version Management ---
