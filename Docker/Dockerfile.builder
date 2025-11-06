@@ -120,6 +120,8 @@ RUN apt-get install -y --no-install-recommends \
     tigervnc-standalone-server \
     tigervnc-tools \
     dbus-x11 \
+    dbus \
+    at-spi2-core \
     tumbler \
     fonts-lklug-sinhala \
     # Icon themes
@@ -287,8 +289,18 @@ if [ ! -f "$SETUP_FLAG" ]; then
     # Create the VNC startup script
     cat > /home/$username/.vnc/xstartup << 'VNC_EOF'
 #!/bin/sh
-. /etc/X11/Xsession
-dbus-run-session -- xfce4-session
+# Unset these to prevent session conflicts
+unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
+
+# Load user resources if available
+[ -r $HOME/.Xresources ] && xrdb $HOME/.Xresources
+
+# Set solid background (better VNC performance than wallpaper)
+xsetroot -solid grey
+
+# Start XFCE with proper dbus session
+exec dbus-launch --exit-with-session xfce4-session
 VNC_EOF
     chmod +x /home/$username/.vnc/xstartup
 
