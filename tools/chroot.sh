@@ -250,52 +250,53 @@ run_fstrim() {
 apply_internet_fix() {
     log "Applying internet fix for chroot..."
 
-    # Get DNS servers from Android system
-    local dns1=$(getprop net.dns1 2>/dev/null || echo '8.8.8.8')
-    local dns2=$(getprop net.dns2 2>/dev/null || echo '8.8.4.4')
+    # Get DNS servers from Android system and provide a fallback if getprop returns an empty string.
+    local dns1=$(getprop net.dns1 2>/dev/null)
+    [ -z "$dns1" ] && dns1='8.8.8.8'
 
-    # Run filesystem operations within namespace context where chroot is accessible
-    run_in_ns sh -c "
-        # Create resolv.conf with DNS servers
-        cat > '$CHROOT_PATH/etc/resolv.conf' << EOF
-nameserver $dns1
-nameserver $dns2
-nameserver 8.8.8.8
-nameserver 8.8.4.4
-EOF
-        chmod 644 '$CHROOT_PATH/etc/resolv.conf'
+    local dns2=$(getprop net.dns2 2>/dev/null)
+    [ -z "$dns2" ] && dns2='8.8.4.4'
 
-        # Add required groups to /etc/group
-        if ! grep -q '^aid_inet:' '$CHROOT_PATH/etc/group' 2>/dev/null; then
-            echo 'aid_inet:x:3003:' >> '$CHROOT_PATH/etc/group'
-        fi
-        if ! grep -q '^aid_net_raw:' '$CHROOT_PATH/etc/group' 2>/dev/null; then
-            echo 'aid_net_raw:x:3004:' >> '$CHROOT_PATH/etc/group'
-        fi
-
-        # Create hosts file
-        cat > '$CHROOT_PATH/etc/hosts' << EOF
-127.0.0.1    localhost $C_HOSTNAME
-::1          localhost ip6-localhost ip6-loopback
-EOF
-
-        # Set hostname
-        echo '$C_HOSTNAME' > '$CHROOT_PATH/proc/sys/kernel/hostname' 2>/dev/null
-    "
-
-    # These commands must run *inside* the chroot to find the users.
-    # Set flag to prevent recursion
+    # Set flag to prevent recursive calls during startup
     CHROOT_SETUP_IN_PROGRESS=1
+
+    # Atomically create network files inside the chroot.
+    # This block handles the case where /etc/resolv.conf is a symlink.
+    if ! run_in_chroot "/bin/sh -c \"
+        # 1. Ensure the target directory for the real resolv.conf exists.
+        mkdir -p /run/resolvconf &&
+
+        # 2. Write the DNS servers to the *actual* file, not the symlink.
+        printf 'nameserver %s\\nnameserver %s\\n' '$dns1' '$dns2' > /run/resolvconf/resolv.conf &&
+
+        # 3. Force-recreate the symlink to ensure it points to the correct file.
+        ln -sf /run/resolvconf/resolv.conf /etc/resolv.conf &&
+
+        # 4. Add required Android networking groups if they don't exist.
+        grep -q '^aid_inet:' /etc/group || echo 'aid_inet:x:3003:' >> /etc/group &&
+        grep -q '^aid_net_raw:' /etc/group || echo 'aid_net_raw:x:3004:' >> /etc/group &&
+
+        # 5. Create the hosts file.
+        printf '127.0.0.1\\tlocalhost %s\\n::1\\t\\tlocalhost ip6-localhost ip6-loopback\\n' '$C_HOSTNAME' > /etc/hosts &&
+        
+        # 6. Set the hostname.
+        echo '$C_HOSTNAME' > /proc/sys/kernel/hostname
+    \""; then
+        error "Failed to create network configuration files inside chroot."
+    fi
+
+    # Add users to the new groups
     run_in_chroot "/usr/sbin/usermod -aG aid_inet root 2>/dev/null"
     run_in_chroot "/usr/sbin/usermod -aG aid_inet,aid_net_raw _apt 2>/dev/null"
+
+    # Unset the flag as we are done with chroot commands for this stage
     CHROOT_SETUP_IN_PROGRESS=0
 
-    # This must run on the host system
+    # This command must run on the host system to enable IP forwarding
     sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1
 
     log "Internet fix successfully applied."
 }
-
 
 # --- Core Action Functions ---
 
