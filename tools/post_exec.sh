@@ -4,9 +4,11 @@
 
 echo "[POST-EXEC] Running post-execution script..."
 
-
 # start dbus service by default
 service dbus start
+
+# Start binfmt service by default
+service binfmt-support start
 
 # Example: Start SSH server
 # service ssh start

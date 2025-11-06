@@ -7,8 +7,36 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Upgrade existing packages first
 RUN apt-get update && apt-get upgrade -y
 
-# Update and install development tools, compilers, and utilities
+# ==> START OF AMD64 SUPPORT MODIFICATIONS <==
+# Nuke the default sources.list and create a new multi-arch one.
+# This ensures arm64 packages are fetched from ports.ubuntu.com and
+# amd64 packages are fetched from the main archive.ubuntu.com.
+RUN rm /etc/apt/sources.list && \
+    cat > /etc/apt/sources.list << EOF
+# For arm64 (native architecture)
+deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ jammy main restricted universe multiverse
+deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ jammy-updates main restricted universe multiverse
+deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ jammy-backports main restricted universe multiverse
+deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ jammy-security main restricted universe multiverse
+
+# For amd64 (the foreign architecture)
+deb [arch=amd64] http://archive.ubuntu.com/ubuntu/ jammy main restricted universe multiverse
+deb [arch=amd64] http://archive.ubuntu.com/ubuntu/ jammy-updates main restricted universe multiverse
+deb [arch=amd64] http://archive.ubuntu.com/ubuntu/ jammy-backports main restricted universe multiverse
+deb [arch=amd64] http://security.ubuntu.com/ubuntu/ jammy-security main restricted universe multiverse
+EOF
+
+# Add the amd64 architecture and update package lists
+RUN dpkg --add-architecture amd64 && \
+    apt-get update
+# ==> END OF AMD64 SUPPORT MODIFICATIONS <==
+
+# Update and install development tools, compilers, utilities, and amd64 support libs
 RUN apt-get install -y --no-install-recommends \
+    # AMD64 Essential Libraries
+    libc6:amd64 \
+    libstdc++6:amd64 \
+    libgcc-s1:amd64 \
     # Core utilities
     bash \
     coreutils \
@@ -77,14 +105,17 @@ RUN apt-get install -y --no-install-recommends \
     docker.io \
     qemu \
     binfmt-support \
-    qemu-user-static
+    qemu-user-static \
+    openjdk-21-jdk \
+    openjdk-17-jdk
     
-# Install fastfetch (neofetch alternative)
-RUN apt-get install -y --no-install-recommends \
-    software-properties-common \
-    && add-apt-repository ppa:zhangsongcui3371/fastfetch \
-    && apt-get update && apt-get install -y fastfetch \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+# Install fastfetch (neofetch alternative) and clean up all apt lists
+RUN apt-get install -y --no-install-recommends software-properties-common && \
+    add-apt-repository ppa:zhangsongcui3371/fastfetch && \
+    apt-get update && \
+    apt-get install -y fastfetch && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # Update locales
 RUN locale-gen en_US.UTF-8 && update-locale LANG=en_US.UTF-8 && update-locale LC_ALL=en_US.UTF-8
