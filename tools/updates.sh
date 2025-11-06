@@ -111,6 +111,51 @@ EOF
     run_in_chroot "apt-get autoremove -y && apt-get clean"
     
     log "Docker support and environment variables added successfully"
+    
+    log "Adding support for running x86_64 applications..."
+    if ! run_in_chroot "rm /etc/apt/sources.list && \
+    cat > /etc/apt/sources.list << EOF
+# For arm64 (native architecture)
+deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ jammy main restricted universe multiverse
+deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ jammy-updates main restricted universe multiverse
+deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ jammy-backports main restricted universe multiverse
+deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ jammy-security main restricted universe multiverse
+
+# For amd64 (the foreign architecture)
+deb [arch=amd64] http://archive.ubuntu.com/ubuntu/ jammy main restricted universe multiverse
+deb [arch=amd64] http://archive.ubuntu.com/ubuntu/ jammy-updates main restricted universe multiverse
+deb [arch=amd64] http://archive.ubuntu.com/ubuntu/ jammy-backports main restricted universe multiverse
+deb [arch=amd64] http://security.ubuntu.com/ubuntu/ jammy-security main restricted universe multiverse
+EOF
+"; then
+        error "Failed to update apt sources for multiarch support"
+        return 1
+    fi
+
+    if ! run_in_chroot "dpkg --add-architecture amd64 && \
+    apt-get update"; then
+        error "Failed to add amd64 architecture and update package lists"
+        return 1
+    fi
+
+    if ! run_in_chroot "apt-get install -y libc6:amd64 \
+    libstdc++6:amd64 \
+    libgcc-s1:amd64 \
+"; then
+        error "Failed to install x86_64 libraries"
+        return 1
+    fi
+
+    run_in_chroot "apt-get autoremove -y && apt-get clean"
+
+    if ! grep -q "binfmt-support" /data/local/ubuntu-chroot/post_exec.sh; then
+        if ! echo -e '# Start binfmt service by default\nservice binfmt-support start' >> /data/local/ubuntu-chroot/post_exec.sh; then
+            error "Failed to update post_exec.sh for binfmt-support"
+            return 1
+        fi
+    fi
+
+    log "x86_64 support added successfully"
     return 0
 }
 
