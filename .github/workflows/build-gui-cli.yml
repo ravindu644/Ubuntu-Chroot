@@ -9,12 +9,17 @@ on:
       version:
         description: 'Release Version (e.g., v3.1)'
         required: true
+      update_jsons_only:
+        description: 'Only update the JSONs and Changelog (skip build and release)'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
 
 jobs:
   build:
+    if: ${{ !inputs.update_jsons_only }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -49,15 +54,16 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}-zip
-          path: update${{ matrix.suffix }}.zip
+          path: out/update${{ matrix.suffix }}.zip
 
       - name: Upload Full Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}-full-zip
-          path: Ubuntu-Chroot-${{ github.event.inputs.version || github.ref_name }}-*${{ matrix.suffix }}.zip
+          path: out/Ubuntu-Chroot-${{ github.event.inputs.version || github.ref_name }}-*${{ matrix.suffix }}.zip
 
   release:
+    if: ${{ !inputs.update_jsons_only }}
     runs-on: ubuntu-latest
     needs: build
     steps:
@@ -79,13 +85,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: main
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update JSONs and Changelog
         run: ./update_meta.sh
+        env:
+          VERSION: ${{ github.event.inputs.version || github.ref_name }}
+          GITHUB_REF_NAME: ${{ github.event.inputs.version || github.ref_name }}
 
       - name: Commit and push
         run: |
           git config user.name 'GitHub Actions'
           git config user.email 'actions@github.com'
           git add CHANGELOG.md update-*.json
+          git commit -m "Update metadata for ${{ github.event.inputs.version || github.ref_name }}"
+          git push

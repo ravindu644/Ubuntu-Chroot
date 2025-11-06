@@ -10,7 +10,7 @@ for dep in "${deps[@]}"; do
     fi
 done
 
-VARIANT=$1
+VARIANT=$(echo "$1" | tr '[:upper:]' '[:lower:]')
 TAG=${2:-dev}
 UPDATE_FLAG=$3
 
@@ -31,20 +31,26 @@ fi
 
 DATE=$(date +%Y%m%d)
 if [ "$UPDATE_FLAG" = "--update" ]; then
-    ZIP_NAME="update${SUFFIX}.zip"
-    EXCLUDE_TAR="--exclude='*.tar.gz'"
+    ZIP_NAME="out/update${SUFFIX}.zip"
 else
-    ZIP_NAME="Ubuntu-Chroot-${TAG}-${DATE}${SUFFIX}.zip"
-    EXCLUDE_TAR=""
+    ZIP_NAME="out/Ubuntu-Chroot-${TAG}-${DATE}${SUFFIX}.zip"
 fi
 
+# Create output directory
+mkdir -p out
+
 # Remove any existing ZIP files
-rm -f *.zip
+rm -f "$ZIP_NAME"
 
 TMP_DIR=$(mktemp -d)
 
 # Copy all files except excluded
-rsync -a --exclude='.git*' --exclude='Docker' --exclude='update-*.json' --exclude='update_meta.sh' --exclude='build_zip.sh' $EXCLUDE_TAR "$PWD/" "$TMP_DIR/"
+rsync -a --exclude='.git*' --exclude='Docker' --exclude='out' --exclude='update-*.json' --exclude='update_meta.sh' --exclude='build_zip.sh' "$PWD/" "$TMP_DIR/"
+
+# For update builds, remove tar.gz files
+if [ "$UPDATE_FLAG" = "--update" ]; then
+    rm -f "$TMP_DIR"/*.tar.gz
+fi
 
 # Update update JSON
 VERSION_CODE=$(echo "$TAG" | sed 's/v//' | awk '{print int($1 * 1000)}')
