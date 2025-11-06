@@ -418,6 +418,8 @@
         activeCommandId = null;
         disableAllActions(false);
         disableSettingsPopup(false, true);
+        // Show close button again
+        if(els.closePopup) els.closePopup.style.display = '';
         setTimeout(() => refreshStatus(), 500);
       });
     }, 50);
@@ -1336,6 +1338,8 @@
     }
 
     closeSettingsPopup();
+    // Immediately hide the close button to prevent it from being visible during update
+    if(els.closePopup) els.closePopup.style.display = 'none';
     // Wait for popup animation to complete
     await new Promise(resolve => setTimeout(resolve, 450));
 
@@ -1402,6 +1406,8 @@
               activeCommandId = null;
               disableAllActions(false);
               disableSettingsPopup(false, true);
+              // Show close button again
+              if(els.closePopup) els.closePopup.style.display = '';
 
               // Refresh status after update and restart
               setTimeout(() => refreshStatus(), 500);
@@ -1413,6 +1419,8 @@
           activeCommandId = null;
           disableAllActions(false);
           disableSettingsPopup(false, true);
+          // Show close button again
+          if(els.closePopup) els.closePopup.style.display = '';
 
           // Refresh status after failed update
           setTimeout(() => refreshStatus(), 500);
