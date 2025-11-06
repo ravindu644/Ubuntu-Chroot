@@ -1214,6 +1214,7 @@
         disableAllActions(false);
         disableSettingsPopup(false, true);
         updateSparseInfo();
+        refreshStatus();
       });
     }, 50);
   }
@@ -1310,6 +1311,7 @@
         disableAllActions(false);
         disableSettingsPopup(false, true);
         updateSparseInfo();
+        refreshStatus();
       });
     }, 50);
   }
