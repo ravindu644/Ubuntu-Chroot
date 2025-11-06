@@ -10,7 +10,7 @@ if [[ "$VERSION" == "dev" ]]; then
     VERSION_CODE=0
 elif [[ "$VERSION" =~ ^v ]]; then
     NUM=$(echo "$VERSION" | sed 's/v//')
-    VERSION_CODE=$(echo "scale=0; $NUM * 1000" | bc 2>/dev/null || echo "1")
+    VERSION_CODE=$(echo "$NUM" | awk '{print int($1 * 1000)}')
 else
     echo "Invalid version format: $VERSION"
     exit 1
