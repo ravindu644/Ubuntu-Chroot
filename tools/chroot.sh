@@ -516,6 +516,11 @@ stop_chroot() {
         log "Running fstrim on sparse image before stopping..."
         run_fstrim >/dev/null 2>&1 || warn "fstrim failed during stop operation"
     fi
+
+    # Unmount binfmt_misc if mounted
+    # this is kinda an ugly hack but it works
+    run_in_chroot "service binfmt-support stop" >/dev/null 2>&1 || true
+    run_in_ns umount -f "$CHROOT_PATH/proc/sys/fs/binfmt_misc" >/dev/null 2>&1 || true
     
     kill_chroot_processes
     umount_chroot
@@ -548,17 +553,6 @@ stop_chroot() {
 }
 
 umount_chroot() {
-    if [ -f "$ROOTFS_IMG" ] && mountpoint -q "$CHROOT_PATH" 2>/dev/null; then
-        log "Force unmounting sparse image..."
-        if umount -f "$CHROOT_PATH" 2>/dev/null; then
-            log "Sparse image force unmounted successfully."
-        elif umount -l "$CHROOT_PATH" 2>/dev/null; then
-            log "Sparse image lazy unmounted successfully."
-        else
-            warn "Failed to unmount sparse image."
-        fi
-    fi
-    
     local chroot_storage="$CHROOT_PATH/storage/emulated/0"
     if is_mounted "$chroot_storage"; then
         log "Unmounting storage safely..."
@@ -581,6 +575,17 @@ umount_chroot() {
         done
         rm -f "$MOUNTED_FILE"
         log "All chroot mounts unmounted."
+    fi
+
+    if [ -f "$ROOTFS_IMG" ] && mountpoint -q "$CHROOT_PATH" 2>/dev/null; then
+        log "Force unmounting sparse image..."
+        if umount -f "$CHROOT_PATH" 2>/dev/null; then
+            log "Sparse image force unmounted successfully."
+        elif umount -l "$CHROOT_PATH" 2>/dev/null; then
+            log "Sparse image lazy unmounted successfully."
+        else
+            warn "Failed to unmount sparse image."
+        fi
     fi
 }
 
@@ -930,63 +935,68 @@ restore_chroot() {
 }
 
 uninstall_chroot() {
-    log "Uninstalling chroot environment..."
-    
-    # Load mounted points into memory before stopping
-    if [ -f "$MOUNTED_FILE" ]; then
-        MOUNTED_POINTS=$(cat "$MOUNTED_FILE")
-        log "Loaded $(echo "$MOUNTED_POINTS" | wc -l) mount points for verification"
-    else
-        MOUNTED_POINTS=""
-    fi
-    
-    # Stop chroot if it's running
-    if is_chroot_running; then
-        log "Stopping running chroot..."; stop_chroot;
-    fi
-    
-    # Sync filesystem after stopping
-    sync
-    sleep 1
-    
-    # Check if any mount points are still mounted
-    STUCK_MOUNTS=""
-    for mount_point in $MOUNTED_POINTS; do
-        if is_mounted "$mount_point"; then
-            STUCK_MOUNTS="$STUCK_MOUNTS $mount_point"
-        fi
+    log "Starting hardcore uninstall process..."
+
+    # Step 1: Use the definitive method to find and kill all chroot processes from the host.
+    # This is the "hardcore" part that is only run during uninstall.
+    local pids_to_kill=""
+    log "Searching for all chroot-related PIDs..."
+    for pid in $(ls /proc | grep -E '^[0-9]+$'); do
+        # Use a subshell to prevent readlink errors from stopping the loop
+        (
+            local process_root
+            process_root=$(readlink "/proc/$pid/root" 2>/dev/null)
+            if [ "$process_root" = "$CHROOT_PATH" ]; then
+                pids_to_kill="$pids_to_kill $pid"
+            fi
+        )
     done
-    
-    if [ -n "$STUCK_MOUNTS" ]; then
-        error "The following mount points are still mounted after stopping chroot:$STUCK_MOUNTS"
-        error "This may cause data corruption or system instability."
-        error "Please restart your phone and try the uninstall again."
+
+    if [ -n "$pids_to_kill" ]; then
+        log "Forcefully terminating chroot PIDs:$pids_to_kill"
+        kill -9 $pids_to_kill >/dev/null 2>&1
+        # Give the kernel a moment to clean up the dead processes
+        sleep 1
+        sync
+    else
+        log "No running chroot processes found."
+    fi
+
+    # Step 2: Now that processes are dead, run the standard stop procedure.
+    # This will cleanly unmount filesystems and kill the namespace holder.
+    if is_chroot_running; then
+        log "Running standard stop procedure for cleanup..."
+        stop_chroot
+    else
+        log "Chroot was not running. Proceeding with file cleanup."
+    fi
+
+    sync && sleep 1
+
+    # Step 3: Perform a final, definitive check from the host's perspective.
+    # If anything is still mounted here, something is seriously wrong.
+    local remaining_mounts
+    remaining_mounts=$(grep "$CHROOT_PATH" /proc/mounts)
+    if [ -n "$remaining_mounts" ]; then
+        error "FATAL: Mount points still exist after hardcore cleanup:"
+        echo "$remaining_mounts"
+        error "A system reboot is required to safely clear these mounts."
         exit 1
     fi
-    
-    # Handle sparse image if it exists
+
+    # Step 4: It's now safe to delete all files.
+    log "All checks passed. Removing chroot files from disk..."
     if [ -f "$ROOTFS_IMG" ]; then
-        log "Detected sparse image: $ROOTFS_IMG"
-        # Force unmount if mounted
-        if mountpoint -q "$CHROOT_PATH" 2>/dev/null; then
-            log "Force unmounting sparse image..."
-            umount -f "$CHROOT_PATH" 2>/dev/null || umount -l "$CHROOT_PATH" 2>/dev/null || {
-                error "Failed to unmount sparse image"; exit 1;
-            }
-        fi
-        # Remove sparse image file
-        log "Removing sparse image file..."; rm -f "$ROOTFS_IMG" || { error "Failed to remove sparse image file"; exit 1; };
-    else
-        log "Using directory-based chroot"
+        log "Removing sparse image file: $ROOTFS_IMG"
+        rm -f "$ROOTFS_IMG" || { error "Failed to remove sparse image file."; exit 1; }
     fi
     
-    # Remove chroot directory if it exists
     if [ -d "$CHROOT_PATH" ]; then
-        log "Removing chroot directory...";
-        if ! run_in_ns rm -rf "$CHROOT_PATH"; then error "Failed to remove chroot directory"; exit 1; fi
+        log "Removing chroot directory: $CHROOT_PATH"
+        rm -rf "$CHROOT_PATH" || { error "Failed to remove chroot directory."; exit 1; }
     fi
     
-    log "Chroot environment uninstalled successfully"
+    log "Chroot environment uninstalled successfully."
 }
 
 # --- Main Script Logic ---
