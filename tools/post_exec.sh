@@ -30,6 +30,9 @@ func_start_vnc
 # Start binfmt service by default (for running x86_64 binaries)
 service binfmt-support start
 
+# Ugly hack to start the udev service
+service udev restart > /dev/null 2>&1 &
+
 # Example: Start SSH server
 # service ssh start
 

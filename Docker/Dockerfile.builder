@@ -51,6 +51,7 @@ RUN apt-get install -y --no-install-recommends \
     locales \
     gnupg \
     bash-completion \
+    udev \
     # Compression tools
     zip \
     unzip \
@@ -278,6 +279,14 @@ if [ ! -f "$SETUP_FLAG" ]; then
 
     # Add to docker group for Docker access without sudo
     usermod -aG docker "$username"
+
+    # Add to plugdev group for USB access
+    usermod -aG plugdev "$username"
+
+    # Add udev rules for universal USB access (safe for adb and MTP)
+    cat > /etc/udev/rules.d/99-chroot.rules << 'EOF'
+    SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", MODE="0666", GROUP="plugdev"
+EOF
 
     # Configure VNC for the new user
     echo "--- Configuring VNC for user $username ---"
