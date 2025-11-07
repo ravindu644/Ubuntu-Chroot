@@ -159,6 +159,55 @@ EOF
     return 0
 }
 
+update_v2520() {
+
+    log "Adding udev rules for USB access..."
+    if ! run_in_chroot "apt update && apt install -y udev"; then
+        error "Failed to install udev"
+        return 1
+    fi
+
+    if ! run_in_chroot "cat > /etc/udev/rules.d/99-chroot.rules << 'EOF'\nSUBSYSTEM==\"usb\", ENV{DEVTYPE}==\"usb_device\", MODE=\"0666\", GROUP=\"plugdev\"\nEOF"; then
+        error "Failed to add udev rules for USB access"
+        return 1
+    fi
+
+    if ! grep -q "udev" /data/local/ubuntu-chroot/post_exec.sh; then
+        if ! echo -e '# Ugly hack to start the udev service\nservice udev restart > /dev/null 2>&1 &' >> /data/local/ubuntu-chroot/post_exec.sh; then
+            error "Failed to update post_exec.sh for udev"
+            return 1
+        fi
+    fi
+
+   if ! run_in_chroot /bin/bash << 'EOF'
+#!/bin/bash
+SETUP_USER_FILE="/var/lib/.default-user"
+if [ -f "$SETUP_USER_FILE" ]; then
+    DEFAULT_USER=$(cat "$SETUP_USER_FILE" 2>/dev/null || echo '')
+    if [ -n "$DEFAULT_USER" ] && id "$DEFAULT_USER" >/dev/null 2>&1; then
+        echo "Adding user '$DEFAULT_USER' to plugdev group..."
+        if usermod -aG plugdev "$DEFAULT_USER"; then
+            echo "User '$DEFAULT_USER' added to plugdev group successfully"
+        else
+            echo "ERROR: Failed to add user '$DEFAULT_USER' to plugdev group"
+            exit 1
+        fi
+    else
+        echo "No valid user found in $SETUP_USER_FILE or user does not exist"
+    fi
+else
+    echo "Setup user file $SETUP_USER_FILE not found - user not created yet"
+fi
+EOF
+    then
+        error "Failed to execute user setup script"
+        return 1
+    fi
+
+    log "udev rules added successfully"
+    return 0
+}
+
 # Add new updates below following the pattern:
 # update_v{VERSION_CODE}() {
 #     log "Description of what this update does..."

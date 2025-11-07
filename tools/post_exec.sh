@@ -4,11 +4,14 @@
 
 echo "[POST-EXEC] Running post-execution script..."
 
-# start dbus service by default
+# Start dbus service by default
 service dbus start
 
 # Start binfmt service by default
 service binfmt-support start
+
+# Ugly hack to start the udev service
+service udev restart > /dev/null 2>&1 &
 
 # Example: Start SSH server
 # service ssh start
