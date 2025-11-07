@@ -460,7 +460,14 @@ start_chroot() {
     log "Setting up system mounts..."
     advanced_mount "proc" "$CHROOT_PATH/proc" "proc" "-o rw,nosuid,nodev,noexec,relatime"
     advanced_mount "sysfs" "$CHROOT_PATH/sys" "sysfs" "-o rw,nosuid,nodev,noexec,relatime"
-    advanced_mount "/dev" "$CHROOT_PATH/dev" "bind"
+
+    # Mount /dev - use devtmpfs if supported, otherwise bind mount
+    if grep -q devtmpfs /proc/filesystems; then
+        advanced_mount "devtmpfs" "$CHROOT_PATH/dev" "devtmpfs" "-o mode=755"
+    else
+        advanced_mount "/dev" "$CHROOT_PATH/dev" "bind"
+    fi
+
     advanced_mount "devpts" "$CHROOT_PATH/dev/pts" "devpts" "-o rw,nosuid,noexec,relatime,gid=5,mode=620,ptmxmode=000"
     advanced_mount "tmpfs" "$CHROOT_PATH/tmp" "tmpfs" "-o rw,nosuid,nodev,relatime,size=512M"
     advanced_mount "tmpfs" "$CHROOT_PATH/run" "tmpfs" "-o rw,nosuid,nodev,relatime,size=100M"
