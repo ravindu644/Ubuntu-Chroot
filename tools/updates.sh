@@ -205,6 +205,9 @@ xsetroot -solid grey
 exec dbus-launch --exit-with-session xfce4-session
 VNC_EOF
         chmod +x /home/$DEFAULT_USER/.vnc/xstartup
+    else
+        warn "No default user found. Please run initial setup by logging into the chroot first time to create a user."
+        exit 1
     fi
 fi
 EOF
