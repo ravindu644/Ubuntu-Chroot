@@ -932,9 +932,36 @@ restore_chroot() {
 uninstall_chroot() {
     log "Uninstalling chroot environment..."
     
+    # Load mounted points into memory before stopping
+    if [ -f "$MOUNTED_FILE" ]; then
+        MOUNTED_POINTS=$(cat "$MOUNTED_FILE")
+        log "Loaded $(echo "$MOUNTED_POINTS" | wc -l) mount points for verification"
+    else
+        MOUNTED_POINTS=""
+    fi
+    
     # Stop chroot if it's running
     if is_chroot_running; then
         log "Stopping running chroot..."; stop_chroot;
+    fi
+    
+    # Sync filesystem after stopping
+    sync
+    sleep 1
+    
+    # Check if any mount points are still mounted
+    STUCK_MOUNTS=""
+    for mount_point in $MOUNTED_POINTS; do
+        if is_mounted "$mount_point"; then
+            STUCK_MOUNTS="$STUCK_MOUNTS $mount_point"
+        fi
+    done
+    
+    if [ -n "$STUCK_MOUNTS" ]; then
+        error "The following mount points are still mounted after stopping chroot:$STUCK_MOUNTS"
+        error "This may cause data corruption or system instability."
+        error "Please restart your phone and try the uninstall again."
+        exit 1
     fi
     
     # Handle sparse image if it exists
