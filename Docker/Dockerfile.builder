@@ -224,7 +224,6 @@ if [ ! -f "$SETUP_FLAG" ]; then
 
     # Add to docker group for Docker access without sudo
     usermod -aG docker "$username"
-    newgrp docker    
 
     # Configure bash for the user (like WSL)
     cat >> /home/$username/.bashrc << 'BASHRC'
@@ -245,9 +244,10 @@ BASHRC
 
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "  Setup complete! User '$username' created."
-    echo "     To log in as '$username',"
-    echo "     copy the login command from the webui."
+    echo "     Setup complete! User '$username' created."
+    echo "       Restart the Chroot to take effect."
+    echo "          To log in as '$username',"
+    echo "        copy the login command from the webui."
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
 
