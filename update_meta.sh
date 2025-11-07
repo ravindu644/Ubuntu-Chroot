@@ -27,7 +27,7 @@ for s in ['-GUI', '-CLI']:
 
 # Update Changelog
 # Get last tag
-LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+LAST_TAG=$(git tag --sort=-version:refname | head -1)
 
 # Get commits from main
 if [ -z "$LAST_TAG" ]; then
