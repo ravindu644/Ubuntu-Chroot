@@ -225,7 +225,7 @@ update_v2520() {
         return 1
     fi
 
-    if ! run_in_chroot "cat > /etc/udev/rules.d/99-chroot.rules << 'EOF'\nSUBSYSTEM==\"usb\", ENV{DEVTYPE}==\"usb_device\", MODE=\"0666\", GROUP=\"plugdev\"\nEOF"; then
+    if ! run_in_chroot "cat > /etc/udev/rules.d/99-chroot.rules << 'UDEV_EOF'\nSUBSYSTEM==\"usb\", ENV{DEVTYPE}==\"usb_device\", MODE=\"0666\", GROUP=\"plugdev\"\nUDEV_EOF"; then
         error "Failed to add udev rules for USB access"
         return 1
     fi
