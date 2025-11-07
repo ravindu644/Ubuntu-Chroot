@@ -183,12 +183,21 @@ update_v2510() {
 
     log "at-spi2-core installed successfully"
 
-    # Add to user's .bashrc if user exists
-    if run_in_chroot /bin/bash << 'EOF'
-SETUP_USER_FILE="/var/lib/.default-user"
-if [ -f "$SETUP_USER_FILE" ]; then
-    DEFAULT_USER=$(cat "$SETUP_USER_FILE" 2>/dev/null || echo '')
-    if [ -n "$DEFAULT_USER" ] && id "$DEFAULT_USER" >/dev/null 2>&1; then
+    # Check if default user file exists and get the user
+    DEFAULT_USER=$(run_in_chroot "cat /var/lib/.default-user 2>/dev/null || echo ''")
+    if [ -z "$DEFAULT_USER" ]; then
+        error "No default user file found. Please run initial setup by logging into the chroot first time to create a user."
+        return 1
+    fi
+
+    # Check if the user exists in the chroot
+    if ! run_in_chroot "id '$DEFAULT_USER' >/dev/null 2>&1"; then
+        error "Default user '$DEFAULT_USER' does not exist in chroot. Please run initial setup by logging into the chroot first time to create a user."
+        return 1
+    fi
+
+    # Create VNC startup script for the user
+    if run_in_chroot /bin/bash << EOF
 cat > /home/$DEFAULT_USER/.vnc/xstartup << 'VNC_EOF'
 #!/bin/sh
 # Unset these to prevent session conflicts
@@ -204,15 +213,10 @@ xsetroot -solid grey
 # Start XFCE with proper dbus session
 exec dbus-launch --exit-with-session xfce4-session
 VNC_EOF
-        chmod +x /home/$DEFAULT_USER/.vnc/xstartup
-    else
-        warn "No default user found. Please run initial setup by logging into the chroot first time to create a user."
-        exit 1
-    fi
-fi
+chmod +x /home/$DEFAULT_USER/.vnc/xstartup
 EOF
     then
-        log "VNC startup script updated successfully"
+        log "VNC startup script updated successfully for user '$DEFAULT_USER'"
     else
         error "Failed to update VNC startup script"
         return 1
