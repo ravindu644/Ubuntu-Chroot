@@ -183,29 +183,21 @@ update_v2510() {
 
     log "at-spi2-core installed successfully"
 
-    # Check if default user file exists and get the user
-    DEFAULT_USER=$(run_in_chroot "cat /var/lib/.default-user 2>/dev/null || echo ''")
-    if [ -z "$DEFAULT_USER" ]; then
-        error "No default user file found. Please run initial setup by logging into the chroot first time to create a user."
-        return 1
-    fi
-
-    # Check if the user exists in the chroot
-    if ! run_in_chroot "id '$DEFAULT_USER' >/dev/null 2>&1"; then
-        error "Default user '$DEFAULT_USER' does not exist in chroot. Please run initial setup by logging into the chroot first time to create a user."
-        return 1
-    fi
-
-    # Create VNC startup script for the user
+    # Check if a regular user exists in the chroot and create VNC startup script
     if run_in_chroot /bin/bash << EOF
-cat > /home/$DEFAULT_USER/.vnc/xstartup << 'VNC_EOF'
+DEFAULT_USER=\$(grep -E ':x:1[0-9][0-9][0-9]:' /etc/passwd 2>/dev/null | cut -d: -f1 | head -1)
+if [ -z "\$DEFAULT_USER" ]; then
+    echo "No regular user found in chroot. Please run initial setup by logging into the chroot first time to create a user." >&2
+    exit 1
+fi
+cat > /home/\$DEFAULT_USER/.vnc/xstartup << 'VNC_EOF'
 #!/bin/sh
 # Unset these to prevent session conflicts
 unset SESSION_MANAGER
 unset DBUS_SESSION_BUS_ADDRESS
 
 # Load user resources if available
-[ -r $HOME/.Xresources ] && xrdb $HOME/.Xresources
+[ -r \$HOME/.Xresources ] && xrdb \$HOME/.Xresources
 
 # Set solid background (better VNC performance than wallpaper)
 xsetroot -solid grey
@@ -213,10 +205,10 @@ xsetroot -solid grey
 # Start XFCE with proper dbus session
 exec dbus-launch --exit-with-session xfce4-session
 VNC_EOF
-chmod +x /home/$DEFAULT_USER/.vnc/xstartup
+chmod +x /home/\$DEFAULT_USER/.vnc/xstartup
 EOF
     then
-        log "VNC startup script updated successfully for user '$DEFAULT_USER'"
+        log "VNC startup script updated successfully"
     else
         error "Failed to update VNC startup script"
         return 1
