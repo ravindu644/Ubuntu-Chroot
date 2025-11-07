@@ -230,9 +230,9 @@ if [ ! -f "$SETUP_FLAG" ]; then
     usermod -aG plugdev "$username"
 
     # Add udev rules for universal USB access (safe for adb and MTP)
-    cat > /etc/udev/rules.d/99-chroot.rules << 'EOF'
+    cat > /etc/udev/rules.d/99-chroot.rules << 'UDEV_EOF'
     SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", MODE="0666", GROUP="plugdev"
-EOF
+UDEV_EOF
 
 
     # Configure bash for the user (like WSL)
