@@ -278,7 +278,6 @@ if [ ! -f "$SETUP_FLAG" ]; then
 
     # Add to docker group for Docker access without sudo
     usermod -aG docker "$username"
-    newgrp docker
 
     # Configure VNC for the new user
     echo "--- Configuring VNC for user $username ---"
@@ -326,10 +325,11 @@ BASHRC
 
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "  Setup complete! User '$username' created."
-    echo "     To log in as '$username',"
-    echo "     copy the login command from the webui."
-    echo "     VNC server will start on the next boot."
+    echo "     Setup complete! User '$username' created."
+    echo "       Restart the Chroot to take effect."
+    echo "          To log in as '$username',"
+    echo "        copy the login command from the webui."
+    echo "      VNC server will start on the next boot."
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
 
