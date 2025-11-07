@@ -1,0 +1,172 @@
+# Changelog
+
+## main (2025-11-07)
+- Build docker container, introduce workflow
+- CRITICAL: Fix black screen issue in GUI
+- CRITICAL: chrootmgr: added mount points detection before uninstalling the chroot
+- CRITICAL: chrootmgr: fix backup not working in the rootfs.ig method
+- CRITICAL: chrootmgr: fixed the internet bug !
+- added .gitignore
+- added detection of regular users
+- added fallbacks
+- app.js: cleanup
+- build_zip: exluce CHANGELOG.md
+- chroot: add unshare fallback logic
+- chroot: implement advanced namespace isolation
+- chroot: implement isolated proc and sysfs filesystems
+- chrootmgr, webui: added an option to resize the sparse image
+- chrootmgr: allocate more space for temporary file systems
+- chrootmgr: capture the entire root for the tarball
+- chrootmgr: convert the post exec script to base64, then run it inline without saving
+- chrootmgr: create a proper backup function to back up contents form both image and the directory based chroot
+- chrootmgr: don't isolate network access
+- chrootmgr: fix brave browser can't start issue by creating /dev/shm
+- chrootmgr: fix cannot log into the normal user accounts after the namespace isolation
+- chrootmgr: fix up paths
+- chrootmgr: hardened the uninstallation process
+- chrootmgr: only mount devices cgroup if it is available
+- chrootmgr: only stop chroot if it was not running before fstrim
+- chrootmgr: proper namespace isolation
+- chrootmgr: proper run_in_chroot handling
+- chrootmgr: pure namespace isolation 2.0 !
+- chrootmgr: removed conflicting kernel-builder hostname
+- chrootmgr: restore the original selinux state when stopping
+- chrootmgr: run namespace commands with busybox
+- chrootmgr: use xterm as the default
+- ci: properly handle ota updates in modules (update.json)
+- debug: improve kernel feature detection and warnings
+- docker: remove the duplicate welcome message
+- don't configure lightdm
+- don't mount /system, mount /config if possible
+- feat: add Qt and XDG environment variables globally
+- feat: add System V IPC kernel check and warning
+- feat: add xhost command to allow root GUI access in VNC
+- feat: implement discard mount and fstrim for sparse image storage reclamation
+- feat: run fstrim before stopping chroot when using sparse image method
+- feat: sync namespace handling across all chroot tools
+- fix build issues
+- fix ci
+- fix issues in clear & refresh buttons
+- fix the margin below Namespace warning
+- fix typo
+- fix update again
+- fix: add filesystem integrity check before mounting to prevent kernel panics during restart
+- fix: export TMPDIR=/tmp globally to fix mktemp/dpkg cache issues
+- fix: handle orphaned sparse image mounts after reboot
+- fix: quote hotspot arguments to support SSIDs with spaces and Unicode
+- fix: remove user namespace from create_namespace
+- fix: replace kernel config detection with direct namespace testing
+- fix: restore TMPDIR=/tmp environment variable
+- fix: run internet fix filesystem operations within namespace context
+- fix: stop the chroot after executing the fstrim process
+- fixes
+- fixing the header
+- gui: fixed a weird issue saying /system/bin/sh not found when setting up the user
+- gui: updates: added updates for the black screen fix
+- improve truncate reliability: prefer built-in over busybox
+- installer: auto-detect the tarball name
+- module: added missing updateJson
+- module: added root method check and global namespace enable for KSU and AP
+- module: basic function wire-up
+- module: bump v2.5
+- module: bump version to v2.51
+- module: bump version v1.5
+- module: clarify susfs warning
+- module: create a symlink called `ubuntu-chroot` to /system/bin
+- module: don't use barrier=0 when mounting the image
+- module: enhanced verbose when using experimental flags
+- module: re-wrote the installer
+- module: remove the susfs check again, but show a harmless warning
+- ota-updater: enhanced the logging
+- ota: fix version recording for proper update tracking
+- post-exec: small improvements
+- post-exec: start dbus service by default, cleanup
+- refactor: remove hardcoded paths from sparsemgr.sh
+- refined the magisk warning
+- refined updates
+- removed adb installation because the built chroot lacks the adb binaries for some reason
+- rewrite the entire chrootmgr script
+- rootfs: added running x86_64 binaries support
+- rootfs: do not log into the created user after the setup
+- rootfs: exit the shell after creating the user
+- rootfs: fix locales
+- rootfs: fix vnspasswd not found issue
+- rootfs: gui: fix dark mode
+- rootfs: gui: fix dbus issues in xfce
+- rootfs: gui: fix missing icons in xfce
+- rootfs: gui: fix thumbnail issues for pictures
+- rootfs: install docker by default
+- rootfs: install firefox esr
+- rootfs: install proper tools for hotspot
+- rootfs: install qemu, regen updates
+- rootfs: install sdk platform tools and heimdall
+- rootfs: install sinhala language fonts
+- rootfs: proper xfce support by installing vanilla xfce
+- rootfs: properly set up bash completion
+- rootfs: removed jdk installation as it adds so much bloat to the rootfs.tar.gz
+- silent the output when using the login command
+- simplified login mechanism
+- source: implement a fully functional OTA updater
+- source: initial GUI support
+- source: initial upload
+- source: introduced the debug mode
+- source: moved the restore and uninstall function to the chroot.sh to avoid complexity
+- supress the output of sysctl command
+- tmp: doze fix
+- update_meta: fix fetching up the last tag
+- updated gitignore
+- updater: log the output of the commands runing inside the chroot during an update
+- updater: simplified the logic
+- updates: added latest updates for v2.5
+- use base64 conversion for post-script exec script saving
+- webui:  disabled text selection globally in unnecessary UI elements
+- webui: add warning for debug mode about potential Docker issues
+- webui: added 5Ghz/2GHz hotspot creation support to forward the VNC traffic
+- webui: added a button to copy the console log
+- webui: added a settings page
+- webui: added a warning about creating 5GHz hotspots
+- webui: added a warning about global namespaces
+- webui: added an icon to view the password
+- webui: added an option to trim the sparse image using the UI
+- webui: added logo
+- webui: added proper start and stop button disable/enable
+- webui: always make the post exec script executable when saving
+- webui: cleanup
+- webui: disable the UI elements in hotspot actions
+- webui: disable the migrate button if it is already migrated
+- webui: disabled the weird resize handler in the post exec text box
+- webui: fix UI flicker during status refresh
+- webui: fix UI refresh for fstrim and resizeSparse
+- webui: fix hotspot warning SVG color to match theme
+- webui: fix issues with namespace warning
+- webui: fix ui elements not getting disabled for the 2nd time :)
+- webui: fix various UI issues
+- webui: fixd some UI glitches
+- webui: fixed a random exit:1 log appears during uninstallation of the chroot
+- webui: fixed an issue hotspot ui shows empty 2.4Ghz channel list on init
+- webui: fixed hotspot detection
+- webui: fixed issues with UI buttons not disabled properly when the chroot is not found
+- webui: fixed the floating closing button when updating the chroot
+- webui: implement experimental sparse image feature
+- webui: implemented comprehensive backup and restore functionality
+- webui: improve footer styling with GitHub branding
+- webui: lockdown everything when a task is running
+- webui: logic enhancements
+- webui: make the 'Update Chroot' and 'Uninstall Chroot' buttons properly aligned with each other
+- webui: make warning buttons more prominent in light mode
+- webui: only remove the rootfs folder, not the essential scripts and files
+- webui: redesign some UI elements
+- webui: refine the hotspot warning
+- webui: refined the status messages
+- webui: refined uninstallation logs
+- webui: removed the global namespace warning as it is not needed anymore
+- webui: restart the chroot after the completion of an update
+- webui: updated the logo, re-define the dark mode colors
+- webui: use short ubuntu-chroot command when symlink exists
+- webui: use the simpler `ubuntu-chroot` command for the login command
+- workflow: created to build both CLI and GUI modules in one shot
+- workflow: fixing the version in the rootfs filename
+- workflow: use the specific -gui tag in releases
+
+## Previous Versions
+- Initial release with basic chroot setup
