@@ -108,8 +108,8 @@ apply_update() {
             return 1
         fi
     else
-        # Silently skip versions without update functions
-        return 0
+        # No more updates available
+        return 2
     fi
 }
 
@@ -139,28 +139,29 @@ perform_update() {
     log "Current version: $current_version"
     log "Target version: $target_version"
 
-    if [ "$current_version" -ge "$target_version" ]; then
-        log "Already up to date"
-        return 0
-    fi
-
-    log "Starting update process from $current_version to $target_version"
+    log "Starting update process from $current_version onwards"
 
     # Load update definitions
     if ! load_updates; then
         return 1
     fi
 
-    # Apply updates incrementally
-    local version
-    for version in $(seq $((current_version + 1)) "$target_version"); do
-        if ! apply_update "$version"; then
+    # Apply updates incrementally from current + 1
+    local version=$((current_version + 1))
+    while true; do
+        apply_update "$version"
+        local ret=$?
+        if [ $ret -eq 2 ]; then
+            # No more updates
+            break
+        elif [ $ret -eq 1 ]; then
             error "Update failed at version $version"
             return 1
+        else
+            # Update succeeded
+            set_current_version "$version"
+            version=$((version + 1))
         fi
-
-        # Update version file after successful update
-        set_current_version "$version"
     done
 
     # Add final summary to log file
