@@ -1,0 +1,46 @@
+#!/bin/bash
+#
+# Standalone script to start the VNC server for the default user.
+# Relies on the configuration files in the user's home directory.
+#
+
+# Find the default user from the setup file
+VNC_USER=$(cat /var/lib/.default-user 2>/dev/null)
+VNC_DISPLAY=":1"
+
+# Exit if no user is configured or the user's home directory doesn't exist
+if [[ -z "$VNC_USER" || ! -d "/home/$VNC_USER" ]]; then
+    echo "[VNC] No default user found. Skipping VNC startup."
+    exit 0
+fi
+
+echo "[VNC] Preparing VNC server for user '$VNC_USER' on display $VNC_DISPLAY..."
+
+# Check if a server is already running for this user on the specified display
+if su - "$VNC_USER" -c "vncserver -list | grep -q \"^$VNC_DISPLAY\""; then
+    echo "[VNC] Server is already running on $VNC_DISPLAY for user '$VNC_USER'."
+    exit 0
+fi
+
+# Pre-create the .Xauthority file if it doesn't exist to prevent the harmless
+# "file does not exist" message from xauth on the first run.
+XAUTHORITY_FILE="/home/$VNC_USER/.Xauthority"
+su - "$VNC_USER" -c "touch '$XAUTHORITY_FILE' && chmod 600 '$XAUTHORITY_FILE'"
+
+# Start the server with explicit -localhost no flag
+# This ensures network access even if config file settings are overridden
+echo "[VNC] Starting VNC server..."
+su - "$VNC_USER" -c "vncserver $VNC_DISPLAY -geometry 1920x1080 -localhost no"
+
+# Give the server a moment to initialize the display socket
+sleep 2
+
+# Grant root user access to the VNC display for running GUI apps as root
+echo "[VNC] Granting display access to root user..."
+if su - "$VNC_USER" -c "DISPLAY=$VNC_DISPLAY xhost +si:localuser:root"; then
+    echo "[VNC] VNC server started successfully."
+    echo "[VNC] Connect to: <your-ip>:5901"
+    echo "[VNC] Display: $VNC_DISPLAY (Port: 5901)"
+else
+    echo "[VNC] WARN: Failed to grant display access to root user."
+fi

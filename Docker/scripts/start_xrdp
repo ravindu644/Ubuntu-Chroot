@@ -1,0 +1,12 @@
+#!/bin/bash
+# Function to start XRDP
+func_start_xrdp(){
+    echo "[POST-EXEC] Starting XRDP service..."
+    service xrdp start
+    if [ $? -eq 0 ]; then
+        echo "[POST-EXEC] XRDP started successfully on port 3389"
+    else
+        echo "[POST-EXEC] XRDP failed to start"
+    fi
+}
+func_start_xrdp
