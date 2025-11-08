@@ -1,204 +1,180 @@
 #!/system/bin/sh
 
-# Ubuntu Chroot Updater
-# Incremental rootfs updater with version tracking
+# Ubuntu Chroot Updater - Rewritten
 # Copyright (c) 2025 ravindu644
 
 # --- Configuration ---
 CHROOT_PATH="${CHROOT_PATH:-/data/local/ubuntu-chroot/rootfs}"
-SCRIPT_DIR="$(dirname "$0")"
-SCRIPT_NAME="$(basename "$0")"
-HOLDER_PID_FILE="/data/local/ubuntu-chroot/holder.pid"
-VERSION_FILE="/data/local/ubuntu-chroot/version"
-OTA_DIR="/data/local/ubuntu-chroot/ota"
-UPDATES_SCRIPT="${OTA_DIR}/updates.sh"
-LOG_FILE=""
+CHROOT_DIR="$(dirname "$CHROOT_PATH")"
+VERSION_FILE="$CHROOT_DIR/version"
+OTA_DIR="$CHROOT_DIR/ota"
+UPDATES_SCRIPT="$OTA_DIR/updates.sh"
+LOG_DIR="$CHROOT_DIR/logs"
 SILENT=0
+DEBUG=0
 
-# --- Debug mode ---
-LOGGING_ENABLED=${LOGGING_ENABLED:-0}
-
-if [ "$LOGGING_ENABLED" -eq 1 ]; then
-    LOG_DIR="${CHROOT_PATH%/*}/logs"
-    mkdir -p "$LOG_DIR"
-    LOG_FILE="$LOG_DIR/$SCRIPT_NAME.txt"
-    LOG_FIFO="$LOG_DIR/$SCRIPT_NAME.fifo"
-    rm -f "$LOG_FIFO" && mkfifo "$LOG_FIFO" 2>/dev/null
-    echo "=== Logging started at $(date) ===" >> "$LOG_FILE"
-    busybox tee -a "$LOG_FILE" < "$LOG_FIFO" &
-    exec >> "$LOG_FIFO" 2>> "$LOG_FILE"
-    set -x
-fi
-
-# --- Logging Functions ---
-log() { 
-    if [ "$SILENT" -eq 0 ]; then
-        echo "[UPDATER] $1"
-    fi
+# --- Logging ---
+log() {
+    [ "$SILENT" -eq 0 ] && echo "[UPDATE] $1"
 }
-warn() { 
-    if [ "$SILENT" -eq 0 ]; then
-        echo "[UPDATER WARN] $1"
-    fi
-}
-error() { echo "[UPDATER ERROR] $1"; }
 
-run_in_chroot() {
-    # Execute command using chroot.sh run and append all output to the global log file
-    "$(dirname "$OTA_DIR")/chroot.sh" run "$*" >> "$LOG_FILE" 2>&1
+debug() {
+    [ "$DEBUG" -eq 1 ] && echo "[DEBUG] $1"
+}
+
+error() {
+    echo "[ERROR] $1" >&2
 }
 
 # --- Version Management ---
 get_current_version() {
     if [ -f "$VERSION_FILE" ]; then
-        cat "$VERSION_FILE" 2>/dev/null || echo "1"
+        cat "$VERSION_FILE" 2>/dev/null || echo "0"
     else
-        echo "1"
+        echo "0"
     fi
 }
 
 set_current_version() {
     echo "$1" > "$VERSION_FILE"
+    log "Version updated to $1"
 }
 
 get_target_version() {
-    # Extract version from module.prop in Magisk modules directory
     local module_prop="/data/adb/modules/ubuntu-chroot/module.prop"
     if [ -f "$module_prop" ]; then
-        grep "^versionCode=" "$module_prop" | cut -d'=' -f2 || echo "1500"
+        grep "^versionCode=" "$module_prop" | cut -d'=' -f2 || echo "0"
     else
-        echo "1500"
+        echo "0"
     fi
 }
 
-# --- Update Framework ---
-load_updates() {
-    if [ -f "$UPDATES_SCRIPT" ]; then
-        . "$UPDATES_SCRIPT"
-        return 0
-    else
-        error "Updates script not found: $UPDATES_SCRIPT"
-        return 1
-    fi
-}
-
-apply_update() {
+# --- Update Execution ---
+execute_update() {
     local version="$1"
     local func_name="update_v${version}"
+    local log_file="$LOG_DIR/update_v${version}_$(date +%Y%m%d_%H%M%S).log"
 
-    if command -v "$func_name" >/dev/null 2>&1; then
-        # Add clear separator for this update in the log file
-        {
-            echo ""
-            echo "=== Applying Update v$version ==="
-            echo "Started: $(date)"
-            echo ""
-        } >> "$LOG_FILE"
+    debug "Checking if $func_name exists..."
+    if ! type "$func_name" >/dev/null 2>&1; then
+        debug "$func_name not found, skipping"
+        return 2  # No more updates
+    fi
 
-        log "Applying update v$version..."
-        if "$func_name"; then
-            # Mark update as completed in log
-            echo "✓ Update v$version completed successfully" >> "$LOG_FILE"
-            log "Update v$version completed successfully"
-            return 0
-        else
-            # Mark update as failed in log
-            echo "✗ Update v$version failed" >> "$LOG_FILE"
-            error "Update v$version failed"
-            return 1
-        fi
+    log "Applying update v$version..."
+
+    # Ensure tmp directory exists in chroot
+    mkdir -p "$CHROOT_PATH/tmp"
+
+    # Base64 encode the updates script for streaming
+    updates_b64=$(base64 -w0 "$UPDATES_SCRIPT")
+
+    # Execute update directly in chroot
+    mkdir -p "$LOG_DIR"
+    debug "Running: $CHROOT_DIR/chroot.sh run \"echo '$updates_b64' | base64 -d > /updates.sh && . /updates.sh && if $func_name; then echo '[UPDATER] Update completed successfully'; else echo '[UPDATER] Update failed'; exit 1; fi\""
+    if "$CHROOT_DIR/chroot.sh" run "echo '$updates_b64' | base64 -d > /updates.sh && . /updates.sh && if $func_name; then echo '[UPDATER] Update completed successfully'; else echo '[UPDATER] Update failed'; exit 1; fi" | tee "$log_file" | grep "^\\[UPDATER\\]"; then
+        log "✓ Update v$version completed successfully"
+        return 0
     else
-        # No more updates available
-        return 2
+        error "✗ Update v$version failed (see $log_file)"
+        # Show last few lines of log
+        if [ -f "$log_file" ]; then
+            error "Last 10 lines of log:"
+            tail -10 "$log_file" >&2
+        fi
+        return 1
     fi
 }
 
 # --- Core Update Logic ---
-perform_update() {
-    local current_version target_version
-
-    # Set up logging for this update session
-    local log_dir="/data/local/ubuntu-chroot/logs"
-    local timestamp=$(date +%Y%m%d_%H%M)
-    LOG_FILE="${log_dir}/update_${timestamp}.log"
-
-    # Create logs directory if it doesn't exist
-    mkdir -p "$log_dir" 2>/dev/null
-
-    # Initialize log file with session info
-    {
-        echo "=== Ubuntu Chroot Update Session ==="
-        echo "Started: $(date)"
-        echo "Log file: $LOG_FILE"
-        echo ""
-    } > "$LOG_FILE"
-
-    current_version=$(get_current_version)
-    target_version=$(get_target_version)
+perform_updates() {
+    local current_version=$(get_current_version)
+    local target_version=$(get_target_version)
 
     log "Current version: $current_version"
     log "Target version: $target_version"
 
-    log "Starting update process from $current_version onwards"
-
-    # Load update definitions
-    if ! load_updates; then
+    # Check if updates script exists
+    if [ ! -f "$UPDATES_SCRIPT" ]; then
+        error "Updates script not found: $UPDATES_SCRIPT"
         return 1
     fi
 
-    # Apply updates incrementally from current + 1
+    debug "Sourcing updates script: $UPDATES_SCRIPT"
+    if ! . "$UPDATES_SCRIPT"; then
+        error "Failed to source updates script"
+        return 1
+    fi
+
+    # Nothing to do if already up to date
+    if [ "$current_version" -ge "$target_version" ]; then
+        log "Already up to date (v$current_version)"
+        return 0
+    fi
+
+    # Find all available update functions
+    log "Scanning for available updates..."
+    local available_updates=""
     local version=$((current_version + 1))
-    while true; do
-        apply_update "$version"
-        local ret=$?
-        if [ $ret -eq 2 ]; then
-            # No more updates
-            break
-        elif [ $ret -eq 1 ]; then
-            error "Update failed at version $version"
-            return 1
+    while [ "$version" -le "$target_version" ]; do
+        if type "update_v${version}" >/dev/null 2>&1; then
+            available_updates="$available_updates $version"
+            debug "Found update_v${version}"
         else
-            # Update succeeded
+            debug "update_v${version} not found"
+        fi
+        version=$((version + 1))
+    done
+
+    if [ -z "$available_updates" ]; then
+        log "No updates found between v$current_version and v$target_version"
+        set_current_version "$target_version"
+        return 0
+    fi
+
+    log "Found updates:$available_updates"
+
+    # Apply each available update
+    for version in $available_updates; do
+        execute_update "$version"
+        local result=$?
+
+        if [ $result -eq 1 ]; then
+            error "Update failed at v$version, stopping"
+            return 1
+        elif [ $result -eq 2 ]; then
+            debug "No update function for v$version"
+        else
+            # Update succeeded, save progress
             set_current_version "$version"
-            version=$((version + 1))
         fi
     done
 
-    # Add final summary to log file
-    {
-        echo ""
-        echo "=== Update Session Complete ==="
-        echo "Final version: $(get_current_version)"
-        echo "Completed: $(date)"
-        echo ""
-    } >> "$LOG_FILE"
-
-    log "All updates applied successfully"
+    # Set to target version
+    set_current_version "$target_version"
+    log "All updates applied successfully!"
     return 0
 }
 
-# --- Main Logic ---
+# --- Main ---
 main() {
-    # Must be run as root
+    # Root check
     if [ "$(id -u)" -ne 0 ]; then
-        error "This script must be run as root"
+        error "Must be run as root"
         exit 1
     fi
 
     # Parse arguments
     while [ $# -gt 0 ]; do
         case "$1" in
-            -s|--silent)
-                SILENT=1
-                ;;
-            -f|--force)
-                # Force update regardless of version
-                rm -f "$VERSION_FILE"
-                ;;
+            -s|--silent) SILENT=1 ;;
+            -d|--debug) DEBUG=1 ;;
+            -f|--force) rm -f "$VERSION_FILE" ;;
             -h|--help)
                 echo "Usage: $0 [options]"
                 echo "  -s, --silent    Silent mode"
-                echo "  -f, --force     Force update"
+                echo "  -d, --debug     Debug mode"
+                echo "  -f, --force     Force re-apply all updates"
                 echo "  -h, --help      Show this help"
                 exit 0
                 ;;
@@ -210,31 +186,24 @@ main() {
         shift
     done
 
-    # Load holder PID for namespace isolation
-    if [ -f "$HOLDER_PID_FILE" ]; then
-        HOLDER_PID=$(cat "$HOLDER_PID_FILE")
+    # Check if chroot.sh exists
+    if [ ! -x "$CHROOT_DIR/chroot.sh" ]; then
+        error "chroot.sh not found or not executable: $CHROOT_DIR/chroot.sh"
+        exit 1
     fi
 
-    # Check if chroot is running, start if needed
-    if [ ! -f "$HOLDER_PID_FILE" ] || ! kill -0 "$(cat "$HOLDER_PID_FILE")" 2>/dev/null; then
-        log "Chroot not running, starting it..."
-        if ! "$(dirname "$OTA_DIR")/chroot.sh" start --no-shell --skip-post-exec -s; then
+    # Ensure chroot is running
+    if ! "$CHROOT_DIR/chroot.sh" status >/dev/null 2>&1; then
+        log "Starting chroot..."
+        if ! "$CHROOT_DIR/chroot.sh" start --no-shell --skip-post-exec -s; then
             error "Failed to start chroot"
             exit 1
         fi
-
-        # Reload holder PID after starting chroot
-        if [ -f "$HOLDER_PID_FILE" ]; then
-            HOLDER_PID=$(cat "$HOLDER_PID_FILE")
-            log "Chroot started successfully, PID: $HOLDER_PID"
-        else
-            error "HOLDER_PID_FILE not found after starting chroot"
-            exit 1
-        fi
+        sleep 2  # Give more time
     fi
 
-    # Perform the update
-    if perform_update; then
+    # Run updates
+    if perform_updates; then
         log "Update completed successfully"
         exit 0
     else

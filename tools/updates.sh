@@ -1,203 +1,214 @@
-#!/bin/bash
+#!/system/bin/sh
 # Ubuntu Chroot Update Definitions
-# This file contains incremental update functions
-# Each function name follows the pattern: update_v{versionCode}
-# Where versionCode matches the versionCode in module.prop
+# Each function defines an update that runs INSIDE the chroot with bash
+# Function name format: update_v{versionCode}
+# These functions are sourced by the updater script
+# Must use "[UPDATER]" prefix for all echo statements
 
-# --- Update Functions ---
-
-# Version 2000: Add wireless networking packages and set up bash completion
+# Version 2000: Wireless networking packages
 update_v2000() {
-    log "Installing wireless networking packages..."
+    echo "[UPDATER] Starting update v2000: Wireless networking packages"
 
-    # Update package lists
-    if ! run_in_chroot "apt-get update -qq"; then
-        error "Failed to update package lists"
+    echo "[UPDATER] Updating package lists..."
+    if apt-get update; then
+        echo "[UPDATER] Package lists updated successfully"
+    else
+        echo "[UPDATER] Failed to update package lists"
         return 1
     fi
 
-    # Install the packages
-    if ! run_in_chroot "apt-get install -y -qq iw hostapd isc-dhcp-server"; then
-        error "Failed to install wireless networking packages"
+    echo "[UPDATER] Installing iw, hostapd, isc-dhcp-server..."
+    if apt-get install -y iw hostapd isc-dhcp-server; then
+        echo "[UPDATER] Wireless packages installed successfully"
+    else
+        echo "[UPDATER] Failed to install wireless packages"
         return 1
     fi
 
-    # Clean up
-    run_in_chroot "apt-get autoremove -y -qq && apt-get clean -qq"
+    echo "[UPDATER] Cleaning up packages..."
+    apt-get autoremove -y && apt-get clean
 
-    log "Wireless networking packages installed successfully"
-
-    log "Setting up bash completion for better shell experience"
+    echo "[UPDATER] Setting up bash completion..."
 
     # Add bash completion to root's .bashrc
-    run_in_chroot "if ! grep -q 'bash_completion' /root/.bashrc; then echo 'if [ -f /etc/bash_completion ]; then' >> /root/.bashrc; echo '    . /etc/bash_completion' >> /root/.bashrc; echo 'fi' >> /root/.bashrc; fi"
-
-    # Add to user's .bashrc if user exists
-    if ! run_in_chroot /bin/bash << 'EOF'
-SETUP_USER_FILE="/var/lib/.default-user"
-if [ -f "$SETUP_USER_FILE" ]; then
-    DEFAULT_USER=$(cat "$SETUP_USER_FILE" 2>/dev/null || echo '')
-    if [ -n "$DEFAULT_USER" ] && id "$DEFAULT_USER" >/dev/null 2>&1; then
-        USER_BASHRC="/home/$DEFAULT_USER/.bashrc"
-        if [ -f "$USER_BASHRC" ] && ! grep -q 'bash_completion' "$USER_BASHRC"; then
-            echo 'if [ -f /etc/bash_completion ]; then' >> "$USER_BASHRC"
-            echo '    . /etc/bash_completion' >> "$USER_BASHRC"
-            echo 'fi' >> "$USER_BASHRC"
-            chown "$DEFAULT_USER:$DEFAULT_USER" "$USER_BASHRC"
-        fi
-    fi
+    if ! grep -q 'bash_completion' /root/.bashrc 2>/dev/null; then
+        echo "[UPDATER] Adding bash completion to root's .bashrc"
+        cat >> /root/.bashrc << 'EOF'
+if [ -f /etc/bash_completion ]; then
+    . /etc/bash_completion
 fi
 EOF
-    then
-        error "Failed to set up bash completion for user"
-        return 1
     fi
 
-    log "Bash completion setup completed successfully"
-    return 0
+    # Add to default user's .bashrc if exists
+    if [ -f /var/lib/.default-user ]; then
+        DEFAULT_USER=$(cat /var/lib/.default-user)
+        if [ -n "$DEFAULT_USER" ] && id "$DEFAULT_USER" >/dev/null 2>&1; then
+            USER_BASHRC="/home/$DEFAULT_USER/.bashrc"
+            if [ -f "$USER_BASHRC" ] && ! grep -q 'bash_completion' "$USER_BASHRC"; then
+                echo "[UPDATER] Adding bash completion to $DEFAULT_USER's .bashrc"
+                cat >> "$USER_BASHRC" << 'EOF'
+if [ -f /etc/bash_completion ]; then
+    . /etc/bash_completion
+fi
+EOF
+                chown "$DEFAULT_USER:$DEFAULT_USER" "$USER_BASHRC"
+            fi
+        fi
+    fi
+
+    echo "[UPDATER] ✓ Update v2000 completed: Wireless networking and bash completion configured!"
 }
 
+# Version 2500: Docker and x86_64 support
 update_v2500() {
-    log "Adding XDG environment variables for better GUI application support"
-    run_in_chroot "echo 'TMPDIR=/tmp' >> /etc/environment"
-    run_in_chroot "echo 'XDG_RUNTIME_DIR=/tmp/runtime' >> /etc/environment"
-    
-    log "Adding Docker support to existing chroot installation..."
-    
-    # Update package lists
-    if ! run_in_chroot "apt-get update"; then
-        error "Failed to update package lists"
-        return 1
-    fi
-    
-    # Install Docker and QEMU
-    if ! run_in_chroot "apt-get install -y docker.io qemu binfmt-support qemu-user-static"; then
-        error "Failed to install Docker and QEMU"
-        return 1
-    fi
-    
-    # Configure Docker daemon
-    run_in_chroot "mkdir -p /etc/docker"
-    run_in_chroot "echo '{\"iptables\": false, \"bridge\": \"none\"}' > /etc/docker/daemon.json"
+    echo "[UPDATER] Starting update v2500: Docker and x86_64 support"
 
-    # Add existing user to docker group if user exists
-    # Use a heredoc to pass the script to run_in_chroot
-    if ! run_in_chroot /bin/bash << 'EOF'
-#!/bin/bash
-SETUP_USER_FILE="/var/lib/.default-user"
-if [ -f "$SETUP_USER_FILE" ]; then
-    DEFAULT_USER=$(cat "$SETUP_USER_FILE" 2>/dev/null || echo '')
-    if [ -n "$DEFAULT_USER" ] && id "$DEFAULT_USER" >/dev/null 2>&1; then
-        echo "Adding user '$DEFAULT_USER' to docker group..."
-        if usermod -aG docker "$DEFAULT_USER"; then
-            echo "User '$DEFAULT_USER' added to docker group successfully"
-        else
-            echo "ERROR: Failed to add user '$DEFAULT_USER' to docker group"
-            exit 1
-        fi
-    else
-        echo "No valid user found in $SETUP_USER_FILE or user does not exist"
-    fi
-else
-    echo "Setup user file $SETUP_USER_FILE not found - user not created yet"
-fi
+    echo "[UPDATER] Adding XDG environment variables..."
+
+    cat >> /etc/environment << 'EOF'
+TMPDIR=/tmp
+XDG_RUNTIME_DIR=/tmp/runtime
 EOF
-    then
-        error "Failed to execute user setup script"
+
+    echo "[UPDATER] Installing Docker and QEMU..."
+
+    if apt-get update; then
+        echo "[UPDATER] Package lists updated successfully"
+    else
+        echo "[UPDATER] Failed to update package lists"
         return 1
     fi
-    
-    # Clean up
-    run_in_chroot "apt-get autoremove -y && apt-get clean"
-    
-    log "Docker support and environment variables added successfully"
-    
-    log "Adding support for running x86_64 applications..."
-    if ! run_in_chroot "rm /etc/apt/sources.list && \
-    cat > /etc/apt/sources.list << EOF
+
+    if apt-get install -y docker.io qemu binfmt-support qemu-user-static; then
+        echo "[UPDATER] Docker and QEMU installed successfully"
+    else
+        echo "[UPDATER] Failed to install Docker and QEMU"
+        return 1
+    fi
+
+    # Configure Docker
+    echo "[UPDATER] Configuring Docker daemon..."
+    mkdir -p /etc/docker
+    cat > /etc/docker/daemon.json << 'EOF'
+{
+    "iptables": false,
+    "bridge": "none"
+}
+EOF
+
+    # Add default user to docker group if exists
+    if [ -f /var/lib/.default-user ]; then
+        DEFAULT_USER=$(cat /var/lib/.default-user)
+        if [ -n "$DEFAULT_USER" ] && id "$DEFAULT_USER" >/dev/null 2>&1; then
+            echo "[UPDATER] Adding $DEFAULT_USER to docker group..."
+            usermod -aG docker "$DEFAULT_USER"
+        fi
+    fi
+
+    echo "[UPDATER] Configuring x86_64 (amd64) support..."
+
+    # Update sources.list for multiarch
+    echo "[UPDATER] Updating APT sources for multiarch support..."
+
+    rm -rf /etc/apt/sources.list && \
+    rm -rf /etc/apt/sources.list.d/*
+
+    cat > /etc/apt/sources.list << 'EOF'
 # For arm64 (native architecture)
 deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ jammy main restricted universe multiverse
 deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ jammy-updates main restricted universe multiverse
 deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ jammy-backports main restricted universe multiverse
 deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ jammy-security main restricted universe multiverse
 
-# For amd64 (the foreign architecture)
+# For amd64 (foreign architecture)
 deb [arch=amd64] http://archive.ubuntu.com/ubuntu/ jammy main restricted universe multiverse
 deb [arch=amd64] http://archive.ubuntu.com/ubuntu/ jammy-updates main restricted universe multiverse
 deb [arch=amd64] http://archive.ubuntu.com/ubuntu/ jammy-backports main restricted universe multiverse
 deb [arch=amd64] http://security.ubuntu.com/ubuntu/ jammy-security main restricted universe multiverse
 EOF
-"; then
-        error "Failed to update apt sources for multiarch support"
+
+    echo "[UPDATER] Adding amd64 architecture..."
+    if dpkg --add-architecture amd64; then
+        echo "[UPDATER] amd64 architecture added successfully"
+    else
+        echo "[UPDATER] Failed to add amd64 architecture"
         return 1
     fi
 
-    if ! run_in_chroot "dpkg --add-architecture amd64 && \
-    apt-get update"; then
-        error "Failed to add amd64 architecture and update package lists"
+    if apt-get update; then
+        echo "[UPDATER] Sources updated successfully"
+    else
+        echo "[UPDATER] Failed to update sources"
         return 1
     fi
 
-    if ! run_in_chroot "apt-get install -y libc6:amd64 \
-    libstdc++6:amd64 \
-    libgcc-s1:amd64 \
-"; then
-        error "Failed to install x86_64 libraries"
+    echo "[UPDATER] Installing amd64 libraries..."
+    if apt-get install -y libc6:amd64 libstdc++6:amd64 libgcc-s1:amd64; then
+        echo "[UPDATER] amd64 libraries installed successfully"
+    else
+        echo "[UPDATER] Failed to install amd64 libraries"
         return 1
     fi
 
-    run_in_chroot "apt-get autoremove -y && apt-get clean"
+    echo "[UPDATER] Cleaning up..."
+    apt-get autoremove -y && apt-get clean
 
-    if ! grep -q "binfmt-support" /data/local/ubuntu-chroot/post_exec.sh; then
-        if ! echo -e '# Start binfmt service by default\nservice binfmt-support start' >> /data/local/ubuntu-chroot/post_exec.sh; then
-            error "Failed to update post_exec.sh for binfmt-support"
-            return 1
-        fi
+    # Update post_exec.sh for binfmt-support
+    if ! grep -q "binfmt-support" /data/local/ubuntu-chroot/post_exec.sh 2>/dev/null; then
+        echo "[UPDATER] Updating post_exec.sh for binfmt-support..."
+        cat >> /data/local/ubuntu-chroot/post_exec.sh << 'EOF'
+
+# Start binfmt service
+service binfmt-support start
+EOF
     fi
 
-    log "x86_64 support added successfully"
-    return 0
+    echo "[UPDATER] ✓ Update v2500 completed: Docker and x86_64 support configured!"
 }
 
+# Version 2510: VNC/Display support
 update_v2510() {
+    echo "[UPDATER] Starting update v2510: VNC/Display support"
 
-    # Update package lists
-    if ! run_in_chroot "apt-get update"; then
-        error "Failed to update package lists"
-        return 1
-    fi
-    
-    # Install dbus
-    if ! run_in_chroot "apt-get install -y dbus"; then
-        error "Failed to install dbus"
+    echo "[UPDATER] Updating package lists..."
+    if apt-get update; then
+        echo "[UPDATER] Package lists updated successfully"
+    else
+        echo "[UPDATER] Failed to update package lists"
         return 1
     fi
 
-    log "dbus installed successfully"
-
-    # Install at-spi2-core
-    if ! run_in_chroot "apt-get install -y at-spi2-core"; then
-        error "Failed to install at-spi2-core"
+    echo "[UPDATER] Installing dbus..."
+    if apt-get install -y dbus; then
+        echo "[UPDATER] dbus installed successfully"
+    else
+        echo "[UPDATER] Failed to install dbus"
         return 1
     fi
 
-    log "at-spi2-core installed successfully"
+    echo "[UPDATER] Installing at-spi2-core..."
+    if apt-get install -y at-spi2-core; then
+        echo "[UPDATER] at-spi2-core installed successfully"
+    else
+        echo "[UPDATER] Failed to install at-spi2-core"
+        return 1
+    fi
 
-    # Check if a regular user exists in the chroot and create VNC startup script
-    if run_in_chroot /bin/bash << EOF
-DEFAULT_USER=\$(grep -E ':x:1[0-9][0-9][0-9]:' /etc/passwd 2>/dev/null | cut -d: -f1 | head -1)
-if [ -z "\$DEFAULT_USER" ]; then
-    echo "No regular user found in chroot. Please run initial setup by logging into the chroot first time to create a user." >&2
-    exit 1
-fi
-cat > /home/\$DEFAULT_USER/.vnc/xstartup << 'VNC_EOF'
+    # Check if a regular user exists and create VNC startup script
+    if [ -f /var/lib/.default-user ]; then
+        DEFAULT_USER=$(cat /var/lib/.default-user)
+        if [ -n "$DEFAULT_USER" ] && id "$DEFAULT_USER" >/dev/null 2>&1; then
+            echo "[UPDATER] Creating VNC startup script for $DEFAULT_USER..."
+            mkdir -p "/home/$DEFAULT_USER/.vnc"
+            cat > "/home/$DEFAULT_USER/.vnc/xstartup" << 'VNC_EOF'
 #!/bin/sh
 # Unset these to prevent session conflicts
 unset SESSION_MANAGER
 unset DBUS_SESSION_BUS_ADDRESS
 
 # Load user resources if available
-[ -r \$HOME/.Xresources ] && xrdb \$HOME/.Xresources
+[ -r $HOME/.Xresources ] && xrdb $HOME/.Xresources
 
 # Set solid background (better VNC performance than wallpaper)
 xsetroot -solid grey
@@ -205,70 +216,71 @@ xsetroot -solid grey
 # Start XFCE with proper dbus session
 exec dbus-launch --exit-with-session xfce4-session
 VNC_EOF
-chmod +x /home/\$DEFAULT_USER/.vnc/xstartup
-EOF
-    then
-        log "VNC startup script updated successfully"
-    else
-        error "Failed to update VNC startup script"
-        return 1
-    fi
-
-    return 0
-}
-
-update_v2520() {
-
-    log "Adding udev rules for USB access..."
-    if ! run_in_chroot "apt update && apt install -y udev"; then
-        error "Failed to install udev"
-        return 1
-    fi
-
-    if ! run_in_chroot "printf '%s\n' 'SUBSYSTEM==\"usb\", ENV{DEVTYPE}==\"usb_device\", MODE=\"0666\", GROUP=\"plugdev\"' > /etc/udev/rules.d/99-chroot.rules"; then
-        error "Failed to add udev rules for USB access"
-        return 1
-    fi
-
-    if ! grep -q "udev" /data/local/ubuntu-chroot/post_exec.sh; then
-        if ! echo -e '# Ugly hack to start the udev service\nservice udev restart > /dev/null 2>&1 &' >> /data/local/ubuntu-chroot/post_exec.sh; then
-            error "Failed to update post_exec.sh for udev"
-            return 1
-        fi
-    fi
-
-   if ! run_in_chroot /bin/bash << 'EOF'
-#!/bin/bash
-SETUP_USER_FILE="/var/lib/.default-user"
-if [ -f "$SETUP_USER_FILE" ]; then
-    DEFAULT_USER=$(cat "$SETUP_USER_FILE" 2>/dev/null || echo '')
-    if [ -n "$DEFAULT_USER" ] && id "$DEFAULT_USER" >/dev/null 2>&1; then
-        echo "Adding user '$DEFAULT_USER' to plugdev group..."
-        if usermod -aG plugdev "$DEFAULT_USER"; then
-            echo "User '$DEFAULT_USER' added to plugdev group successfully"
+            chmod +x "/home/$DEFAULT_USER/.vnc/xstartup"
+            chown "$DEFAULT_USER:$DEFAULT_USER" "/home/$DEFAULT_USER/.vnc/xstartup"
+            echo "[UPDATER] VNC startup script updated successfully"
         else
-            echo "ERROR: Failed to add user '$DEFAULT_USER' to plugdev group"
-            exit 1
+            echo "[UPDATER] No valid default user found for VNC setup"
         fi
     else
-        echo "No valid user found in $SETUP_USER_FILE or user does not exist"
+        echo "[UPDATER] No default user file found, skipping VNC setup"
     fi
-else
-    echo "Setup user file $SETUP_USER_FILE not found - user not created yet"
-fi
-EOF
-    then
-        error "Failed to execute user setup script"
+
+    echo "[UPDATER] ✓ Update v2510 completed: VNC/Display support configured!"
+}
+
+# Version 2520: USB/udev support
+update_v2520() {
+    echo "[UPDATER] Starting update v2520: USB/udev support"
+
+    echo "[UPDATER] Updating package lists..."
+    if apt-get update; then
+        echo "[UPDATER] Package lists updated successfully"
+    else
+        echo "[UPDATER] Failed to update package lists"
         return 1
     fi
 
-    log "udev rules added successfully"
-    return 0
+    echo "[UPDATER] Installing udev..."
+    if apt-get install -y udev; then
+        echo "[UPDATER] udev installed successfully"
+    else
+        echo "[UPDATER] Failed to install udev"
+        return 1
+    fi
+
+    # Add udev rules for USB devices
+    echo "[UPDATER] Adding udev rules for USB access..."
+    cat > /etc/udev/rules.d/99-chroot.rules << 'EOF'
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", MODE="0666", GROUP="plugdev"
+EOF
+
+    # Add default user to plugdev group if exists
+    if [ -f /var/lib/.default-user ]; then
+        DEFAULT_USER=$(cat /var/lib/.default-user)
+        if [ -n "$DEFAULT_USER" ] && id "$DEFAULT_USER" >/dev/null 2>&1; then
+            echo "[UPDATER] Adding $DEFAULT_USER to plugdev group..."
+            usermod -aG plugdev "$DEFAULT_USER"
+        fi
+    fi
+
+    # Update post_exec.sh for udev
+    if ! grep -q "service udev" /data/local/ubuntu-chroot/post_exec.sh 2>/dev/null; then
+        echo "[UPDATER] Updating post_exec.sh for udev service..."
+        cat >> /data/local/ubuntu-chroot/post_exec.sh << 'EOF'
+
+# Start udev service
+service udev restart > /dev/null 2>&1 &
+EOF
+    fi
+
+    echo "[UPDATER] ✓ Update v2520 completed: USB/udev support configured!"
 }
 
-# Add new updates below following the pattern:
-# update_v{VERSION_CODE}() {
-#     log "Description of what this update does..."
-#     # Your update commands here
-#     return 0
+# Add your new updates below:
+# update_v{VERSION}() {
+#     echo "Your update description..."
+#     # Regular bash commands here
+#     # These run INSIDE the chroot, so just use normal commands
+#     echo "✓ Done!"
 # }
