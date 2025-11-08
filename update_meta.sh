@@ -29,6 +29,8 @@ python3 -c "
 import json
 import sys
 
+import re
+
 for suffix in ['-GUI', '-CLI']:
     filename = f'update{suffix}.json'
     try:
@@ -37,6 +39,7 @@ for suffix in ['-GUI', '-CLI']:
         
         data['version'] = '$VERSION'
         data['versionCode'] = $VERSION_CODE
+        data['zipUrl'] = re.sub(r'/download/[^/]+/', f'/download/$VERSION/', data['zipUrl'])
         
         with open(filename, 'w') as f:
             json.dump(data, f, indent=2)
