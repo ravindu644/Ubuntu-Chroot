@@ -12,6 +12,7 @@ RUN apt-get update && apt-get upgrade -y
 # This ensures arm64 packages are fetched from ports.ubuntu.com and
 # amd64 packages are fetched from the main archive.ubuntu.com.
 RUN rm /etc/apt/sources.list && \
+    rm -rf /etc/apt/sources.list.d/* && \
     cat > /etc/apt/sources.list << EOF
 # For arm64 (native architecture)
 deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ jammy main restricted universe multiverse
