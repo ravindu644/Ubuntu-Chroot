@@ -189,11 +189,8 @@ check_sysv_ipc() {
 advanced_mount() {
     local src="$1" tgt="$2" type="$3" opts="$4"
     
-    if [ "$type" = "tmpfs" ] || [ "$type" = "devpts" ] || [ ! -e "$src" ]; then
-        run_in_ns mkdir -p "$tgt" 2>/dev/null
-    else
-        run_in_ns mkdir -p "$(dirname "$tgt")" 2>/dev/null
-    fi
+    # Always create the target directory silently if it doesn't exist
+    [ ! -d "$tgt" ] && run_in_ns mkdir -p "$tgt" 2>/dev/null
 
     if [ "$type" = "bind" ]; then
         [ -e "$src" ] || { warn "Source for bind mount does not exist: $src"; return 1; }
