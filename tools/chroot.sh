@@ -470,6 +470,11 @@ start_chroot() {
     advanced_mount "tmpfs" "$CHROOT_PATH/run" "tmpfs" "-o rw,nosuid,nodev,relatime,size=100M"
     advanced_mount "tmpfs" "$CHROOT_PATH/dev/shm" "tmpfs" "-o mode=1777"
 
+    # Mount binfmt_misc if supported
+    if grep -q binfmt_misc /proc/filesystems; then
+        advanced_mount "binfmt_misc" "$CHROOT_PATH/proc/sys/fs/binfmt_misc" "binfmt_misc" ""
+    fi
+
     [ -d "/config" ] && run_in_ns mount -t bind "/config" "$CHROOT_PATH/config" 2>/dev/null && log "Mounted $CHROOT_PATH/config" && echo "$CHROOT_PATH/config" >> "$MOUNTED_FILE"
     [ -d "/dev/binderfs" ] && advanced_mount "/dev/binderfs" "$CHROOT_PATH/dev/binderfs" "bind"
     [ -d "/dev/bus/usb" ] && advanced_mount "/dev/bus/usb" "$CHROOT_PATH/dev/bus/usb" "bind"

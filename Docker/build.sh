@@ -7,7 +7,7 @@ set -e
 DATE=$(date +%Y%m%d)
 
 # Output filename
-OUTPUT_FILE="Ubuntu-22.04-rootfs-${DATE}-${VERSION}.tar.gz"
+OUTPUT_FILE="Ubuntu-24.04-rootfs-${DATE}-${VERSION}.tar.gz"
 
 # Install QEMU handlers for cross-platform builds
 docker run --privileged --rm tonistiigi/binfmt --install all
