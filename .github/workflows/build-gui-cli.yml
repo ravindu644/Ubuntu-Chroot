@@ -13,6 +13,10 @@ on:
         description: 'Only update the JSONs and Changelog (skip build and release)'
         type: boolean
         default: false
+      only_build_update_zip:
+        description: 'Only build the update ZIP (skip rootfs and full ZIP)'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -41,6 +45,7 @@ jobs:
         run: sudo apt update && sudo apt install -y rsync python3
 
       - name: Build Ubuntu RootFS
+        if: ${{ !inputs.only_build_update_zip }}
         run: |
           cd Docker
           VERSION="${{ github.event.inputs.version || github.ref_name }}" ./build.sh
@@ -49,6 +54,7 @@ jobs:
         run: ./build_zip.sh ${{ matrix.name }} "${{ github.event.inputs.version || github.ref_name }}" --update
 
       - name: Build Full ZIP
+        if: ${{ !inputs.only_build_update_zip }}
         run: ./build_zip.sh ${{ matrix.name }} "${{ github.event.inputs.version || github.ref_name }}"
 
       - name: Upload Artifact
@@ -58,6 +64,7 @@ jobs:
           path: out/update${{ matrix.suffix }}.zip
 
       - name: Upload Full Artifact
+        if: ${{ !inputs.only_build_update_zip }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}-full-zip
