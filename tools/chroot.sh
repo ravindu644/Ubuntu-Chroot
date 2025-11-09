@@ -526,10 +526,9 @@ stop_chroot() {
         run_fstrim >/dev/null 2>&1 || warn "fstrim failed during stop operation"
     fi
 
-    # Unmount binfmt_misc if mounted
+    # Stop binfmt_misc service if running
     # this is kinda an ugly hack but it works
-    run_in_chroot "service binfmt-support stop" >/dev/null 2>&1 || true
-    run_in_ns umount -f "$CHROOT_PATH/proc/sys/fs/binfmt_misc" >/dev/null 2>&1 || true
+    run_in_chroot "systemctl stop binfmt-support" >/dev/null 2>&1 || true
     
     kill_chroot_processes
     umount_chroot
@@ -562,6 +561,19 @@ stop_chroot() {
 }
 
 umount_chroot() {
+
+    # Define custom Linux mounts in reverse order (deepest first)
+    custom_linux_mounts=(
+        "$CHROOT_PATH/proc/sys/fs/binfmt_misc"
+        "$CHROOT_PATH/tmp/runtime/gvfs"
+        "$CHROOT_PATH/tmp"
+    )
+
+    # Unmount any external mounts not managed by the script
+    for mount_point in "${custom_linux_mounts[@]}"; do
+        run_in_ns umount -lf "$mount_point" >/dev/null 2>&1 || true
+    done
+
     local chroot_storage="$CHROOT_PATH/storage/emulated/0"
     if is_mounted "$chroot_storage"; then
         log "Unmounting storage safely..."
