@@ -1,9 +1,10 @@
 # Changelog
 
-## v3.1 (2025-11-09)
+## v3.2 (2025-11-10)
 
-- workflow: added ability to only build the update zip if there are no major rootfs updates there
-- chrootmgr: umount gvfs and binfmt_misc when stopping the chroot
-- Update metadata for v3.0
-
-#### This update is for Magisk, KernelSU, and APatch users only. If you are a new user, [you must install the full chroot package from the v3.0 release.](https://github.com/ravindu644/Ubuntu-Chroot/releases/tag/v3.0)
+- module: bump v3.2
+- rootfs: fix Weird wifi interface names making when an external adapter plugged in
+- chrootmgr: fix USB device authorization to detect external WIFI adapters
+- chrootmgr: added firmware loading mechanism if the device supports it
+- Update CHANGELOG.md
+- Update metadata for v3.1
