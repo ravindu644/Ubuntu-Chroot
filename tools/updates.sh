@@ -277,7 +277,7 @@ EOF
     echo "[UPDATER] ✓ Update v2520 completed: USB/udev support configured!"
 }
 
-update_v2530() {
+update_v3200() {
 
     # Create udev rule for traditional wireless interface names
     if mkdir -p /etc/udev/rules.d && echo 'SUBSYSTEM=="net", ACTION=="add", ATTR{type}=="1", NAME="wlan%n"' > /etc/udev/rules.d/70-wlan.rules; then
@@ -287,7 +287,7 @@ update_v2530() {
         return 1
     fi
     
-    echo "[UPDATER] ✓ Update v2530 completed: Wireless interface names configured!"
+    echo "[UPDATER] ✓ Update v3200 completed: Wireless interface names configured!"
 }
 
 # Add your new updates below:

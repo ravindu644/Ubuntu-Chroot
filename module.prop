@@ -1,7 +1,7 @@
 id=ubuntu-chroot
 name=Ubuntu Chroot
-version=v3
-versionCode=3000
+version=v3.2
+versionCode=3200
 author=ravindu644
 description=A module for installing Ubuntu 24.04 rootfs on Android and managing it with a modern WebUI, featuring full hardware access and proper namespace isolation
 updateJson=https://raw.githubusercontent.com/ravindu644/Ubuntu-Chroot/refs/heads/main/update-GUI.json
