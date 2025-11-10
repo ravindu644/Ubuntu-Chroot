@@ -521,6 +521,11 @@ start_chroot() {
     setup_storage
     apply_internet_fix
 
+    if [ -w /sys/module/usbcore/parameters/authorized_default ]; then
+        echo 1 > /sys/module/usbcore/parameters/authorized_default
+        log "Enabled USB device authorization"
+    fi
+
     sysctl -w kernel.shmmax=268435456 >/dev/null 2>&1
 
     if [ "$SKIP_POST_EXEC" -eq 0 ] && [ -f "$POST_EXEC_SCRIPT" ] && [ -x "$POST_EXEC_SCRIPT" ]; then
