@@ -158,6 +158,9 @@ RUN locale-gen en_US.UTF-8 && \
     # Configure Docker daemon
     mkdir -p /etc/docker && \
     echo '{"iptables": false, "bridge": "none"}' > /etc/docker/daemon.json && \
+    # Create udev rule for traditional wireless interface names
+    mkdir -p /etc/udev/rules.d && \
+    echo 'SUBSYSTEM=="net", ACTION=="add", ATTR{type}=="1", NAME="wlan%n"' > /etc/udev/rules.d/70-wlan.rules && \
     # Remove default ubuntu user if it exists
     deluser --remove-home ubuntu || true
 
