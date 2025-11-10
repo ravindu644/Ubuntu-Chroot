@@ -241,6 +241,9 @@ RUN locale-gen en_US.UTF-8 && \
     echo "xfce4-session" > /etc/skel/.xsession && \
     chmod +x /etc/skel/.xsession && \
     sed -i 's/max_bpp=32/max_bpp=24/g' /etc/xrdp/xrdp.ini || true && \
+    # Create udev rule for traditional wireless interface names
+    mkdir -p /etc/udev/rules.d && \
+    echo 'SUBSYSTEM=="net", ACTION=="add", ATTR{type}=="1", NAME="wlan%n"' > /etc/udev/rules.d/70-wlan.rules && \
     # Create default user directories
     xdg-user-dirs-update && \
     # Remove default ubuntu user if it exists
