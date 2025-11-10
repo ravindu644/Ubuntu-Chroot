@@ -222,7 +222,15 @@ RUN apt-get update && \
 COPY xfce4-config.tar /tmp/
 RUN mkdir -p /etc/skel/.config && \
     tar -xf /tmp/xfce4-config.tar -C /etc/skel/.config/ && \
-    rm /tmp/xfce4-config.tar
+    rm /tmp/xfce4-config.tar && \
+    # Configure XFCE kiosk mode to disable shutdown/restart buttons
+    mkdir -p /etc/xdg/xfce4/kiosk && \
+    cat > /etc/xdg/xfce4/kiosk/kioskrc << EOF
+[xfce4-session]
+Shutdown=NONE
+CustomizeLogout=NONE
+CustomizeChooser=NONE
+EOF
 
 # Configure locales, environment, SSH, Docker, and user setup in a single layer
 RUN locale-gen en_US.UTF-8 && \
