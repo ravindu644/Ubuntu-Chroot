@@ -442,6 +442,26 @@ start_chroot() {
             exit 1
         fi
         log "Sparse image mounted successfully"
+
+        # Configure firmware path to include chroot firmware if conditions are met
+        if [ -f "/sys/module/firmware_class/parameters/path" ] && [ -d "$CHROOT_PATH/lib/firmware" ]; then
+            log "Configuring kernel firmware path to include chroot firmware..."
+            current_path=$(cat /sys/module/firmware_class/parameters/path 2>/dev/null)
+            if [ -z "$current_path" ]; then
+                current_path="/vendor/firmware"
+            fi
+            # Check if chroot firmware path is not already in the path
+            if ! echo "$current_path" | grep -q "$CHROOT_PATH/lib/firmware"; then
+                new_path="$current_path,$CHROOT_PATH/lib/firmware"
+                if echo "$new_path" > /sys/module/firmware_class/parameters/path; then
+                    log "Firmware path updated to: $new_path"
+                else
+                    warn "Failed to update firmware path"
+                fi
+            else
+                log "Chroot firmware path already configured"
+            fi
+        fi
     fi
 
     rm -f "$MOUNTED_FILE"
