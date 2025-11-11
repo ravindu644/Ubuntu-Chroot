@@ -246,54 +246,68 @@ run_fstrim() {
 }
 
 apply_internet_fix() {
-    log "Applying internet fix for chroot..."
+    log "Applying chroot compatibility fixes..."
 
-    # Get DNS servers from Android system and provide a fallback if getprop returns an empty string.
-    local dns1=$(getprop net.dns1 2>/dev/null)
-    [ -z "$dns1" ] && dns1='8.8.8.8'
-
-    local dns2=$(getprop net.dns2 2>/dev/null)
-    [ -z "$dns2" ] && dns2='8.8.4.4'
-
-    # Set flag to prevent recursive calls during startup
     CHROOT_SETUP_IN_PROGRESS=1
 
-    # Atomically create network files inside the chroot.
-    # This block handles the case where /etc/resolv.conf is a symlink.
+    local dns_servers=""
+    for i in 1 2 3 4; do
+        local dns
+        dns=$(getprop net.dns${i} 2>/dev/null)
+        [ -n "$dns" ] && dns_servers="${dns_servers}nameserver ${dns}\n"
+    done
+    [ -z "$dns_servers" ] && dns_servers="nameserver 8.8.8.8\nnameserver 8.8.4.4\n"
+
     if ! run_in_chroot "/bin/sh -c \"
-        # 1. Ensure the target directory for the real resolv.conf exists.
-        mkdir -p /run/resolvconf &&
-
-        # 2. Write the DNS servers to the *actual* file, not the symlink.
-        printf 'nameserver %s\\nnameserver %s\\n' '$dns1' '$dns2' > /run/resolvconf/resolv.conf &&
-
-        # 3. Force-recreate the symlink to ensure it points to the correct file.
-        ln -sf /run/resolvconf/resolv.conf /etc/resolv.conf &&
-
-        # 4. Add required Android networking groups if they don't exist.
-        grep -q '^aid_inet:' /etc/group || echo 'aid_inet:x:3003:' >> /etc/group &&
-        grep -q '^aid_net_raw:' /etc/group || echo 'aid_net_raw:x:3004:' >> /etc/group &&
-
-        # 5. Create the hosts file.
-        printf '127.0.0.1\\tlocalhost %s\\n::1\\t\\tlocalhost ip6-localhost ip6-loopback\\n' '$C_HOSTNAME' > /etc/hosts &&
-        
-        # 6. Set the hostname.
+        # --- System-level Setup ---
+        mkdir -p /run/resolvconf
+        printf '$dns_servers' > /run/resolvconf/resolv.conf
+        ln -sf /run/resolvconf/resolv.conf /etc/resolv.conf
+        printf '127.0.0.1\\tlocalhost %s\\n::1\\t\\tlocalhost ip6-localhost ip6-loopback\\n' '$C_HOSTNAME' > /etc/hosts
         echo '$C_HOSTNAME' > /proc/sys/kernel/hostname
+        find /etc/pam.d/ -type f -exec sed -i -E 's/^(session\\s+(optional|required)\\s+pam_keyinit.so)/#\\1/' {} + 2>/dev/null
+
+        # --- Create Android Network Groups ---
+        grep -q '^aid_inet:' /etc/group || echo 'aid_inet:x:3003:' >> /etc/group
+        grep -q '^aid_net_raw:' /etc/group || echo 'aid_net_raw:x:3004:' >> /etc/group
+
+        # --- Ensure /run/sshd exists with correct ownership ---
+        mkdir -p /run/sshd ; chown root:root /run/sshd ; chmod 755 /run/sshd
+
+        # --- Fix Root User ---
+        usermod -a -G aid_inet,aid_net_raw root >/dev/null 2>&1 || true
+
+        # --- Fix _apt User (if exists) ---
+        if grep -q '^_apt:' /etc/passwd; then
+            usermod -a -G aid_inet,aid_net_raw _apt >/dev/null 2>&1 || true
+        fi
+
+        # --- Fix ALL Regular Users (UID >= 1000) ---
+        for user in \\\$(awk -F: '\\\$3 >= 1000 && \\\$3 < 65534 {print \\\$1}' /etc/passwd); do
+            usermod -a -G aid_inet,aid_net_raw \\\"\\\$user\\\" >/dev/null 2>&1 || true
+        done
+
+        # --- Set ping capability ---
+        command -v setcap >/dev/null 2>&1 && setcap cap_net_raw+ep /bin/ping 2>/dev/null
+
+        # --- Configure adduser for future users ---
+        if [ -f /etc/adduser.conf ]; then
+            sed -i '/^EXTRA_GROUPS=/d' /etc/adduser.conf 2>/dev/null
+            sed -i '/^ADD_EXTRA_GROUPS=/d' /etc/adduser.conf 2>/dev/null
+            echo 'ADD_EXTRA_GROUPS=1' >> /etc/adduser.conf
+            echo 'EXTRA_GROUPS=\\\"aid_inet aid_net_raw\\\"' >> /etc/adduser.conf
+        fi
     \""; then
-        error "Failed to create network configuration files inside chroot."
+        error "Failed to apply compatibility fixes."
+        CHROOT_SETUP_IN_PROGRESS=0
+        return 1
     fi
 
-    # Add users to the new groups
-    run_in_chroot "/usr/sbin/usermod -aG aid_inet root 2>/dev/null"
-    run_in_chroot "/usr/sbin/usermod -aG aid_inet,aid_net_raw _apt 2>/dev/null"
+    # --- Host-level fixes ---
+    [ -f /proc/sys/net/ipv4/ping_group_range ] && echo '0 2147483647' > /proc/sys/net/ipv4/ping_group_range 2>/dev/null
 
-    # Unset the flag as we are done with chroot commands for this stage
     CHROOT_SETUP_IN_PROGRESS=0
-
-    # This command must run on the host system to enable IP forwarding
-    sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1
-
-    log "Internet fix successfully applied."
+    log "Compatibility fixes applied successfully."
 }
 
 # --- Core Action Functions ---
@@ -627,7 +641,6 @@ enter_chroot() {
         return
     fi
 
-    # Check if we are running in an interactive terminal.
     if ! [ -t 1 ]; then
         log "Chroot is running. To enter manually, use: sh $SCRIPT_NAME start $user"
         return
@@ -639,37 +652,20 @@ enter_chroot() {
         export TMPDIR='/tmp';
         export TERM='xterm';
     "
-
-    # Load holder PID
-    if [ -f "$HOLDER_PID_FILE" ]; then
-        HOLDER_PID=$(cat "$HOLDER_PID_FILE")
-    fi
     
     local shell_command
     if [ "$user" = "root" ]; then
         shell_command="
             $common_exports
-            export HOME='/root';
-            cd /root;
-            exec /bin/bash --login;
+            exec su - root
         "
     else
         shell_command="
             $common_exports
-            user_uid=\$(id -u '$user' 2>/dev/null)
-            if [ -n \"\$user_uid\" ]; then
-                mkdir -p /run/user/\$user_uid 2>/dev/null
-                chown '$user':'$user' /run/user/\$user_uid 2>/dev/null
-                chmod 700 /run/user/\$user_uid 2>/dev/null
-            fi
-            export HOME=\"/home/$user\";
-            cd \"/home/$user\" 2>/dev/null || export HOME='/root';
-            exec /bin/su '$user' -s /bin/bash;
+            exec /bin/su -l '$user'
         "
     fi
 
-    # Use exec to replace the script's process with the shell inside the chroot.
-    # Check if namespace holder is available, otherwise fallback to direct chroot.
     if [ -f "$HOLDER_PID_FILE" ] && kill -0 "$(cat "$HOLDER_PID_FILE")" 2>/dev/null; then
         exec _execute_in_ns chroot "$CHROOT_PATH" /bin/bash -c "$shell_command"
     else
@@ -692,7 +688,7 @@ show_status() {
 }
 
 list_users() {
-    run_in_chroot "grep -E ':x:1[0-9][0-9][0-9]:' /etc/passwd 2>/dev/null | cut -d: -f1 | head -20 | tr '\n' ',' | sed 's/,$//'"
+    run_in_chroot "awk -F: '\$3 >= 1000 && \$3 < 65534 {print \$1}' /etc/passwd 2>/dev/null | tr '\n' ',' | sed 's/,$//'"
 }
 
 run_command() {
