@@ -41,10 +41,9 @@ COPY scripts/systemctl3.py /usr/local/bin/systemctl
 COPY scripts/first-run-setup.sh /usr/local/bin/
 COPY scripts/start_vnc /usr/local/bin/
 COPY scripts/start_xrdp /usr/local/bin/
-COPY scripts/startwm.sh /etc/xrdp/startwm.sh
 
 # Make scripts executable
-RUN chmod +x /usr/local/bin/systemctl /usr/local/bin/first-run-setup.sh /usr/local/bin/start_vnc /usr/local/bin/start_xrdp /etc/xrdp/startwm.sh
+RUN chmod +x /usr/local/bin/systemctl /usr/local/bin/first-run-setup.sh /usr/local/bin/start_vnc /usr/local/bin/start_xrdp
 
 # This is the main installation layer. All package installations, PPA additions,
 # and setup are done here to minimize layers and maximize build speed.
@@ -252,7 +251,6 @@ RUN locale-gen en_US.UTF-8 && \
     # Configure xrdp to use XFCE and set color depth
     echo "xfce4-session" > /etc/skel/.xsession && \
     chmod +x /etc/skel/.xsession && \
-    sed -i 's/max_bpp=32/max_bpp=24/g' /etc/xrdp/xrdp.ini || true && \
     # Create udev rule for traditional wireless interface names
     mkdir -p /etc/udev/rules.d && \
     echo 'SUBSYSTEM=="net", ACTION=="add", ATTR{type}=="1", NAME="wlan%n"' > /etc/udev/rules.d/70-wlan.rules && \
@@ -260,6 +258,10 @@ RUN locale-gen en_US.UTF-8 && \
     xdg-user-dirs-update && \
     # Remove default ubuntu user if it exists
     deluser --remove-home ubuntu || true
+
+# Copy the XRDP starter script after everything is properly configured
+COPY scripts/startwm.sh /etc/xrdp/startwm.sh
+RUN chmod +x /etc/xrdp/startwm.sh
 
 # Set up root's bashrc with first-run logic
 RUN echo '#!/bin/bash' > /root/.bashrc && \
