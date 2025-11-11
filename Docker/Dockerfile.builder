@@ -41,9 +41,10 @@ COPY scripts/systemctl3.py /usr/local/bin/systemctl
 COPY scripts/first-run-setup.sh /usr/local/bin/
 COPY scripts/start_vnc /usr/local/bin/
 COPY scripts/start_xrdp /usr/local/bin/
+COPY scripts/startwm.sh /etc/xrdp/startwm.sh
 
 # Make scripts executable
-RUN chmod +x /usr/local/bin/systemctl /usr/local/bin/first-run-setup.sh /usr/local/bin/start_vnc /usr/local/bin/start_xrdp
+RUN chmod +x /usr/local/bin/systemctl /usr/local/bin/first-run-setup.sh /usr/local/bin/start_vnc /usr/local/bin/start_xrdp /etc/xrdp/startwm.sh
 
 # This is the main installation layer. All package installations, PPA additions,
 # and setup are done here to minimize layers and maximize build speed.
@@ -167,6 +168,9 @@ RUN apt-get update && \
     tigervnc-standalone-server \
     tigervnc-tools \
     xrdp \
+    xinit \
+    xorg \
+    xorgxrdp \
     dbus-x11 \
     dbus \
     at-spi2-core \

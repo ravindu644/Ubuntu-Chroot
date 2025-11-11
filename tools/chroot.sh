@@ -282,6 +282,11 @@ apply_internet_fix() {
             usermod -a -G aid_inet,aid_net_raw _apt >/dev/null 2>&1 || true
         fi
 
+        # --- Fix XRDP User (if exists) ---
+        if id xrdp >/dev/null 2>&1; then
+            usermod -a -G aid_inet,aid_net_raw xrdp >/dev/null 2>&1 || true
+        fi
+
         # --- Fix ALL Regular Users (UID >= 1000) ---
         for user in \\\$(awk -F: '\\\$3 >= 1000 && \\\$3 < 65534 {print \\\$1}' /etc/passwd); do
             usermod -a -G aid_inet,aid_net_raw \\\"\\\$user\\\" >/dev/null 2>&1 || true
