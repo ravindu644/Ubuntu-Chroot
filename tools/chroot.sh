@@ -145,23 +145,28 @@ run_in_chroot() {
     fi
 
     local common_exports="export PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/libexec:/opt/bin'; export TMPDIR='/tmp';"
-    
+
+    # We wrap the command in "su - root -c" to ensure it runs within a full
+    # login shell. This is critical for non-interactive commands to inherit
+    # the correct group permissions (like aid_inet) that are set during startup.
+    # The command is double-quoted to pass it as a single argument to -c.
+    local execution_block="su - root -c \"$command\""
+
     # If namespace holder is running, execute in isolated namespaces
     if [ -f "$HOLDER_PID_FILE" ] && kill -0 "$(cat "$HOLDER_PID_FILE")" 2>/dev/null; then
         # Use the centralized namespace execution
         _execute_in_ns chroot "$CHROOT_PATH" /bin/bash -c "
             $common_exports
-            $command
+            $execution_block
         "
     else
         # Fallback to direct chroot if namespace not available (maintains compatibility)
         chroot "$CHROOT_PATH" /bin/bash -c "
             $common_exports
-            $command
+            $execution_block
         "
     fi
 }
-
 
 # --- State Check Functions ---
 
@@ -279,7 +284,7 @@ apply_internet_fix() {
 
         # --- Fix _apt User (if exists) ---
         if grep -q '^_apt:' /etc/passwd; then
-            usermod -a -G aid_inet,aid_net_raw _apt >/dev/null 2>&1 || true
+            usermod -g aid_inet _apt >/dev/null 2>&1 || true
         fi
 
         # --- Fix ALL Regular Users (UID >= 1000) ---
@@ -693,7 +698,6 @@ list_users() {
 
 run_command() {
     local command="$*"
-    log "Running command in chroot: $command"
     run_in_chroot "$command"
 }
 
