@@ -380,6 +380,8 @@ create_namespace() {
 start_chroot() {
     log "Setting up advanced chroot environment..."
     
+    (setenforce 0 && log "SELinux set to permissive mode") || warn "Failed to set SELinux to permissive mode"
+    
     # Set flag to prevent recursion
     CHROOT_SETUP_IN_PROGRESS=1
 
@@ -466,12 +468,6 @@ start_chroot() {
 
     rm -f "$MOUNTED_FILE"
 
-    local og_selinux_file="/data/local/ubuntu-chroot/og-selinux"
-    if [ ! -f "$og_selinux_file" ]; then
-        getenforce > "$og_selinux_file" 2>/dev/null && log "Stored original SELinux status" || warn "Failed to store SELinux status"
-    fi
-    (setenforce 0 && log "SELinux set to permissive mode") || warn "Failed to set SELinux to permissive mode"
-
     run_in_ns mount -o remount,suid /data 2>/dev/null && log "Remounted /data with suid" || warn "Failed to remount /data with suid"
 
     log "Setting up system mounts..."
@@ -557,18 +553,6 @@ stop_chroot() {
     
     kill_chroot_processes
     umount_chroot
-    
-    # Restore original SELinux status.
-    local og_selinux_file="/data/local/ubuntu-chroot/og-selinux"
-    if [ -f "$og_selinux_file" ]; then
-        local original_status
-        original_status="$(cat "$og_selinux_file")"
-        case "$original_status" in
-            Enforcing) setenforce 1 && log "Restored SELinux to enforcing mode." || warn "Failed to restore SELinux." ;;
-            Permissive) setenforce 0 && log "Restored SELinux to permissive mode." || warn "Failed to restore SELinux." ;;
-        esac
-        rm -f "$og_selinux_file"
-    fi
     
     # Kill namespace holder process
     if [ -f "$HOLDER_PID_FILE" ]; then
