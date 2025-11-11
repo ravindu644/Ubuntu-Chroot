@@ -146,25 +146,18 @@ run_in_chroot() {
 
     local common_exports="export PATH='/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/libexec:/opt/bin'; export TMPDIR='/tmp';"
 
-    # We wrap the command in "su - root -c" to ensure it runs within a full
-    # login shell. This is critical for non-interactive commands to inherit
-    # the correct group permissions (like aid_inet) that are set during startup.
-    # The command is double-quoted to pass it as a single argument to -c.
-    local execution_block="su - root -c \"$command\""
+    # For complex multi-line scripts, we need to pass them more carefully.
+    # Instead of wrapping in su with double quotes (which breaks the script structure),
+    # we pass the script directly and let bash handle it.
+    local bash_cmd="$common_exports $command"
 
     # If namespace holder is running, execute in isolated namespaces
     if [ -f "$HOLDER_PID_FILE" ] && kill -0 "$(cat "$HOLDER_PID_FILE")" 2>/dev/null; then
         # Use the centralized namespace execution
-        _execute_in_ns chroot "$CHROOT_PATH" /bin/bash -c "
-            $common_exports
-            $execution_block
-        "
+        _execute_in_ns chroot "$CHROOT_PATH" /bin/bash -c "$bash_cmd"
     else
         # Fallback to direct chroot if namespace not available (maintains compatibility)
-        chroot "$CHROOT_PATH" /bin/bash -c "
-            $common_exports
-            $execution_block
-        "
+        chroot "$CHROOT_PATH" /bin/bash -c "$bash_cmd"
     fi
 }
 
@@ -251,7 +244,7 @@ run_fstrim() {
 }
 
 apply_internet_fix() {
-    log "Applying chroot compatibility fixes..."
+    log "Applying networking fixes..."
 
     CHROOT_SETUP_IN_PROGRESS=1
 
@@ -263,56 +256,67 @@ apply_internet_fix() {
     done
     [ -z "$dns_servers" ] && dns_servers="nameserver 8.8.8.8\nnameserver 8.8.4.4\n"
 
-    if ! run_in_chroot "/bin/sh -c \"
-        # --- System-level Setup ---
-        mkdir -p /run/resolvconf
-        printf '$dns_servers' > /run/resolvconf/resolv.conf
-        ln -sf /run/resolvconf/resolv.conf /etc/resolv.conf
-        printf '127.0.0.1\\tlocalhost %s\\n::1\\t\\tlocalhost ip6-localhost ip6-loopback\\n' '$C_HOSTNAME' > /etc/hosts
-        echo '$C_HOSTNAME' > /proc/sys/kernel/hostname
-        find /etc/pam.d/ -type f -exec sed -i -E 's/^(session\\s+(optional|required)\\s+pam_keyinit.so)/#\\1/' {} + 2>/dev/null
+    # The heredoc now correctly escapes the command substitution for the awk command.
+    # This ensures the awk command is executed inside the chroot, not on the host.
+    internet_fix_cmd=$(cat <<EOF
+# --- System-level Setup ---
+mkdir -p /run/resolvconf
+printf '$dns_servers' > /run/resolvconf/resolv.conf
+ln -sf /run/resolvconf/resolv.conf /etc/resolv.conf
+printf '127.0.0.1\tlocalhost %s\n::1\t\tlocalhost ip6-localhost ip6-loopback\n' '$C_HOSTNAME' > /etc/hosts
+echo '$C_HOSTNAME' > /proc/sys/kernel/hostname
+find /etc/pam.d/ -type f -exec sed -i -E 's/^(session\s+(optional|required)\s+pam_keyinit.so)/#\1/' {} + 2>/dev/null
 
-        # --- Create Android Network Groups ---
-        grep -q '^aid_inet:' /etc/group || echo 'aid_inet:x:3003:' >> /etc/group
-        grep -q '^aid_net_raw:' /etc/group || echo 'aid_net_raw:x:3004:' >> /etc/group
+# --- Create Android Network Groups ---
+grep -q '^aid_inet:' /etc/group || echo 'aid_inet:x:3003:' >> /etc/group
+grep -q '^aid_net_raw:' /etc/group || echo 'aid_net_raw:x:3004:' >> /etc/group
 
-        # --- Ensure /run/sshd exists with correct ownership ---
-        mkdir -p /run/sshd ; chown root:root /run/sshd ; chmod 755 /run/sshd
+# --- Ensure /run/sshd exists with correct ownership ---
+mkdir -p /run/sshd ; chown root:root /run/sshd ; chmod 755 /run/sshd
 
-        # --- Fix Root User ---
-        usermod -a -G aid_inet,aid_net_raw root >/dev/null 2>&1 || true
+# --- Fix Root User ---
+usermod -a -G aid_inet,aid_net_raw root >/dev/null 2>&1 || true
 
-        # --- Fix _apt User (if exists) ---
-        if grep -q '^_apt:' /etc/passwd; then
-            usermod -g aid_inet _apt >/dev/null 2>&1 || true
-        fi
+# --- Fix _apt User (if exists) ---
+if grep -q '^_apt:' /etc/passwd; then
+    usermod -g aid_inet _apt >/dev/null 2>&1 || true
+fi
 
-        # --- Fix ALL Regular Users (UID >= 1000) ---
-        for user in \\\$(awk -F: '\\\$3 >= 1000 && \\\$3 < 65534 {print \\\$1}' /etc/passwd); do
-            usermod -a -G aid_inet,aid_net_raw \\\"\\\$user\\\" >/dev/null 2>&1 || true
-        done
+# --- Fix XRDP User (if exists) ---
+if id xrdp >/dev/null 2>&1; then
+    usermod -a -G aid_inet,aid_net_raw xrdp >/dev/null 2>&1 || true
+fi
 
-        # --- Set ping capability ---
-        command -v setcap >/dev/null 2>&1 && setcap cap_net_raw+ep /bin/ping 2>/dev/null
+# --- Fix ALL Regular Users (UID >= 1000) ---
+# The dollar sign is escaped here: \$(...)
+# This prevents the host shell from expanding it.
+for user in \$(awk -F: '\$3 >= 1000 && \$3 < 65534 {print \$1}' /etc/passwd); do
+    usermod -a -G aid_inet,aid_net_raw "\$user" >/dev/null 2>&1 || true
+done
 
-        # --- Configure adduser for future users ---
-        if [ -f /etc/adduser.conf ]; then
-            sed -i '/^EXTRA_GROUPS=/d' /etc/adduser.conf 2>/dev/null
-            sed -i '/^ADD_EXTRA_GROUPS=/d' /etc/adduser.conf 2>/dev/null
-            echo 'ADD_EXTRA_GROUPS=1' >> /etc/adduser.conf
-            echo 'EXTRA_GROUPS=\\\"aid_inet aid_net_raw\\\"' >> /etc/adduser.conf
-        fi
-    \""; then
-        error "Failed to apply compatibility fixes."
-        CHROOT_SETUP_IN_PROGRESS=0
-        return 1
+# --- Set ping capability ---
+command -v setcap >/dev/null 2>&1 && setcap cap_net_raw+ep /bin/ping 2>/dev/null
+
+# --- Configure adduser for future users ---
+if [ -f /etc/adduser.conf ]; then
+    sed -i '/^EXTRA_GROUPS=/d' /etc/adduser.conf 2>/dev/null
+    sed -i '/^ADD_EXTRA_GROUPS=/d' /etc/adduser.conf 2>/dev/null
+    echo 'ADD_EXTRA_GROUPS=1' >> /etc/adduser.conf
+    echo 'EXTRA_GROUPS="aid_inet aid_net_raw"' >> /etc/adduser.conf
+fi
+EOF
+)
+
+    if run_in_chroot "${internet_fix_cmd}"; then
+        log "Networking fixes applied successfully."
+    else
+        error "Failed to apply networking fixes."
     fi
 
     # --- Host-level fixes ---
     [ -f /proc/sys/net/ipv4/ping_group_range ] && echo '0 2147483647' > /proc/sys/net/ipv4/ping_group_range 2>/dev/null
 
     CHROOT_SETUP_IN_PROGRESS=0
-    log "Compatibility fixes applied successfully."
 }
 
 # --- Core Action Functions ---
