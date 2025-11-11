@@ -60,7 +60,7 @@ usage() {
     echo "  backup <path> Create a compressed backup of the chroot environment."
     echo "  restore <path> Restore chroot from a backup archive."
     echo "  uninstall     Completely remove the chroot environment and all data."
-    echo "  resize <size> Resize sparse image to specified size in GB (4-64GB)."
+    echo "  resize <size> Resize sparse image to specified size in GB (4-512GB)."
     echo ""
     echo "Options:"
     echo "  [user]        Username to log in as (default: root)."
@@ -783,8 +783,8 @@ resize_sparse() {
         exit 1
     fi
     
-    if [ "$new_size_gb" -lt 4 ] || [ "$new_size_gb" -gt 64 ]; then
-        error "Size must be between 4GB and 64GB"
+    if [ "$new_size_gb" -lt 4 ] || [ "$new_size_gb" -gt 512 ]; then
+        error "Size must be between 4GB and 512GB"
         exit 1
     fi
     

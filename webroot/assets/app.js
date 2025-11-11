@@ -1807,7 +1807,7 @@
     // Confirm migration - remove emojis from warning
     const confirmed = await showConfirmDialog(
       'Migrate to Sparse Image',
-      `This will convert your current rootfs to a ${sizeGb}GB sparse ext4 image.\n\n⚠️ IMPORTANT: If your chroot is currently running, it will be stopped automatically.\n\nWARNING: This process cannot be undone. Make sure you have a backup!\n\nContinue with migration?`,
+      `This will convert your current rootfs to a ${sizeGb}GB sparse ext4 image.\n\n⚠️ IMPORTANT: If your chroot is currently running, it will be stopped automatically.\n\nℹ️ NOTE: Sparse images do not immediately use ${sizeGb}GB of storage. They only consume space as you write data to them, starting small and growing as needed.\n\nWARNING: This process cannot be undone. Make sure you have a backup!\n\nContinue with migration?`,
       'Start Migration',
       'Cancel'
     );
@@ -1980,7 +1980,7 @@
       `;
 
       // Add size options
-      const sizes = [4, 8, 16, 32, 64];
+      const sizes = [4, 8, 16, 32, 64, 128, 256, 512];
       sizes.forEach(size => {
         const option = document.createElement('option');
         option.value = size;
