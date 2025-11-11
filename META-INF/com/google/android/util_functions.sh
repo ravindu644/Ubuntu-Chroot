@@ -38,7 +38,6 @@ setup_chroot() {
     unzip -oj "$ZIPFILE" 'tools/chroot.sh' -d "$CHROOT_DIR" >&2
     unzip -oj "$ZIPFILE" 'tools/start-hotspot' -d "$CHROOT_DIR" >&2
     unzip -oj "$ZIPFILE" 'tools/sparsemgr.sh' -d "$CHROOT_DIR" >&2
-    unzip -oj "$ZIPFILE" 'tools/post_exec.sh' -d "$CHROOT_DIR" >&2
     echo "- Core chroot files extracted"
 }
 
@@ -129,6 +128,7 @@ extract_traditional() {
     # Create directory and extract
     mkdir -p "$rootfs_dir" "$TMPDIR"
     if unzip -oq "$ZIPFILE" "$rootfs_file" -d "$TMPDIR" && tar -xpf "$TMPDIR/$rootfs_file" -C "$rootfs_dir"; then
+        unzip -oj "$ZIPFILE" 'tools/post_exec.sh' -d "$CHROOT_DIR" >&2
         echo "- Ubuntu rootfs extracted successfully"
         return 0
     else
@@ -177,6 +177,7 @@ extract_sparse() {
     if unzip -oq "$ZIPFILE" "$rootfs_file" -d "$TMPDIR" && tar -xpf "$TMPDIR/$rootfs_file" -C "$rootfs_dir"; then
         echo "- Ubuntu rootfs extracted to sparse image"
         umount "$rootfs_dir"
+        unzip -oj "$ZIPFILE" 'tools/post_exec.sh' -d "$CHROOT_DIR" >&2
         echo "- Sparse image setup completed"
         return 0
     else
