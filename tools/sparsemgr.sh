@@ -250,8 +250,8 @@ migrate_to_sparse() {
         exit 1
     fi
     
-    if [ "$size_gb" -lt 4 ] || [ "$size_gb" -gt 64 ]; then
-        error "Size must be between 4GB and 64GB"
+    if [ "$size_gb" -lt 4 ] || [ "$size_gb" -gt 512 ]; then
+        error "Size must be between 4GB and 512GB"
         exit 1
     fi
     
