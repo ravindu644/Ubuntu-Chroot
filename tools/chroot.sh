@@ -546,6 +546,7 @@ start_chroot() {
     fi
 
     sysctl -w kernel.shmmax=268435456 >/dev/null 2>&1
+    sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1
 
     if [ "$SKIP_POST_EXEC" -eq 0 ] && [ -f "$POST_EXEC_SCRIPT" ] && [ -x "$POST_EXEC_SCRIPT" ]; then
         log "Running post-execution script..."
