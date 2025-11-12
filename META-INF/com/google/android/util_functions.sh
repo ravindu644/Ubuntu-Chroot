@@ -159,7 +159,7 @@ extract_sparse() {
         echo "- Built-in truncate failed, trying busybox truncate..."
         busybox truncate -s "${SPARSE_IMAGE_SIZE}G" "$img_file" || return 1
     fi
-    mkfs.ext4 -F -O ^has_journal,^resize_inode -m 0 -L "ubuntu-chroot" "$img_file" || {
+    mkfs.ext4 -F -L "ubuntu-chroot" "$img_file" || {
         rm -f "$img_file"
         return 1
     }

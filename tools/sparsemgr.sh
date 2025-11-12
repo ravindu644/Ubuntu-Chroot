@@ -172,13 +172,13 @@ create_sparse_image() {
     log "Formatting sparse image with ext4..."
     # Try mkfs.ext4 first, fallback to mke2fs
     if command -v mkfs.ext4 >/dev/null 2>&1; then
-        if ! mkfs.ext4 -F -O ^has_journal,^resize_inode -m 0 -L "ubuntu-chroot" "$img_path" 2>&1; then
+        if ! mkfs.ext4 -F -L "ubuntu-chroot" "$img_path" 2>&1; then
             error "Failed to format sparse image with mkfs.ext4"
             busybox rm -f "$img_path"
             return 1
         fi
     elif command -v mke2fs >/dev/null 2>&1; then
-        if ! mke2fs -t ext4 -F -O ^has_journal,^resize_inode -m 0 -L "ubuntu-chroot" "$img_path" 2>&1; then
+        if ! mke2fs -t ext4 -F -L "ubuntu-chroot" "$img_path" 2>&1; then
             error "Failed to format sparse image with mke2fs"
             busybox rm -f "$img_path"
             return 1
@@ -202,9 +202,9 @@ mount_sparse_image() {
     busybox mkdir -p "$mount_path"
     
     # Use busybox mount
-    if ! busybox mount -t ext4 -o loop,rw,noatime,nodiratime "$img_path" "$mount_path" 2>/dev/null; then
+    if ! busybox mount -t ext4 -o loop,rw,noatime,nodiratime,data=ordered,commit=30 "$img_path" "$mount_path" 2>/dev/null; then
         # Fallback to system mount if busybox mount fails
-        if ! mount -t ext4 -o loop,rw,noatime,nodiratime,barrier=0 "$img_path" "$mount_path" 2>/dev/null; then
+        if ! mount -t ext4 -o loop,rw,noatime,nodiratime,data=ordered,commit=30 "$img_path" "$mount_path" 2>/dev/null; then
             error "Failed to mount sparse image"
             return 1
         fi

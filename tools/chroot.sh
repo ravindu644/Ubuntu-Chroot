@@ -438,7 +438,14 @@ start_chroot() {
                 warn "Failed to unmount previous mount, continuing anyway"
             fi
         fi
-        
+
+        # Ugly fix for users who already have a sparse image without a journal
+        if ! tune2fs -l "$ROOTFS_IMG" | grep -q "has_journal"; then
+            log "Sparse image does not have journal - Enabling..."
+            tune2fs -O has_journal "$ROOTFS_IMG"
+            tune2fs -o journal_data_writeback "$ROOTFS_IMG"
+        fi
+
         # Check and repair filesystem before mounting to prevent kernel panics
         log "Checking filesystem integrity..."
         local fsck_output=$(e2fsck -f -y "$ROOTFS_IMG" 2>&1)
@@ -461,7 +468,7 @@ start_chroot() {
         sleep 1
         
         log "Mounting sparse image to rootfs..."
-        if ! run_in_ns mount -t ext4 -o loop,rw,noatime,nodiratime "$ROOTFS_IMG" "$CHROOT_PATH"; then
+        if ! run_in_ns mount -t ext4 -o loop,rw,noatime,nodiratime,data=ordered,commit=30 "$ROOTFS_IMG" "$CHROOT_PATH"; then
             error "Failed to mount sparse image"
             CHROOT_SETUP_IN_PROGRESS=0
             exit 1
@@ -544,6 +551,13 @@ start_chroot() {
         echo 1 > /sys/module/usbcore/parameters/authorized_default
         log "Enabled USB device authorization"
     fi
+
+
+    # Safe kernel tuning for better I/O
+    log "Applying I/O performance tuning..."
+    sysctl -w vm.dirty_ratio=10 >/dev/null 2>&1
+    sysctl -w vm.dirty_background_ratio=5 >/dev/null 2>&1
+    sysctl -w vm.swappiness=10 >/dev/null 2>&1
 
     sysctl -w kernel.shmmax=268435456 >/dev/null 2>&1
     sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1
