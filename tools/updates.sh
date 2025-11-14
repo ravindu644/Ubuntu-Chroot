@@ -221,7 +221,12 @@ update_v3200() {
         echo "[UPDATER] Failed to create udev rule for traditional wireless interface names"
         return 1
     fi
-    
+
+    echo "[UPDATER] ✓ Update v3200 completed: Wireless interface names configured!"
+}
+
+update_v3400() {
+
     # Create a global script for custom aliases and functions
     ALIASES_FILE="/etc/profile.d/chroot-webui-aliases.sh"
     if [ ! -f "$ALIASES_FILE" ]; then
@@ -335,7 +340,7 @@ EOF
         echo "[UPDATER] Global aliases and functions script already exists, skipping"
     fi
 
-    echo "[UPDATER] ✓ Update v3200 completed: Wireless interface names configured!"
+    echo "[UPDATER] ✓ Update v3400 completed: Aliases and functions configured!"
 }
 
 # Add your new updates below:
