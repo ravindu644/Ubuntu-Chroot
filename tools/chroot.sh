@@ -468,7 +468,7 @@ start_chroot() {
         sleep 1
         
         log "Mounting sparse image to rootfs..."
-        if ! run_in_ns mount -t ext4 -o loop,rw,noatime,nodiratime,data=ordered,commit=30 "$ROOTFS_IMG" "$CHROOT_PATH"; then
+        if ! run_in_ns mount -t ext4 -o loop,rw,noatime,nodiratime,errors=remount-ro "$ROOTFS_IMG" "$CHROOT_PATH"; then
             error "Failed to mount sparse image"
             CHROOT_SETUP_IN_PROGRESS=0
             exit 1
