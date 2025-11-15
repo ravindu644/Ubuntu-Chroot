@@ -1,11 +1,15 @@
 # Changelog
 
-## v3.3 (2025-11-11)
+## v3.4 (2025-11-15)
 
-- CRITICAL: chrootmgr: Final fix for the internet issue in legacy Android devices
-- fixed apt does not have internet access in legacy devices, only when using the `run_in_chroot` function
-- module: don't override the post_exec script everytime the user installs a new update
-- CRITICAL: chrootmgr: fixed internet in old legacy devices !
-- webui: give users to make a sparse image up to 512GB
-- CRITICAL: chrootmgr: don't restore SELinux to Enforcing after stopping the chroot
-- Update metadata for v3.2
+- readme: moved the Kernel Requirements to the bottom of the page
+- readme: fix ups and enhancements
+- readme: added webui screenshots
+- source: initial README drop
+- experimental-features: refined
+- chrootmgr; critical: use more safer mount flags in sparse image mode to avoid kernel panics
+- updates: refined
+- rootfs: added some cool aliases and functions to the bashrc
+- chrootmgr, module: micro-optimize the sparse image creating/mounting logic
+- chrootmgr: enable ipv4 forwarding when starting chroot
+- Update metadata for v3.3
