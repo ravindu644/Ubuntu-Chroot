@@ -45,7 +45,7 @@ rm -f "$ZIP_NAME"
 TMP_DIR=$(mktemp -d)
 
 # Copy all files except excluded
-rsync -a --exclude='.git*' --exclude='Docker' --exclude='CHANGELOG.md' --exclude='out' --exclude='update-*.json' --exclude='update_meta.sh' --exclude='build_zip.sh' "$PWD/" "$TMP_DIR/"
+rsync -a --exclude='.git*' --exclude='Screenshots' --exclude='Docker' --exclude='CHANGELOG.md' --exclude='out' --exclude='update-*.json' --exclude='update_meta.sh' --exclude='build_zip.sh' "$PWD/" "$TMP_DIR/"
 
 # For update builds, remove tar.gz files
 if [ "$UPDATE_FLAG" = "--update" ]; then
