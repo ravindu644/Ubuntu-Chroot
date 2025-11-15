@@ -1,10 +1,15 @@
 # Changelog
 
-## v2.52 (2025-11-08)
+## v3.4 (2025-11-15)
 
-- Fix Dockerfile syntax error by changing nested here document delimiter
-- Add MIT License
-- module: bump version v.2.52
-- Add udev support for USB device access in chroot environment
-- chrootmgr: mount /dev with devtmpfs when the support is available in the kernel.
-- Update metadata for v2.51
+- readme: moved the Kernel Requirements to the bottom of the page
+- readme: fix ups and enhancements
+- readme: added webui screenshots
+- source: initial README drop
+- experimental-features: refined
+- chrootmgr; critical: use more safer mount flags in sparse image mode to avoid kernel panics
+- updates: refined
+- rootfs: added some cool aliases and functions to the bashrc
+- chrootmgr, module: micro-optimize the sparse image creating/mounting logic
+- chrootmgr: enable ipv4 forwarding when starting chroot
+- Update metadata for v3.3
