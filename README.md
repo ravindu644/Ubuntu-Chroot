@@ -16,10 +16,10 @@ A comprehensive Android Linux environment featuring **Ubuntu 24.04** with a buil
 
 - [Requirements](#requirements)
 - [Why This Is Different](#why-this-is-different)
-- [Kernel Requirements (Optional)](#kernel-requirements)
 - [Installation](#installation)
 - [Usage](#usage)
 - [Experimental Features](#experimental-features)
+- [Kernel Requirements (Optional)](#kernel-requirements)
 - [Credits](#credits)
 
 <a id="requirements"></a>
@@ -147,6 +147,41 @@ A comprehensive Android Linux environment featuring **Ubuntu 24.04** with a buil
 </tr>
 </table>
 </details>
+
+<a id="installation"></a>
+## 🚀 Installation
+
+1. Download the latest release from [GitHub releases](https://github.com/ravindu644/ubuntu-chroot/releases)
+2. Flash the ZIP file using APatch/KernelSU managers
+3. Reboot your device
+
+<a id="usage"></a>
+## 🧑‍💻 Usage
+
+1. Access the chroot control panel using APatch/KernelSU's built-in WebUI
+2. On the first installation, you have to set up your user account to access GUI functionality (VNC/RDP):
+   - Start the chroot from the WebUI
+   - Copy the login command
+   - Paste it in Termux and complete the user account setup
+   - Return to the WebUI and click "Restart" to apply changes
+3. You can now log in as the created user via:
+   - **CLI**: Copy the login command and paste it in Termux or any other terminal emulator, including ADB Shell
+   - **GUI (VNC)**: Use the [AVNC Android app](https://github.com/gujjwal00/avnc) (recommended for best performance)
+   - **GUI (RDP)**: Uncomment the `# start_xrdp` line in the Post-exec Script from the WebUI and restart the chroot
+
+> **Note**: There is currently no perfect RDP app for Android. Please create an issue if you find a better option.
+
+<a id="experimental-features"></a>
+## 🧪 Experimental Features
+
+**Sparse Image Mode Installation**  
+- Edit the [experimental.conf](./experimental.conf) file before installation:
+    - Set `SPARSE_IMAGE=true`
+    - Define the image size in GB using `SPARSE_IMAGE_SIZE`
+
+**Converting to Sparse Image**
+
+- You can convert your existing directory-based installation to an isolated ext4 sparse image from the WebUI under **Experimental Features**.
 
 <a id="kernel-requirements"></a>
 ## 🛠 Kernel Requirements
@@ -317,41 +352,6 @@ CONFIG_SYSVIPC_SYSCTL=y
 ```
 
 </details>
-
-<a id="installation"></a>
-## 🚀 Installation
-
-1. Download the latest release from [GitHub releases](https://github.com/ravindu644/ubuntu-chroot/releases)
-2. Flash the ZIP file using APatch/KernelSU managers
-3. Reboot your device
-
-<a id="usage"></a>
-## 🧑‍💻 Usage
-
-1. Access the chroot control panel using APatch/KernelSU's built-in WebUI
-2. On the first installation, you have to set up your user account to access GUI functionality (VNC/RDP):
-   - Start the chroot from the WebUI
-   - Copy the login command
-   - Paste it in Termux and complete the user account setup
-   - Return to the WebUI and click "Restart" to apply changes
-3. You can now log in as the created user via:
-   - **CLI**: Copy the login command and paste it in Termux or any other terminal emulator, including ADB Shell
-   - **GUI (VNC)**: Use the [AVNC Android app](https://github.com/gujjwal00/avnc) (recommended for best performance)
-   - **GUI (RDP)**: Uncomment the `# start_xrdp` line in the Post-exec Script from the WebUI and restart the chroot
-
-> **Note**: There is currently no perfect RDP app for Android. Please create an issue if you find a better option.
-
-<a id="experimental-features"></a>
-## 🧪 Experimental Features
-
-**Sparse Image Mode Installation**  
-- Edit the [experimental.conf](./experimental.conf) file before installation:
-    - Set `SPARSE_IMAGE=true`
-    - Define the image size in GB using `SPARSE_IMAGE_SIZE`
-
-**Converting to Sparse Image**
-
-- You can convert your existing directory-based installation to an isolated ext4 sparse image from the WebUI under **Experimental Features**.
 
 <a id="credits"></a>
 ## 🙏 Credits
