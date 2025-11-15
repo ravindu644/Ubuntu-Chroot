@@ -97,7 +97,7 @@ A comprehensive Android Linux environment featuring **Ubuntu 24.04** with a buil
   <br><em>Portrait mode</em>
 </p>
 
-</details><br>
+</details>
 
 - A complete Linux desktop experience on Android, capable of running GUI applications smoothly.<sup>[<a href="#04-gui-applications-support">4</a>]</sup>
 
@@ -124,7 +124,23 @@ A comprehensive Android Linux environment featuring **Ubuntu 24.04** with a buil
 **Modern WebUI**  
 - Access and manage your chroot environment from KernelSU/APatch in-built WebUI.
 
-and more..
+  <details>
+  <summary>WebUI screenshots</summary>
+
+  <table>
+  <tr>
+    <td align="left" valign="top">
+      <img src="Screenshots/Main.jpg" alt="WebUI main screen" width="270" /><br><em>Main screen</em>
+    </td>
+    <td align="left" valign="top">
+      <img src="Screenshots/Hotspot.jpg" alt="WebUI hotspot" width="270" /><br><em>Hotspot settings</em>
+    </td>
+    <td align="left" valign="top">
+      <img src="Screenshots/Options.jpg" alt="WebUI options" width="270" /><br><em>Options panel</em>
+    </td>
+  </tr>
+</table>
+  </details>
 
 <a id="requirements"></a>
 ## 👀 Requirements
