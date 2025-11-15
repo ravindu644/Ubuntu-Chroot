@@ -1,4 +1,4 @@
-<img src="webroot/banner.png" alt="Ubuntu Chroot banner" width="900" />
+<img src="Screenshots/banner.png" alt="Ubuntu Chroot banner" width="900" />
 
 [![Latest release](https://img.shields.io/github/v/release/ravindu644/ubuntu-chroot?label=Latest%20Release&style=for-the-badge)](https://github.com/ravindu644/ubuntu-chroot/releases/latest)
 [![Telegram channel](https://img.shields.io/badge/Telegram-Channel-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/SamsungTweaks)
@@ -14,15 +14,21 @@ A comprehensive Android Linux environment featuring **Ubuntu 24.04** with a buil
 
 #### Quick Navigation
 
-- [Why This Is Different](#why-this-is-different)
 - [Requirements](#requirements)
+- [Why This Is Different](#why-this-is-different)
 - [Kernel Requirements (Optional)](#kernel-requirements)
 - [Installation](#installation)
 - [Usage](#usage)
 - [Experimental Features](#experimental-features)
 - [Credits](#credits)
 
----
+<a id="requirements"></a>
+## 👀 Requirements
+
+- Android device with arm64 architecture
+- Unlocked bootloader
+- Rooted with APatch/KernelSU
+  - Magisk is not supported due to **TTY issues below version 29**. If using Magisk, use a version below v29.
 
 <a id="why-this-is-different"></a>
 ## ❔ Why This Is Different
@@ -124,31 +130,23 @@ A comprehensive Android Linux environment featuring **Ubuntu 24.04** with a buil
 **Modern WebUI**  
 - Access and manage your chroot environment from KernelSU/APatch in-built WebUI.
 
-  <details>
-  <summary>WebUI screenshots</summary>
+<details>
+<summary>WebUI screenshots</summary>
 
-  <table>
-  <tr>
-    <td align="left" valign="top">
-      <img src="Screenshots/Main.jpg" alt="WebUI main screen" width="270" /><br><em>Main screen</em>
-    </td>
-    <td align="left" valign="top">
-      <img src="Screenshots/Hotspot.jpg" alt="WebUI hotspot" width="270" /><br><em>Hotspot settings</em>
-    </td>
-    <td align="left" valign="top">
-      <img src="Screenshots/Options.jpg" alt="WebUI options" width="270" /><br><em>Options panel</em>
-    </td>
-  </tr>
+<table>
+<tr>
+  <td align="left" valign="top">
+    <img src="Screenshots/Main.jpg" alt="WebUI main screen" width="270" /><br><em>Main screen</em>
+  </td>
+  <td align="left" valign="top">
+    <img src="Screenshots/Hotspot.jpg" alt="WebUI hotspot" width="270" /><br><em>Hotspot settings</em>
+  </td>
+  <td align="left" valign="top">
+    <img src="Screenshots/Options.jpg" alt="WebUI options" width="270" /><br><em>Options panel</em>
+  </td>
+</tr>
 </table>
-  </details>
-
-<a id="requirements"></a>
-## 👀 Requirements
-
-- Android device with arm64 architecture
-- Unlocked bootloader
-- Rooted with APatch/KernelSU
-  - Magisk is not supported due to **TTY issues below version 29**. If using Magisk, use a version below v29.
+</details>
 
 <a id="kernel-requirements"></a>
 ## 🛠 Kernel Requirements
@@ -358,8 +356,8 @@ CONFIG_SYSVIPC_SYSCTL=y
 <a id="credits"></a>
 ## 🙏 Credits
 
-- [Kali NetHunter project](https://github.com/offensive-security/kali-nethunter) for chroot initialization and sysctl commands
-- [Chroot-distro](https://github.com/Chroot-distro/Chroot-distro) for the internet connectivity fix
+- [Kali NetHunter project](https://gitlab.com/kalilinux/nethunter) for my own understanding of chroot and sysctl commands
+- [Chroot-distro](https://github.com/Magisk-Modules-Alt-Repo/chroot-distro) for the internet connectivity fix in initial versions
 - [docker-systemctl-replacement](https://github.com/gdraheim/docker-systemctl-replacement) for [systemctl](./Docker/scripts/systemctl3.py) implementation in chroot
 - [optimizer](https://t.me/OptimizerS1) for the cool banner design :)
 
