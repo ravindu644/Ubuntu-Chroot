@@ -796,3 +796,100 @@ textarea {
   width: 40%;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
 }
+
+/* Utility classes for inline styles moved from HTML */
+.debug-indicator-hidden {
+  display: none;
+}
+
+.btn-box-spaced {
+  margin-top: 12px;
+  padding: 10px;
+}
+
+.form-group-spaced {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.form-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.form-row-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.row-label-no-margin {
+  margin: 0;
+}
+
+.experimental-section-hidden {
+  display: none;
+}
+
+.icon-inline {
+  vertical-align: middle;
+  margin-left: 4px;
+}
+
+.icon-inline-right {
+  vertical-align: middle;
+  margin-right: 6px;
+}
+
+.sparse-settings-btn-icon {
+  width: 36px;
+  height: 36px;
+  padding: 6px;
+  aspect-ratio: 1;
+  min-height: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sparse-settings-btn-icon svg {
+  width: 18px;
+  height: 18px;
+  opacity: 0.8;
+}
+
+.debug-warning-text {
+  color: #ff6b6b;
+  font-weight: bold;
+  text-transform: uppercase;
+  font-size: 0.85em;
+  margin-top: 8px;
+}
+
+[data-theme="dark"] .debug-warning-text {
+  color: #fb7185;
+}
+
+.hotspot-note {
+  margin-top: 16px;
+  margin-bottom: 0;
+  font-size: 0.75em;
+  font-style: italic;
+  color: var(--muted, #666);
+  text-align: center;
+  opacity: 0.8;
+}
+
+.flex-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.sparse-settings-btn-hidden {
+  display: none;
+}

@@ -66,6 +66,13 @@
   // Track forward-nat state
   let forwardingActive = false;
 
+  // Feature module state refs (will be set by initFeatureModules)
+  let activeCommandIdRef = null;
+  let rootAccessConfirmedRef = null;
+  let hotspotActiveRef = null;
+  let forwardingActiveRef = null;
+  let sparseMigratedRef = null;
+
   // Track debug mode state
   let debugModeActive = false;
 
@@ -76,43 +83,29 @@
    * Load hotspot status from localStorage on page load
    */
   function loadHotspotStatus(){
-    try{
-      const saved = localStorage.getItem('hotspot_active');
-      hotspotActive = saved === 'true';
-    }catch(e){
-      hotspotActive = false;
-    }
+    hotspotActive = StateManager.get('hotspot');
   }
 
   /**
    * Save hotspot status to localStorage
    */
   function saveHotspotStatus(){
-    try{
-      localStorage.setItem('hotspot_active', hotspotActive.toString());
-    }catch(e){/* ignore storage errors */}
+    StateManager.set('hotspot', hotspotActive);
   }
 
   /**
    * Load debug mode status from localStorage on page load
    */
   function loadDebugMode(){
-    try{
-      const saved = localStorage.getItem('debug_mode_active');
-      debugModeActive = saved === 'true';
-      updateDebugIndicator();
-    }catch(e){
-      debugModeActive = false;
-    }
+    debugModeActive = StateManager.get('debug');
+    updateDebugIndicator();
   }
 
   /**
    * Save debug mode status to localStorage
    */
   function saveDebugMode(){
-    try{
-      localStorage.setItem('debug_mode_active', debugModeActive.toString());
-    }catch(e){/* ignore storage errors */}
+    StateManager.set('debug', debugModeActive);
   }
 
   /**
@@ -121,7 +114,12 @@
   function updateDebugIndicator(){
     const indicator = document.getElementById('debug-indicator');
     if(indicator){
-      indicator.style.display = debugModeActive ? 'block' : 'none';
+      // Use class instead of inline style
+      if(debugModeActive) {
+        indicator.classList.remove('debug-indicator-hidden');
+      } else {
+        indicator.classList.add('debug-indicator-hidden');
+      }
     }
   }
 
@@ -135,20 +133,15 @@
    * Save console logs to localStorage
    */
   function saveConsoleLogs(){
-    try{
-      const logs = els.console.innerHTML;
-      localStorage.setItem('chroot_console_logs', logs);
-    }catch(e){/* ignore storage errors */}
+    Storage.set('chroot_console_logs', els.console.innerHTML);
   }
 
   /**
    * Load console logs from localStorage
    */
   function loadConsoleLogs(){
-    try{
-      const logs = localStorage.getItem('chroot_console_logs');
-      if(logs) els.console.innerHTML = logs;
-    }catch(e){/* ignore storage errors */}
+    const logs = Storage.get('chroot_console_logs');
+    if(logs) els.console.innerHTML = logs;
   }
 
   /**
@@ -180,7 +173,7 @@
       });
 
       // Try to restore previously selected user
-      const savedUser = localStorage.getItem('chroot_selected_user');
+      const savedUser = Storage.get('chroot_selected_user');
       if(savedUser && select.querySelector(`option[value="${savedUser}"]`)){
         select.value = savedUser;
       }
@@ -215,8 +208,522 @@
    */
   function animateButton(btn){
     btn.classList.add('btn-pressed');
-    setTimeout(() => btn.classList.remove('btn-pressed'), 150);
+    setTimeout(() => btn.classList.remove('btn-pressed'), ANIMATION_DELAYS.BUTTON_ANIMATION);
   }
+
+  // ============================================================================
+  // STORAGE UTILITY - Centralized localStorage operations
+  // ============================================================================
+  const Storage = {
+    get(key, defaultValue = null) {
+      try {
+        const value = localStorage.getItem(key);
+        return value !== null ? value : defaultValue;
+      } catch(e) {
+        return defaultValue;
+      }
+    },
+    set(key, value) {
+      try {
+        localStorage.setItem(key, String(value));
+      } catch(e) {
+        // Silently fail - storage may be disabled
+      }
+    },
+    remove(key) {
+      try {
+        localStorage.removeItem(key);
+      } catch(e) {
+        // Silently fail
+      }
+    },
+    getBoolean(key, defaultValue = false) {
+      const value = this.get(key);
+      return value !== null ? value === 'true' : defaultValue;
+    },
+    getJSON(key, defaultValue = null) {
+      try {
+        const value = this.get(key);
+        return value ? JSON.parse(value) : defaultValue;
+      } catch(e) {
+        return defaultValue;
+      }
+    },
+    setJSON(key, value) {
+      try {
+        this.set(key, JSON.stringify(value));
+      } catch(e) {
+        // Silently fail
+      }
+    }
+  };
+
+  // ============================================================================
+  // ANIMATION DELAYS - Centralized timing constants
+  // ============================================================================
+  const ANIMATION_DELAYS = {
+    POPUP_CLOSE: 450,
+    POPUP_CLOSE_LONG: 750,
+    POPUP_CLOSE_VERY_LONG: 1500,
+    UI_UPDATE: 50,
+    STATUS_REFRESH: 500,
+    BUTTON_ANIMATION: 150,
+    INPUT_FOCUS: 100, // Delay for focusing inputs after DOM manipulation
+    INIT_DELAY: 160, // Initial page load delay
+    PRE_FETCH_DELAY: 500, // Delay before pre-fetching interfaces
+    SETTINGS_LOAD: 100, // Delay for loading settings after popup opens
+    CHANNEL_VERIFY: 100 // Delay for verifying channel value after load
+  };
+
+  // ============================================================================
+  // STATE MANAGER - Unified state management with persistence
+  // ============================================================================
+  const StateManager = {
+    states: {
+      hotspot: { key: 'hotspot_active', default: false },
+      forwarding: { key: 'forwarding_active', default: false },
+      debug: { key: 'debug_mode_active', default: false },
+      sparse: { key: 'sparse_migrated', default: false }
+    },
+    get(name) {
+      const state = this.states[name];
+      if(!state) return null;
+      return Storage.getBoolean(state.key, state.default);
+    },
+    set(name, value) {
+      const state = this.states[name];
+      if(!state) return;
+      Storage.set(state.key, value);
+    },
+    loadAll() {
+      hotspotActive = this.get('hotspot');
+      forwardingActive = this.get('forwarding');
+      debugModeActive = this.get('debug');
+      sparseMigrated = this.get('sparse');
+    },
+    saveAll() {
+      this.set('hotspot', hotspotActive);
+      this.set('forwarding', forwardingActive);
+      this.set('debug', debugModeActive);
+      this.set('sparse', sparseMigrated);
+    }
+  };
+
+  // ============================================================================
+  // COMMAND GUARD - Prevents concurrent command execution
+  // ============================================================================
+  async function withCommandGuard(commandId, fn) {
+    if(activeCommandId) {
+      appendConsole('⚠ Another command is already running. Please wait...', 'warn');
+      return;
+    }
+    if(!rootAccessConfirmed) {
+      appendConsole('Cannot execute: root access not available', 'err');
+      return;
+    }
+    try {
+      activeCommandId = commandId;
+      await fn();
+    } finally {
+      activeCommandId = null;
+    }
+  }
+
+  // ============================================================================
+  // DIALOG MANAGER - Centralized dialog creation
+  // ============================================================================
+  const DialogManager = {
+    // Common dialog styles
+    styles: {
+      overlay: `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2000;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+      `,
+      dialog: `
+        background: var(--card);
+        border-radius: var(--surface-radius);
+        box-shadow: 0 6px 20px rgba(6,8,14,0.06);
+        border: 1px solid rgba(0,0,0,0.08);
+        max-width: 450px;
+        width: 90%;
+        padding: 24px;
+        transform: scale(0.9);
+        transition: transform 0.2s ease;
+      `,
+      title: `
+        margin: 0 0 12px 0;
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--text);
+      `,
+      message: `
+        margin: 0 0 20px 0;
+        font-size: 14px;
+        color: var(--muted);
+        line-height: 1.5;
+        white-space: pre-line;
+      `,
+      buttonContainer: `
+        display: flex;
+        gap: 12px;
+        justify-content: flex-end;
+      `,
+      button: `
+        padding: 8px 16px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s ease;
+        -webkit-tap-highlight-color: transparent;
+      `,
+      buttonPrimary: `
+        border: 1px solid var(--accent);
+        background: var(--accent);
+        color: white;
+      `,
+      buttonSecondary: `
+        border: 1px solid rgba(0,0,0,0.08);
+        background: transparent;
+        color: var(--text);
+      `,
+      buttonDanger: `
+        border: 1px solid var(--danger);
+        background: var(--danger);
+        color: white;
+      `,
+      input: `
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid rgba(0,0,0,0.08);
+        border-radius: 8px;
+        background: var(--card);
+        color: var(--text);
+        font-size: 14px;
+        box-sizing: border-box;
+      `
+    },
+
+    createOverlay() {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = this.styles.overlay;
+      return overlay;
+    },
+
+    createDialog() {
+      const dialog = document.createElement('div');
+      dialog.style.cssText = this.styles.dialog;
+      return dialog;
+    },
+
+    createTitle(text) {
+      const title = document.createElement('h3');
+      title.textContent = text;
+      title.style.cssText = this.styles.title;
+      return title;
+    },
+
+    createMessage(text) {
+      const message = document.createElement('p');
+      message.textContent = text;
+      message.style.cssText = this.styles.message;
+      return message;
+    },
+
+    createButton(text, type = 'secondary') {
+      const btn = document.createElement('button');
+      btn.textContent = text;
+      const baseStyle = this.styles.button;
+      const typeStyle = type === 'primary' ? this.styles.buttonPrimary :
+                       type === 'danger' ? this.styles.buttonDanger :
+                       this.styles.buttonSecondary;
+      btn.style.cssText = baseStyle + typeStyle;
+      return btn;
+    },
+
+    createInput(placeholder = '', value = '') {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.placeholder = placeholder;
+      input.value = value;
+      input.style.cssText = this.styles.input;
+      return input;
+    },
+
+    createSelect(options = []) {
+      const select = document.createElement('select');
+      select.style.cssText = this.styles.input;
+      options.forEach(opt => {
+        const option = document.createElement('option');
+        option.value = opt.value;
+        option.textContent = opt.text;
+        select.appendChild(option);
+      });
+      return select;
+    },
+
+    show(overlay, dialog) {
+      document.body.appendChild(overlay);
+      setTimeout(() => {
+        overlay.style.opacity = '1';
+        dialog.style.transform = 'scale(1)';
+      }, 10);
+    },
+
+    close(overlay, delay = 200) {
+      overlay.style.opacity = '0';
+      const dialog = overlay.querySelector('div');
+      if(dialog) dialog.style.transform = 'scale(0.9)';
+      setTimeout(() => {
+        if(overlay.parentNode) {
+          overlay.parentNode.removeChild(overlay);
+        }
+      }, delay);
+    },
+
+    setupKeyboard(overlay, onEnter, onEscape) {
+      const handleKeyDown = (e) => {
+        if(e.key === 'Escape') {
+          if(onEscape) onEscape();
+          document.removeEventListener('keydown', handleKeyDown);
+        } else if(e.key === 'Enter') {
+          if(onEnter) onEnter();
+          document.removeEventListener('keydown', handleKeyDown);
+        }
+      };
+      document.addEventListener('keydown', handleKeyDown);
+      return handleKeyDown;
+    }
+  };
+
+  /**
+   * Progress Indicator Manager - Centralizes progress indicator creation/management
+   */
+  const ProgressIndicator = {
+    create(text, type = 'spinner') {
+      const progressLine = document.createElement('div');
+      progressLine.className = 'progress-indicator';
+      progressLine.textContent = '⏳ ' + text;
+      els.console.appendChild(progressLine);
+      els.console.scrollTop = els.console.scrollHeight;
+      
+      let interval = null;
+      if(type === 'spinner') {
+        let spinIndex = 0;
+        const spinner = ['|', '/', '-', '\\'];
+        interval = setInterval(() => {
+          spinIndex = (spinIndex + 1) % 4;
+          progressLine.textContent = '⏳ ' + text + ' ' + spinner[spinIndex];
+        }, 200);
+      } else if(type === 'dots') {
+        let dotCount = 0;
+        interval = setInterval(() => {
+          dotCount = (dotCount + 1) % 4;
+          progressLine.textContent = '⏳ ' + text + '.'.repeat(dotCount);
+        }, 400);
+      }
+      
+      return { progressLine, interval };
+    },
+    
+    remove(progressLine, interval) {
+      if(interval) clearInterval(interval);
+      if(progressLine) progressLine.remove();
+    },
+    
+    update(progressLine, text) {
+      if(progressLine) {
+        progressLine.textContent = '⏳ ' + text;
+      }
+    }
+  };
+
+  /**
+   * Button State Manager - Centralizes all button state updates
+   */
+  const ButtonState = {
+    setButton(btn, enabled, visible = true, opacity = null) {
+      if(!btn) return;
+      btn.disabled = !enabled;
+      if(opacity !== null) {
+        btn.style.opacity = enabled ? '' : opacity;
+      } else {
+        btn.style.opacity = enabled ? '' : '0.5';
+      }
+      if(visible !== null) {
+        btn.style.display = visible ? '' : 'none';
+      }
+    },
+    
+    setButtonPair(startBtn, stopBtn, isActive) {
+      this.setButton(startBtn, !isActive, true, '0.5');
+      this.setButton(stopBtn, isActive, true, '0.5');
+    },
+    
+    setButtons(buttons) {
+      // buttons: [{ btn, enabled, visible, opacity }, ...]
+      buttons.forEach(({ btn, enabled, visible, opacity }) => {
+        this.setButton(btn, enabled, visible, opacity);
+      });
+    }
+  };
+
+  /**
+   * Command Execution Wrapper - Standardizes async command execution pattern
+   */
+  async function executeCommand(config) {
+    const {
+      id,
+      checkActive = true,
+      checkRoot = true,
+      validate = null,
+      beforeExecute = null,
+      command,
+      progressText,
+      progressType = 'spinner',
+      closePopup = null,
+      onSuccess = null,
+      onError = null,
+      onComplete = null,
+      refreshAfter = true
+    } = config;
+
+    // Check if another command is running
+    if(checkActive && activeCommandId) {
+      appendConsole('⚠ Another command is already running. Please wait...', 'warn');
+      return;
+    }
+
+    // Check root access
+    if(checkRoot && !rootAccessConfirmed) {
+      appendConsole(`Cannot execute: root access not available`, 'err');
+      return;
+    }
+
+    // Validate inputs
+    if(validate && !validate()) {
+      return;
+    }
+
+    // Close popup if needed
+    if(closePopup) {
+      closePopup();
+      await new Promise(resolve => setTimeout(resolve, ANIMATION_DELAYS.POPUP_CLOSE));
+    }
+
+    // Before execute hook
+    if(beforeExecute) {
+      await beforeExecute();
+    }
+
+    // Show progress indicator
+    appendConsole(`━━━ ${progressText} ━━━`, 'info');
+    const { progressLine, interval } = ProgressIndicator.create(progressText, progressType);
+
+    // Disable UI
+    disableAllActions(true);
+    disableSettingsPopup(true);
+    activeCommandId = id;
+
+    // Execute command
+    return new Promise((resolve) => {
+      setTimeout(async () => {
+        try {
+          let output;
+          if(typeof command === 'function') {
+            output = await command();
+          } else {
+            output = await runCmdSync(command);
+          }
+
+          ProgressIndicator.remove(progressLine, interval);
+
+          // Display output line by line
+          if(output) {
+            const lines = String(output).split('\n');
+            lines.forEach(line => {
+              if(line.trim()) {
+                appendConsole(line);
+              }
+            });
+          }
+
+          // Handle success
+          if(onSuccess) {
+            onSuccess(output);
+          }
+
+          // Cleanup
+          activeCommandId = null;
+          disableAllActions(false);
+          disableSettingsPopup(false, true);
+          if(onComplete) onComplete(true);
+          if(refreshAfter) setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH);
+          resolve({ success: true, output });
+        } catch(error) {
+          ProgressIndicator.remove(progressLine, interval);
+
+          // Display error line by line
+          const errorMsg = String(error.message || error);
+          const lines = errorMsg.split('\n');
+          lines.forEach(line => {
+            if(line.trim()) {
+              appendConsole(line, 'err');
+            }
+          });
+
+          // Handle error
+          if(onError) {
+            onError(error);
+          }
+
+          // Cleanup
+          activeCommandId = null;
+          disableAllActions(false);
+          disableSettingsPopup(false, true);
+          if(onComplete) onComplete(false);
+          if(refreshAfter) setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH);
+          resolve({ success: false, error });
+        }
+      }, 50);
+    });
+  }
+
+  /**
+   * Popup Manager - Centralizes popup open/close logic
+   */
+  const PopupManager = {
+    open(popup, onOpen = null) {
+      if(popup) {
+        popup.classList.add('active');
+        if(onOpen) onOpen();
+      }
+    },
+    
+    close(popup, onClose = null) {
+      if(popup) {
+        popup.classList.remove('active');
+        if(onClose) onClose();
+      }
+    },
+    
+    setupClickOutside(popup, closeFn) {
+      if(popup && closeFn) {
+        popup.addEventListener('click', (e) => {
+          if(e.target === popup) closeFn();
+        });
+      }
+    }
+  };
 
   /**
    * Run command asynchronously
@@ -240,6 +747,9 @@
     // Prepend LOGGING_ENABLED=1 if debug mode is active
     const finalCmd = debugModeActive ? `LOGGING_ENABLED=1 ${cmd}` : cmd;
 
+    // FIXED: Set activeCommandId BEFORE calling executeAsync to prevent race condition
+    // The executeAsync method returns a commandId, so we set activeCommandId after getting it
+    // But we also track it locally to prevent race conditions in the callback
     const commandId = cmdExec.executeAsync(finalCmd, true, {
       onOutput: (output) => {
         // Display output, but filter out executing messages
@@ -256,11 +766,17 @@
         appendConsole(String(error), 'err');
       },
       onComplete: (result) => {
-        activeCommandId = null;
+        // Only clear if this is still the active command (prevents race conditions)
+        // This ensures we don't clear activeCommandId if a new command started
+        if(activeCommandId === commandId) {
+          activeCommandId = null;
+        }
         if(onComplete) onComplete(result);
       }
     });
 
+    // Set activeCommandId AFTER getting commandId but BEFORE callback can fire
+    // This prevents race condition where callback clears it before we set it
     activeCommandId = commandId;
     return commandId;
   }
@@ -296,35 +812,28 @@
 
   function disableAllActions(disabled, isErrorCondition = false){
     try{
-      // Main action buttons
-      els.startBtn.disabled = disabled;
-      els.stopBtn.disabled = disabled;
-      els.restartBtn.disabled = disabled;
+      // Main action buttons - using centralized ButtonState
+      ButtonState.setButton(els.startBtn, !disabled);
+      ButtonState.setButton(els.stopBtn, !disabled);
+      ButtonState.setButton(els.restartBtn, !disabled);
+      ButtonState.setButton(els.settingsBtn, !disabled, true);
+      ButtonState.setButton(els.forwardNatBtn, !disabled, true);
+      ButtonState.setButton(els.hotspotBtn, !disabled, true);
+      
       els.userSelect.disabled = disabled;
-      els.settingsBtn.disabled = disabled;
-      els.settingsBtn.style.opacity = disabled ? '0.5' : '';
-      els.forwardNatBtn.disabled = disabled;
-      els.forwardNatBtn.style.opacity = disabled ? '0.5' : '';
-      // Note: visibility is controlled by refreshStatus(), not here
-      els.hotspotBtn.disabled = disabled;
-      els.hotspotBtn.style.opacity = disabled ? '0.5' : '';
       
       // Additional UI elements that should be disabled during operations
       // But kept enabled during error conditions (root access failed, chroot not found)
       const shouldDisableAlwaysAvailable = disabled && !isErrorCondition;
-      els.clearConsole.disabled = shouldDisableAlwaysAvailable;
-      els.clearConsole.style.opacity = shouldDisableAlwaysAvailable ? '0.5' : '';
-      els.copyConsole.disabled = shouldDisableAlwaysAvailable;
-      els.copyConsole.style.opacity = shouldDisableAlwaysAvailable ? '0.5' : '';
-      els.refreshStatus.disabled = shouldDisableAlwaysAvailable;
-      els.refreshStatus.style.opacity = shouldDisableAlwaysAvailable ? '0.5' : '';
+      ButtonState.setButton(els.clearConsole, !shouldDisableAlwaysAvailable);
+      ButtonState.setButton(els.copyConsole, !shouldDisableAlwaysAvailable);
+      ButtonState.setButton(els.refreshStatus, !shouldDisableAlwaysAvailable);
       if(els.themeToggle){
-        els.themeToggle.disabled = shouldDisableAlwaysAvailable;
-        els.themeToggle.style.opacity = shouldDisableAlwaysAvailable ? '0.5' : '';
+        ButtonState.setButton(els.themeToggle, !shouldDisableAlwaysAvailable);
       }
       
       const copyBtn = document.getElementById('copy-login');
-      if(copyBtn) copyBtn.disabled = disabled;
+      if(copyBtn) ButtonState.setButton(copyBtn, !disabled);
       
       // Disable boot toggle when root not available
       if(els.bootToggle) {
@@ -356,86 +865,67 @@
    * Execute chroot action asynchronously (non-blocking), with hotspot handling for stop/restart
    */
   async function doAction(action, btn){
-    if(activeCommandId) {
-      appendConsole('⚠ Another command is already running. Please wait...', 'warn');
-      return;
-    }
+    await withCommandGuard(`chroot-${action}`, async () => {
+      animateButton(btn);
+      const actionText = action.charAt(0).toUpperCase() + action.slice(1) + 'ing chroot';
+      appendConsole(`━━━ Starting ${action} ━━━`, 'info');
+      
+      // Show progress indicator using centralized utility
+      const { progressLine, interval: progressInterval } = ProgressIndicator.create(actionText, 'dots');
+      
+      // Disable ALL UI elements during execution
+      disableAllActions(true);
+      disableSettingsPopup(true);
 
-    animateButton(btn);
-    appendConsole(`━━━ Starting ${action} ━━━`, 'info');
-    
-    // Show progress indicator IMMEDIATELY
-    const progressLine = document.createElement('div');
-    progressLine.className = 'progress-indicator';
-    const actionText = action.charAt(0).toUpperCase() + action.slice(1) + 'ing chroot';
-    progressLine.textContent = '⏳ ' + actionText;
-    els.console.appendChild(progressLine);
-    els.console.scrollTop = els.console.scrollHeight;
-    
-    let dotCount = 0;
-    const progressInterval = setInterval(() => {
-      dotCount = (dotCount + 1) % 4;
-      progressLine.textContent = '⏳ ' + actionText + '.'.repeat(dotCount);
-    }, 400);
-    
-    // Disable ALL UI elements during execution
-    disableAllActions(true);
-    disableSettingsPopup(true);
-
-    // Check for hotspot on stop/restart
-    let hotspotWasRunning = false;
-    if(action === 'stop' || action === 'restart'){
-      try{
-        // Use actual interface check instead of saved state for accuracy
-        hotspotWasRunning = await checkAp0Interface();
-        if(hotspotWasRunning){
-          progressLine.textContent = '⏳ Stopping hotspot first';
-          dotCount = 0; // reset dots
-          
-          // Stop hotspot first
-          await new Promise((resolve, reject) => {
-            runCmdAsync(`sh ${HOTSPOT_SCRIPT} -k 2>&1`, (result) => {
-              if(result.success) {
-                appendConsole('✓ Hotspot stopped successfully', 'success');
-                hotspotActive = false; // Update state
-                saveHotspotStatus(); // Save to localStorage
-                resolve();
-              } else {
-                appendConsole('✗ Failed to stop hotspot, continuing with chroot action', 'warn');
-                resolve(); // Continue anyway
-              }
+      // Check for hotspot on stop/restart
+      let hotspotWasRunning = false;
+      if(action === 'stop' || action === 'restart'){
+        try{
+          hotspotWasRunning = await checkAp0Interface();
+          if(hotspotWasRunning){
+            ProgressIndicator.update(progressLine, 'Stopping hotspot first');
+            
+            // Stop hotspot first
+            await new Promise((resolve, reject) => {
+              runCmdAsync(`sh ${HOTSPOT_SCRIPT} -k 2>&1`, (result) => {
+                if(result.success) {
+                  appendConsole('✓ Hotspot stopped successfully', 'success');
+                  hotspotActive = false;
+                  saveHotspotStatus();
+                  resolve();
+                } else {
+                  appendConsole('✗ Failed to stop hotspot, continuing with chroot action', 'warn');
+                  resolve(); // Continue anyway
+                }
+              });
             });
-          });
+          }
+        }catch(e){
+          appendConsole('⚠ Could not check hotspot status, proceeding with chroot action', 'warn');
         }
-      }catch(e){
-        appendConsole('⚠ Could not check hotspot status, proceeding with chroot action', 'warn');
       }
-    }
 
-    // Use --no-shell flag to prevent blocking on interactive shell
-    const cmd = `sh ${PATH_CHROOT_SH} ${action} --no-shell`;
-    
-    // Use setTimeout to allow UI to update before blocking command
-    setTimeout(() => {
-      runCmdAsync(cmd, (result) => {
-        clearInterval(progressInterval);
-        progressLine.remove();
-        
-        if(result.success) {
-          appendConsole(`✓ ${action} completed successfully`, 'success');
-        } else {
-          appendConsole(`✗ ${action} failed`, 'err');
-        }
-        
-        // Re-enable buttons immediately, then refresh status
-        activeCommandId = null;
-        disableAllActions(false);
-        disableSettingsPopup(false, true);
-        // Show close button again
-        if(els.closePopup) els.closePopup.style.display = '';
-        setTimeout(() => refreshStatus(), 500);
-      });
-    }, 50);
+      // Use --no-shell flag to prevent blocking on interactive shell
+      const cmd = `sh ${PATH_CHROOT_SH} ${action} --no-shell`;
+      
+      setTimeout(() => {
+        runCmdAsync(cmd, (result) => {
+          ProgressIndicator.remove(progressLine, progressInterval);
+          
+          if(result.success) {
+            appendConsole(`✓ ${action} completed successfully`, 'success');
+          } else {
+            appendConsole(`✗ ${action} failed`, 'err');
+          }
+          
+          activeCommandId = null;
+          disableAllActions(false);
+          disableSettingsPopup(false, true);
+          if(els.closePopup) els.closePopup.style.display = '';
+          setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH);
+        });
+      }, ANIMATION_DELAYS.UI_UPDATE);
+    });
   }
 
 
@@ -497,23 +987,11 @@
       const status = chrootExists ? (running ? 'running' : 'stopped') : 'not_found';
       updateStatus(status);
 
-      // Main action buttons
-      if(rootAccessConfirmed && chrootExists){
-        els.startBtn.disabled = running;
-        els.stopBtn.disabled = !running;
-        els.restartBtn.disabled = !running;
-        els.startBtn.style.opacity = running ? '0.5' : '';
-        els.stopBtn.style.opacity = !running ? '0.5' : '';
-        els.restartBtn.style.opacity = !running ? '0.5' : '';
-      } else if(!chrootExists){
-        // When chroot doesn't exist: disable all action buttons
-        els.startBtn.disabled = true;
-        els.stopBtn.disabled = true;
-        els.restartBtn.disabled = true;
-        els.startBtn.style.opacity = '0.5';
-        els.stopBtn.style.opacity = '0.5';
-        els.restartBtn.style.opacity = '0.5';
-      }
+      // Main action buttons - using centralized ButtonState
+      const canControl = rootAccessConfirmed && chrootExists;
+      ButtonState.setButton(els.startBtn, canControl && !running);
+      ButtonState.setButton(els.stopBtn, canControl && running);
+      ButtonState.setButton(els.restartBtn, canControl && running);
 
       // User select
       if(chrootExists && running){
@@ -528,54 +1006,18 @@
       // Copy login button
       const copyLoginBtn = document.getElementById('copy-login');
       if(copyLoginBtn) {
-        const isEnabled = chrootExists && running;
-        copyLoginBtn.disabled = !isEnabled;
-        copyLoginBtn.style.opacity = isEnabled ? '' : '0.5';
-        copyLoginBtn.style.display = '';
+        ButtonState.setButton(copyLoginBtn, chrootExists && running);
       }
 
       // Forward NAT button - visible but disabled when chroot is not running
-      if(chrootExists && running && rootAccessConfirmed){
-        els.forwardNatBtn.disabled = false;
-        els.forwardNatBtn.style.opacity = '';
-        els.forwardNatBtn.style.display = '';
-        // Individual forwarding buttons
-        els.startForwardingBtn.disabled = forwardingActive;
-        els.stopForwardingBtn.disabled = !forwardingActive;
-        els.startForwardingBtn.style.opacity = forwardingActive ? '0.5' : '';
-        els.stopForwardingBtn.style.opacity = !forwardingActive ? '0.5' : '';
-      } else {
-        // Keep button visible but disabled when chroot is stopped, not found, or no root access
-        els.forwardNatBtn.disabled = true;
-        els.forwardNatBtn.style.opacity = '0.5';
-        els.forwardNatBtn.style.display = '';
-        // Individual forwarding buttons
-        els.startForwardingBtn.disabled = true;
-        els.stopForwardingBtn.disabled = true;
-        els.startForwardingBtn.style.opacity = '0.5';
-        els.stopForwardingBtn.style.opacity = '0.5';
-      }
+      const forwardNatEnabled = chrootExists && running && rootAccessConfirmed;
+      ButtonState.setButton(els.forwardNatBtn, forwardNatEnabled, true);
+      ButtonState.setButtonPair(els.startForwardingBtn, els.stopForwardingBtn, forwardingActive && forwardNatEnabled);
 
       // Hotspot button
-      if(chrootExists && running && rootAccessConfirmed){
-        els.hotspotBtn.disabled = false;
-        els.hotspotBtn.style.opacity = '';
-        els.hotspotBtn.style.display = '';
-        // Individual hotspot buttons
-        els.startHotspotBtn.disabled = hotspotActive;
-        els.stopHotspotBtn.disabled = !hotspotActive;
-        els.startHotspotBtn.style.opacity = hotspotActive ? '0.5' : '';
-        els.stopHotspotBtn.style.opacity = !hotspotActive ? '0.5' : '';
-      } else {
-        els.hotspotBtn.disabled = true;
-        els.hotspotBtn.style.opacity = '0.5';
-        els.hotspotBtn.style.display = '';
-        // Individual hotspot buttons
-        els.startHotspotBtn.disabled = true;
-        els.stopHotspotBtn.disabled = true;
-        els.startHotspotBtn.style.opacity = '0.5';
-        els.stopHotspotBtn.style.opacity = '0.5';
-      }
+      const hotspotEnabled = chrootExists && running && rootAccessConfirmed;
+      ButtonState.setButton(els.hotspotBtn, hotspotEnabled, true);
+      ButtonState.setButtonPair(els.startHotspotBtn, els.stopHotspotBtn, hotspotActive && hotspotEnabled);
 
       // Boot toggle
       if(els.bootToggle) {
@@ -729,7 +1171,7 @@
   function copyLoginCommand(){
     const selectedUser = els.userSelect.value;
     // Save selected user
-    try{ localStorage.setItem('chroot_selected_user', selectedUser); }catch(e){}
+    Storage.set('chroot_selected_user', selectedUser);
 
     // Use short command - symlink should exist when module is installed
     const loginCommand = `su -c "ubuntu-chroot start ${selectedUser} -s"`;
@@ -813,6 +1255,21 @@
       rootAccessConfirmed = true;
       disableAllActions(false);
       disableSettingsPopup(false, true); // assume chroot exists for now
+      
+      // Pre-fetch interfaces in background when root access is confirmed
+      // This ensures cache is ready when user opens popups
+      setTimeout(() => {
+        if(window.HotspotFeature && HotspotFeature.fetchInterfaces) {
+          HotspotFeature.fetchInterfaces(false, true).catch(() => {
+            // Silently fail - will fetch when popup opens
+          });
+        }
+        if(window.ForwardNatFeature && ForwardNatFeature.fetchInterfaces) {
+          ForwardNatFeature.fetchInterfaces(false, true).catch(() => {
+            // Silently fail - will fetch when popup opens
+          });
+        }
+      }, ANIMATION_DELAYS.PRE_FETCH_DELAY); // Delay to not interfere with initial page load
     }catch(e){
       // If failed, show the backend error message once
       rootAccessConfirmed = false;
@@ -834,18 +1291,15 @@
 
   // Settings popup functions
   async function openSettingsPopup(){
-    // Load current post-exec script
     await loadPostExecScript();
-    // Update debug toggle state
     if(els.debugToggle) {
       els.debugToggle.checked = debugModeActive;
     }
-    // Show popup with animation
-    els.settingsPopup.classList.add('active');
+    PopupManager.open(els.settingsPopup);
   }
 
   function closeSettingsPopup(){
-    els.settingsPopup.classList.remove('active');
+    PopupManager.close(els.settingsPopup);
   }
 
   async function loadPostExecScript(){
@@ -894,516 +1348,84 @@
     }
   }
 
-  // Hotspot functions
-  function openHotspotPopup(){
-    // Show warning banner on first visit
-    showHotspotWarning();
-    els.hotspotPopup.classList.add('active');
-  }
-
-  function closeHotspotPopup(){
-    els.hotspotPopup.classList.remove('active');
-  }
-
-  function showHotspotWarning(){
-    if(!els.hotspotWarning) return;
-    
-    // Check if user has already dismissed the warning
-    const dismissed = localStorage.getItem('hotspot_warning_dismissed') === 'true';
-    if(dismissed){
-      els.hotspotWarning.classList.add('hidden');
-    } else {
-      els.hotspotWarning.classList.remove('hidden');
+  // Hotspot functions - delegated to HotspotFeature module
+  function openHotspotPopup() {
+    if(window.HotspotFeature) {
+      HotspotFeature.openHotspotPopup();
     }
   }
 
-  function dismissHotspotWarning(){
-    if(!els.hotspotWarning) return;
-    
-    // Hide the warning and save dismissal to localStorage
-    els.hotspotWarning.classList.add('hidden');
-    try{ localStorage.setItem('hotspot_warning_dismissed', 'true'); }catch(e){}
-  }
-
-  async function startHotspot(){
-    if(activeCommandId) {
-      appendConsole('⚠ Another command is already running. Please wait...', 'warn');
-      return;
-    }
-
-    if(!rootAccessConfirmed){
-      appendConsole('Cannot start hotspot: root access not available', 'err');
-      return;
-    }
-
-    const iface = document.getElementById('hotspot-iface').value.trim();
-    const ssid = document.getElementById('hotspot-ssid').value.trim();
-    const password = document.getElementById('hotspot-password').value;
-    const band = document.getElementById('hotspot-band').value;
-    const channel = document.getElementById('hotspot-channel').value;
-
-    if(!iface || !ssid || !password || !channel){
-      appendConsole('All fields are required', 'err');
-      return;
-    }
-
-    if(password.length < 8){
-      appendConsole('Password must be at least 8 characters', 'err');
-      return;
-    }
-
-    saveHotspotSettings(); // Save settings before starting
-
-    closeHotspotPopup();
-    // Wait for popup animation to complete (same timing as backup/restore)
-    await new Promise(resolve => setTimeout(resolve, 450));
-
-    appendConsole(`━━━ Starting hotspot '${ssid}' ━━━`, 'info');
-    
-    // Show progress indicator IMMEDIATELY
-    const progressLine = document.createElement('div');
-    progressLine.className = 'progress-indicator';
-    const actionText = `Starting hotspot '${ssid}'`;
-    progressLine.textContent = '⏳ ' + actionText;
-    els.console.appendChild(progressLine);
-    els.console.scrollTop = els.console.scrollHeight;
-    
-    let spinIndex = 0;
-    const spinner = ['|', '/', '-', '\\'];
-    const progressInterval = setInterval(() => {
-      spinIndex = (spinIndex + 1) % 4;
-      progressLine.textContent = '⏳ ' + actionText + ' ' + spinner[spinIndex];
-    }, 200);
-    
-    // Disable ALL UI elements during hotspot operation (like chroot functions)
-    disableAllActions(true);
-    disableSettingsPopup(true);
-
-    // Mark as active to prevent other commands
-    activeCommandId = 'hotspot-start';
-
-    // Redirect stderr to stdout to capture all output
-    const cmd = `sh ${HOTSPOT_SCRIPT} -o "${iface}" -s "${ssid}" -p "${password}" -b "${band}" -c "${channel}" 2>&1`;
-    
-    // Use setTimeout to allow UI to update, then run sync command wrapped as async
-    setTimeout(async () => {
-      try {
-        const output = await runCmdSync(cmd);
-        clearInterval(progressInterval);
-        progressLine.remove();
-        
-        // Display all output line by line
-        if(output) {
-          const lines = String(output).split('\n');
-          lines.forEach(line => {
-            if(line.trim()) {
-              appendConsole(line);
-            }
-          });
-        }
-        
-        if(output && output.includes('AP-ENABLED')) {
-          appendConsole(`✓ Hotspot started successfully`, 'success');
-          hotspotActive = true; // Update state
-          saveHotspotStatus(); // Save to localStorage
-          // Immediately update button states
-          els.startHotspotBtn.disabled = true;
-          els.stopHotspotBtn.disabled = false;
-          els.startHotspotBtn.style.opacity = '0.5';
-          els.stopHotspotBtn.style.opacity = '';
-        } else {
-          appendConsole(`✗ Failed to start hotspot`, 'err');
-        }
-      } catch(error) {
-        clearInterval(progressInterval);
-        progressLine.remove();
-        
-        // Display error output line by line
-        const errorMsg = String(error.message || error);
-        const lines = errorMsg.split('\n');
-        lines.forEach(line => {
-          if(line.trim()) {
-            appendConsole(line, 'err');
-          }
-        });
-        
-        appendConsole(`✗ Hotspot failed to start`, 'err');
-      } finally {
-        activeCommandId = null;
-        disableAllActions(false);
-        disableSettingsPopup(false, true);
-        
-        // Refresh status after hotspot operation
-        setTimeout(() => refreshStatus(), 500);
-      }
-    }, 50);
-  }
-
-  async function stopHotspot(){
-    if(activeCommandId) {
-      appendConsole('⚠ Another command is already running. Please wait...', 'warn');
-      return;
-    }
-
-    if(!rootAccessConfirmed){
-      appendConsole('Cannot stop hotspot: root access not available', 'err');
-      return;
-    }
-
-    closeHotspotPopup();
-    // Wait for popup animation to complete (same timing as backup/restore)
-    await new Promise(resolve => setTimeout(resolve, 450));
-
-    appendConsole(`━━━ Stopping hotspot ━━━`, 'info');
-
-    // Show progress indicator IMMEDIATELY
-    const progressLine = document.createElement('div');
-    progressLine.className = 'progress-indicator';
-    const actionText = 'Stopping hotspot';
-    progressLine.textContent = '⏳ ' + actionText;
-    els.console.appendChild(progressLine);
-    els.console.scrollTop = els.console.scrollHeight;
-
-    let spinIndex = 0;
-    const spinner = ['|', '/', '-', '\\'];
-    const progressInterval = setInterval(() => {
-      spinIndex = (spinIndex + 1) % 4;
-      progressLine.textContent = '⏳ ' + actionText + ' ' + spinner[spinIndex];
-    }, 200);
-
-    // Disable ALL UI elements during hotspot operation (like chroot functions)
-    disableAllActions(true);
-    disableSettingsPopup(true);
-
-    // Mark as active to prevent other commands
-    activeCommandId = 'hotspot-stop';
-
-    // Redirect stderr to stdout to capture all output
-    const cmd = `sh ${HOTSPOT_SCRIPT} -k 2>&1`;
-
-    // Use setTimeout to allow UI to update before blocking command
-    setTimeout(() => {
-      runCmdAsync(cmd, (result) => {
-        clearInterval(progressInterval);
-        progressLine.remove();
-        
-        if(result.success) {
-          appendConsole(`✓ Hotspot stopped successfully`, 'success');
-          hotspotActive = false; // Update state
-          saveHotspotStatus(); // Save to localStorage
-          // Immediately update button states
-          els.startHotspotBtn.disabled = false;
-          els.stopHotspotBtn.disabled = true;
-          els.startHotspotBtn.style.opacity = '';
-          els.stopHotspotBtn.style.opacity = '0.5';
-        } else {
-          appendConsole(`✗ Failed to stop hotspot (exit code: ${result.exitCode || 'unknown'})`, 'err');
-        }
-        
-        // Re-enable ALL UI elements (like chroot functions)
-        activeCommandId = null;
-        disableAllActions(false);
-        disableSettingsPopup(false, true);
-        
-        // Refresh status after hotspot operation
-        setTimeout(() => refreshStatus(), 500);
-      });
-    }, 50);
-  }
-
-  // Forward NAT functions
-  /**
-   * Load forwarding status from localStorage on page load
-   */
-  function loadForwardingStatus(){
-    try{
-      const saved = localStorage.getItem('forwarding_active');
-      forwardingActive = saved === 'true';
-    }catch(e){
-      forwardingActive = false;
+  function closeHotspotPopup() {
+    if(window.HotspotFeature) {
+      HotspotFeature.closeHotspotPopup();
     }
   }
 
-  /**
-   * Save forwarding status to localStorage
-   */
-  function saveForwardingStatus(){
-    try{
-      localStorage.setItem('forwarding_active', forwardingActive.toString());
-    }catch(e){/* ignore storage errors */}
-  }
-
-  /**
-   * Fetch available interfaces from forward-nat.sh
-   * Handles both formats: "iface1,iface2" or "iface1:ip1,iface2:ip2"
-   */
-  async function fetchInterfaces(){
-    if(!rootAccessConfirmed){
-      return;
-    }
-    
-    try{
-      const cmd = `sh ${FORWARD_NAT_SCRIPT} list-iface`;
-      const out = await runCmdSync(cmd);
-      const interfacesRaw = String(out || '').trim().split(',').filter(i => i && i.length > 0);
-
-      // Clear existing options
-      const select = els.forwardNatIface;
-      select.innerHTML = '';
-
-      if(interfacesRaw.length === 0){
-        const option = document.createElement('option');
-        option.value = '';
-        option.textContent = 'No interfaces found';
-        select.appendChild(option);
-        select.disabled = true;
-        return;
-      }
-
-      // Add interface options
-      // Handle format: "iface:ip" or just "iface"
-      interfacesRaw.forEach(ifaceRaw => {
-        const trimmed = ifaceRaw.trim();
-        if(trimmed.length > 0){
-          const option = document.createElement('option');
-          
-          // Check if it contains IPv4 address (format: iface:ip)
-          if(trimmed.includes(':')){
-            const [iface, ip] = trimmed.split(':');
-            option.value = iface.trim();
-            option.textContent = `${iface.trim()} (${ip.trim()})`;
-          } else {
-            // Just interface name
-            option.value = trimmed;
-            option.textContent = trimmed;
-          }
-          
-          select.appendChild(option);
-        }
-      });
-
-      select.disabled = false;
-
-      // Try to restore previously selected interface
-      const savedIface = localStorage.getItem('chroot_selected_interface');
-      if(savedIface){
-        // Try to find exact match first
-        const exactMatch = Array.from(select.options).find(opt => opt.value === savedIface);
-        if(exactMatch){
-          select.value = savedIface;
-        } else if(interfacesRaw.length > 0){
-          // Fallback to first interface
-          const firstIface = interfacesRaw[0].trim();
-          select.value = firstIface.includes(':') ? firstIface.split(':')[0].trim() : firstIface;
-        }
-      } else if(interfacesRaw.length > 0){
-        // Default to first interface
-        const firstIface = interfacesRaw[0].trim();
-        select.value = firstIface.includes(':') ? firstIface.split(':')[0].trim() : firstIface;
-      }
-    }catch(e){
-      appendConsole(`Could not fetch interfaces: ${e.message}`, 'warn');
-      els.forwardNatIface.innerHTML = '<option value="">Failed to load interfaces</option>';
-      els.forwardNatIface.disabled = true;
+  function showHotspotWarning() {
+    if(window.HotspotFeature) {
+      HotspotFeature.showHotspotWarning();
     }
   }
 
-  function openForwardNatPopup(){
-    // Fetch interfaces when opening popup
-    fetchInterfaces();
-    els.forwardNatPopup.classList.add('active');
+  function dismissHotspotWarning() {
+    if(window.HotspotFeature) {
+      HotspotFeature.dismissHotspotWarning();
+    }
   }
 
-  function closeForwardNatPopup(){
-    els.forwardNatPopup.classList.remove('active');
+  async function startHotspot() {
+    if(window.HotspotFeature) {
+      await HotspotFeature.startHotspot();
+    }
   }
 
-  async function startForwarding(){
-    if(activeCommandId) {
-      appendConsole('⚠ Another command is already running. Please wait...', 'warn');
-      return;
+  async function stopHotspot() {
+    if(window.HotspotFeature) {
+      await HotspotFeature.stopHotspot();
     }
-
-    if(!rootAccessConfirmed){
-      appendConsole('Cannot start forwarding: root access not available', 'err');
-      return;
-    }
-
-    const iface = els.forwardNatIface.value.trim();
-    if(!iface){
-      appendConsole('Please select a network interface', 'err');
-      return;
-    }
-
-    // Save selected interface
-    try{ localStorage.setItem('chroot_selected_interface', iface); }catch(e){}
-
-    closeForwardNatPopup();
-    // Wait for popup animation to complete
-    await new Promise(resolve => setTimeout(resolve, 450));
-
-    appendConsole(`━━━ Starting forwarding on ${iface} ━━━`, 'info');
-    
-    // Show progress indicator IMMEDIATELY
-    const progressLine = document.createElement('div');
-    progressLine.className = 'progress-indicator';
-    const actionText = `Starting forwarding on ${iface}`;
-    progressLine.textContent = '⏳ ' + actionText;
-    els.console.appendChild(progressLine);
-    els.console.scrollTop = els.console.scrollHeight;
-    
-    let spinIndex = 0;
-    const spinner = ['|', '/', '-', '\\'];
-    const progressInterval = setInterval(() => {
-      spinIndex = (spinIndex + 1) % 4;
-      progressLine.textContent = '⏳ ' + actionText + ' ' + spinner[spinIndex];
-    }, 200);
-    
-    // Disable ALL UI elements during forwarding operation
-    disableAllActions(true);
-    disableSettingsPopup(true);
-
-    // Mark as active to prevent other commands
-    activeCommandId = 'forwarding-start';
-
-    // Redirect stderr to stdout to capture all output
-    const cmd = `sh ${FORWARD_NAT_SCRIPT} -i "${iface}" 2>&1`;
-    
-    // Use setTimeout to allow UI to update, then run sync command wrapped as async
-    setTimeout(async () => {
-      try {
-        const output = await runCmdSync(cmd);
-        clearInterval(progressInterval);
-        progressLine.remove();
-        
-        // Display all output line by line
-        if(output) {
-          const lines = String(output).split('\n');
-          lines.forEach(line => {
-            if(line.trim()) {
-              appendConsole(line);
-            }
-          });
-        }
-        
-        // Check for success indicators in output
-        if(output && (output.includes('Localhost routing active') || output.includes('Gateway:'))) {
-          appendConsole(`✓ Forwarding started successfully on ${iface}`, 'success');
-          forwardingActive = true; // Update state
-          saveForwardingStatus(); // Save to localStorage
-          // Immediately update button states
-          els.startForwardingBtn.disabled = true;
-          els.stopForwardingBtn.disabled = false;
-          els.startForwardingBtn.style.opacity = '0.5';
-          els.stopForwardingBtn.style.opacity = '';
-        } else {
-          appendConsole(`✗ Failed to start forwarding`, 'err');
-        }
-      } catch(error) {
-        clearInterval(progressInterval);
-        progressLine.remove();
-        
-        // Display error output line by line
-        const errorMsg = String(error.message || error);
-        const lines = errorMsg.split('\n');
-        lines.forEach(line => {
-          if(line.trim()) {
-            appendConsole(line, 'err');
-          }
-        });
-        
-        appendConsole(`✗ Forwarding failed to start`, 'err');
-      } finally {
-        activeCommandId = null;
-        disableAllActions(false);
-        disableSettingsPopup(false, true);
-        
-        // Refresh status after forwarding operation
-        setTimeout(() => refreshStatus(), 500);
-      }
-    }, 50);
   }
 
-  async function stopForwarding(){
-    if(activeCommandId) {
-      appendConsole('⚠ Another command is already running. Please wait...', 'warn');
-      return;
+  // Forward NAT functions - delegated to ForwardNatFeature module
+  function loadForwardingStatus() {
+    forwardingActive = StateManager.get('forwarding');
+  }
+
+  function saveForwardingStatus() {
+    StateManager.set('forwarding', forwardingActive);
+  }
+
+  function openForwardNatPopup() {
+    if(window.ForwardNatFeature) {
+      ForwardNatFeature.openForwardNatPopup();
     }
+  }
 
-    if(!rootAccessConfirmed){
-      appendConsole('Cannot stop forwarding: root access not available', 'err');
-      return;
+  function closeForwardNatPopup() {
+    if(window.ForwardNatFeature) {
+      ForwardNatFeature.closeForwardNatPopup();
     }
+  }
 
-    closeForwardNatPopup();
-    // Wait for popup animation to complete
-    await new Promise(resolve => setTimeout(resolve, 450));
+  async function startForwarding() {
+    if(window.ForwardNatFeature) {
+      await ForwardNatFeature.startForwarding();
+    }
+  }
 
-    appendConsole(`━━━ Stopping forwarding ━━━`, 'info');
-
-    // Show progress indicator IMMEDIATELY
-    const progressLine = document.createElement('div');
-    progressLine.className = 'progress-indicator';
-    const actionText = 'Stopping forwarding';
-    progressLine.textContent = '⏳ ' + actionText;
-    els.console.appendChild(progressLine);
-    els.console.scrollTop = els.console.scrollHeight;
-
-    let spinIndex = 0;
-    const spinner = ['|', '/', '-', '\\'];
-    const progressInterval = setInterval(() => {
-      spinIndex = (spinIndex + 1) % 4;
-      progressLine.textContent = '⏳ ' + actionText + ' ' + spinner[spinIndex];
-    }, 200);
-
-    // Disable ALL UI elements during forwarding operation
-    disableAllActions(true);
-    disableSettingsPopup(true);
-
-    // Mark as active to prevent other commands
-    activeCommandId = 'forwarding-stop';
-
-    // Redirect stderr to stdout to capture all output
-    const cmd = `sh ${FORWARD_NAT_SCRIPT} -k 2>&1`;
-
-    // Use setTimeout to allow UI to update before blocking command
-    setTimeout(() => {
-      runCmdAsync(cmd, (result) => {
-        clearInterval(progressInterval);
-        progressLine.remove();
-        
-        if(result.success) {
-          appendConsole(`✓ Forwarding stopped successfully`, 'success');
-          forwardingActive = false; // Update state
-          saveForwardingStatus(); // Save to localStorage
-          // Immediately update button states
-          els.startForwardingBtn.disabled = false;
-          els.stopForwardingBtn.disabled = true;
-          els.startForwardingBtn.style.opacity = '';
-          els.stopForwardingBtn.style.opacity = '0.5';
-        } else {
-          appendConsole(`✗ Failed to stop forwarding (exit code: ${result.exitCode || 'unknown'})`, 'err');
-        }
-        
-        // Re-enable ALL UI elements
-        activeCommandId = null;
-        disableAllActions(false);
-        disableSettingsPopup(false, true);
-        
-        // Refresh status after forwarding operation
-        setTimeout(() => refreshStatus(), 500);
-      });
-    }, 50);
+  async function stopForwarding() {
+    if(window.ForwardNatFeature) {
+      await ForwardNatFeature.stopForwarding();
+    }
   }
 
   // Sparse image settings functions
   function openSparseSettingsPopup(){
     updateSparseInfo();
-    els.sparseSettingsPopup.classList.add('active');
+    PopupManager.open(els.sparseSettingsPopup);
   }
 
   function closeSparseSettingsPopup(){
-    els.sparseSettingsPopup.classList.remove('active');
+    PopupManager.close(els.sparseSettingsPopup);
   }
 
   // Helper function to format bytes to human readable format (base 1000, GB)
@@ -1417,7 +1439,7 @@
 
   async function updateSparseInfo(){
     if(!rootAccessConfirmed || !sparseMigrated){
-      if(els.sparseInfo) els.sparseInfo.innerHTML = 'Sparse image not detected';
+      if(els.sparseInfo) els.sparseInfo.textContent = 'Sparse image not detected';
       return;
     }
 
@@ -1446,194 +1468,23 @@
           </tbody>
         </table>
       `;
-      if(els.sparseInfo) els.sparseInfo.innerHTML = info;
+      if(els.sparseInfo) els.sparseInfo.innerHTML = info; // Keep innerHTML for HTML table content
     }catch(e){
-      if(els.sparseInfo) els.sparseInfo.innerHTML = 'Unable to read sparse image information';
+      if(els.sparseInfo) els.sparseInfo.textContent = 'Unable to read sparse image information';
     }
   }
 
-  async function trimSparseImage(){
-    if(activeCommandId) {
-      appendConsole('⚠ Another command is already running. Please wait...', 'warn');
-      return;
+  // Resize functions - delegated to ResizeFeature module
+  async function trimSparseImage() {
+    if(window.ResizeFeature) {
+      await ResizeFeature.trimSparseImage();
     }
-
-    if(!rootAccessConfirmed){
-      appendConsole('Cannot trim sparse image: root access not available', 'err');
-      return;
-    }
-
-    if(!sparseMigrated){
-      appendConsole('Sparse image not detected - cannot trim', 'err');
-      return;
-    }
-
-    // Confirmation dialog before trimming
-    const confirmed = await showConfirmDialog(
-      'Trim Sparse Image',
-      'This will run fstrim to reclaim unused space in the sparse image.\n\nThe operation may take a few seconds and space reclamation happens gradually. Continue?',
-      'Trim',
-      'Cancel'
-    );
-
-    if(!confirmed){
-      return;
-    }
-
-    // Close both popups with proper animation handling
-    closeSettingsPopup();
-    const sparsePopup = els.sparseSettingsPopup;
-    if(sparsePopup && sparsePopup.classList.contains('active')) {
-      sparsePopup.classList.remove('active');
-    }
-
-    // Wait for popup animation to complete (750ms for proper closing)
-    await new Promise(resolve => setTimeout(resolve, 750));
-
-    appendConsole('━━━ Trimming Sparse Image ━━━', 'info');
-
-    // Show progress indicator IMMEDIATELY
-    const progressLine = document.createElement('div');
-    progressLine.className = 'progress-indicator';
-    progressLine.textContent = '⏳ Trimming sparse image';
-    els.console.appendChild(progressLine);
-    els.console.scrollTop = els.console.scrollHeight;
-
-    let dotCount = 0;
-    const progressInterval = setInterval(() => {
-      dotCount = (dotCount + 1) % 4;
-      progressLine.textContent = '⏳ Trimming sparse image' + '.'.repeat(dotCount);
-    }, 400);
-
-    // Disable ALL UI elements during trim operation
-    disableAllActions(true);
-    disableSettingsPopup(true);
-
-    // Mark as active to prevent other commands
-    activeCommandId = 'sparse-trim';
-
-    const cmd = `sh ${PATH_CHROOT_SH} fstrim`;
-
-    // Use setTimeout to allow UI to update
-    setTimeout(() => {
-      runCmdAsync(cmd, (result) => {
-        clearInterval(progressInterval);
-        progressLine.remove();
-
-        if(result.success) {
-          appendConsole('✓ Sparse image trimmed successfully', 'success');
-          appendConsole('Space may be reclaimed after a few minutes', 'info');
-          appendConsole('━━━ Trim Complete ━━━', 'success');
-        } else {
-          appendConsole('✗ Sparse image trim failed', 'err');
-          appendConsole('This may be expected on some Android kernels', 'warn');
-        }
-
-        // Re-enable UI and refresh info
-        activeCommandId = null;
-        disableAllActions(false);
-        disableSettingsPopup(false, true);
-        updateSparseInfo();
-        refreshStatus();
-      });
-    }, 50);
   }
 
-  async function resizeSparseImage(){
-    if(activeCommandId) {
-      appendConsole('⚠ Another command is already running. Please wait...', 'warn');
-      return;
+  async function resizeSparseImage() {
+    if(window.ResizeFeature) {
+      await ResizeFeature.resizeSparseImage();
     }
-
-    if(!rootAccessConfirmed){
-      appendConsole('Cannot resize sparse image: root access not available', 'err');
-      return;
-    }
-
-    // Show size selection dialog first
-    const newSizeGb = await showSizeSelectionDialog();
-    if(!newSizeGb) return;
-
-    // Get current allocated size for warning message
-    let currentAllocatedGb = 'Unknown';
-    try {
-      const usageBytesCmd = `du -b ${CHROOT_DIR}/rootfs.img | cut -f1`;
-      const actualUsageBytes = await runCmdSync(usageBytesCmd);
-      currentAllocatedGb = Math.ceil(parseInt(actualUsageBytes.trim()) / 1024 / 1024 / 1024) + 'GB';
-    } catch(e) {
-      // Keep as 'Unknown' if we can't determine
-    }
-
-    // Show extreme warnings about backup and risks
-    const confirmed = await showConfirmDialog(
-      'Resize Sparse Image',
-      `⚠️ EXTREME WARNING: This operation can CORRUPT your filesystem!\n\nYou MUST create a backup before proceeding.\n\nDO NOT close this window or interrupt the process.\n\nCurrent allocated: ${currentAllocatedGb}\nNew size: ${newSizeGb}GB\n\n${parseInt(newSizeGb) > parseInt(currentAllocatedGb) ? 'Operation: GROWING (safer)' : 'Operation: SHRINKING (VERY RISKY)'}\n\nContinue?`,
-      'Resize',
-      'Cancel'
-    );
-
-    if(!confirmed){
-      return;
-    }
-
-    // Close both popups with proper animation handling
-    closeSettingsPopup();
-    const sparsePopup = els.sparseSettingsPopup;
-    if(sparsePopup && sparsePopup.classList.contains('active')) {
-      sparsePopup.classList.remove('active');
-    }
-
-    // Wait for popup animation to complete (750ms for proper closing)
-    await new Promise(resolve => setTimeout(resolve, 750));
-
-    appendConsole(`━━━ Resizing Sparse Image to ${newSizeGb}GB ━━━`, 'warn');
-
-    // Show progress indicator IMMEDIATELY
-    const progressLine = document.createElement('div');
-    progressLine.className = 'progress-indicator';
-    progressLine.textContent = '⏳ Preparing resize operation';
-    els.console.appendChild(progressLine);
-    els.console.scrollTop = els.console.scrollHeight;
-
-    let dotCount = 0;
-    const progressInterval = setInterval(() => {
-      dotCount = (dotCount + 1) % 4;
-      progressLine.textContent = '⏳ Preparing resize operation' + '.'.repeat(dotCount);
-    }, 400);
-
-    // Disable ALL UI elements during resize operation
-    disableAllActions(true);
-    disableSettingsPopup(true);
-
-    // Mark as active to prevent other commands
-    activeCommandId = 'sparse-resize';
-
-    const cmd = `sh ${PATH_CHROOT_SH} resize --webui ${newSizeGb}`;
-
-    // Use setTimeout to allow UI to update
-    setTimeout(() => {
-      runCmdAsync(cmd, (result) => {
-        clearInterval(progressInterval);
-        progressLine.remove();
-
-        if(result.success) {
-          appendConsole('✅ Sparse image resized successfully', 'success');
-          appendConsole(`New size: ${newSizeGb}GB`, 'info');
-          appendConsole('━━━ Resize Complete ━━━', 'success');
-        } else {
-          appendConsole('✗ Sparse image resize failed', 'err');
-          appendConsole('Check the logs above for details', 'err');
-          appendConsole('━━━ Resize Failed ━━━', 'err');
-        }
-
-        // Re-enable UI and refresh info
-        activeCommandId = null;
-        disableAllActions(false);
-        disableSettingsPopup(false, true);
-        updateSparseInfo();
-        refreshStatus();
-      });
-    }, 50);
   }
 
   async function updateChroot(){
@@ -1663,62 +1514,34 @@
     // Immediately hide the close button to prevent it from being visible during update
     if(els.closePopup) els.closePopup.style.display = 'none';
     // Wait for popup animation to complete
-    await new Promise(resolve => setTimeout(resolve, 450));
+    await new Promise(resolve => setTimeout(resolve, ANIMATION_DELAYS.POPUP_CLOSE));
 
     appendConsole('━━━ Starting Chroot Update ━━━', 'info');
 
-    // Show progress indicator IMMEDIATELY
-    const progressLine = document.createElement('div');
-    progressLine.className = 'progress-indicator';
-    progressLine.textContent = '⏳ Updating chroot';
-    els.console.appendChild(progressLine);
-    els.console.scrollTop = els.console.scrollHeight;
+    // Show progress indicator using centralized utility
+    const { progressLine, interval: progressInterval } = ProgressIndicator.create('Updating chroot', 'dots');
 
-    let dotCount = 0;
-    const progressInterval = setInterval(() => {
-      dotCount = (dotCount + 1) % 4;
-      progressLine.textContent = '⏳ Updating chroot' + '.'.repeat(dotCount);
-    }, 400);
-
-    // Disable ALL UI elements during update (like backup/restore functions)
     disableAllActions(true);
     disableSettingsPopup(true);
-
-    // Mark as active to prevent other commands
     activeCommandId = 'chroot-update';
 
     const cmd = `sh ${OTA_UPDATER}`;
 
-    // Use setTimeout to allow UI to update
     setTimeout(() => {
       runCmdAsync(cmd, (result) => {
-        clearInterval(progressInterval);
-        progressLine.remove();
+        ProgressIndicator.remove(progressLine, progressInterval);
 
         if(result.success) {
           appendConsole('✓ Chroot update completed successfully', 'success');
           
-          // Scroll to bottom and wait before restart
           els.console.scrollTop = els.console.scrollHeight;
           setTimeout(() => {
-            // Show restart animation
-            const restartLine = document.createElement('div');
-            restartLine.className = 'progress-indicator';
-            restartLine.textContent = '⏳ Restarting chroot';
-            els.console.appendChild(restartLine);
-            els.console.scrollTop = els.console.scrollHeight;
+            // Show restart animation using centralized utility
+            const { progressLine: restartLine, interval: restartInterval } = ProgressIndicator.create('Restarting chroot', 'dots');
 
-            let dotCount = 0;
-            const restartInterval = setInterval(() => {
-              dotCount = (dotCount + 1) % 4;
-              restartLine.textContent = '⏳ Restarting chroot' + '.'.repeat(dotCount);
-            }, 400);
-
-            // Restart chroot with suppressed output
             setTimeout(() => {
               runCmdAsync(`sh ${PATH_CHROOT_SH} restart >/dev/null 2>&1`, (restartResult) => {
-                clearInterval(restartInterval);
-                restartLine.remove();
+                ProgressIndicator.remove(restartLine, restartInterval);
                 
                 if(restartResult.success) {
                   appendConsole('✓ Chroot restarted successfully', 'success');
@@ -1735,7 +1558,7 @@
                 if(els.closePopup) els.closePopup.style.display = '';
 
                 // Refresh status after update and restart
-                setTimeout(() => refreshStatus(), 500);
+                setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH);
               });
             }, 100);
           }, 750);
@@ -1749,248 +1572,30 @@
           if(els.closePopup) els.closePopup.style.display = '';
 
           // Refresh status after failed update
-          setTimeout(() => refreshStatus(), 500);
+          setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH);
         }
       });
     }, 50);
   }
 
-  async function backupChroot(){
-    if(activeCommandId) {
-      appendConsole('⚠ Another command is already running. Please wait...', 'warn');
-      return;
-    }
-
-    // Get backup path
-    const backupPath = await showFilePickerDialog(
-      'Backup Chroot Environment',
-      'Select where to save the backup file.\n\nThe chroot will be stopped during backup if it\'s currently running.',
-      '/sdcard',
-      `chroot-backup-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.tar.gz`
-    );
-
-    if(!backupPath) return;
-
-    // Confirm
-    const confirmed = await showConfirmDialog(
-      'Backup Chroot Environment',
-      `This will create a compressed backup of your chroot environment.\n\nThe chroot will be stopped during backup if it's currently running.\n\nBackup location: ${backupPath}\n\nContinue?`,
-      'Backup',
-      'Cancel'
-    );
-
-    if(!confirmed) return;
-
-    // Close popup and wait for animation
-    closeSettingsPopup();
-    await new Promise(resolve => setTimeout(resolve, 750));
-
-    // Start backup
-    appendConsole('━━━ Starting Chroot Backup ━━━', 'info');
-
-    const progressLine = document.createElement('div');
-    progressLine.className = 'progress-indicator';
-    progressLine.textContent = '⏳ Backing up chroot';
-    els.console.appendChild(progressLine);
-    els.console.scrollTop = els.console.scrollHeight;
-
-    let dotCount = 0;
-    const progressInterval = setInterval(() => {
-      dotCount = (dotCount + 1) % 4;
-      progressLine.textContent = '⏳ Backing up chroot' + '.'.repeat(dotCount);
-    }, 400);
-
-    disableAllActions(true);
-    disableSettingsPopup(true);
-
-    // No need to check if running - backup_chroot handles lifecycle internally
-    proceedToBackup();
-
-    function proceedToBackup(){
-      progressLine.textContent = '⏳ Creating backup';
-      dotCount = 0;
-
-      setTimeout(() => {
-        runCmdAsync(`sh ${PATH_CHROOT_SH} backup --webui "${backupPath}"`, (result) => {
-          clearInterval(progressInterval);
-          progressLine.remove();
-
-          if(result.success) {
-            appendConsole('✓ Backup completed successfully', 'success');
-            appendConsole(`Saved to: ${backupPath}`, 'info');
-            appendConsole('━━━ Backup Complete ━━━', 'success');
-          } else {
-            appendConsole('✗ Backup failed', 'err');
-          }
-
-          activeCommandId = null;
-          disableAllActions(false);
-          disableSettingsPopup(false, true);
-
-          setTimeout(() => refreshStatus(), 500);
-        });
-      }, 50);
+  // Backup/Restore functions - delegated to BackupRestoreFeature module
+  async function backupChroot() {
+    if(window.BackupRestoreFeature) {
+      await BackupRestoreFeature.backupChroot();
     }
   }
 
-  async function restoreChroot(){
-    if(activeCommandId) {
-      appendConsole('⚠ Another command is already running. Please wait...', 'warn');
-      return;
+  async function restoreChroot() {
+    if(window.BackupRestoreFeature) {
+      await BackupRestoreFeature.restoreChroot();
     }
-
-    if(!rootAccessConfirmed){
-      appendConsole('Cannot restore chroot: root access not available', 'err');
-      return;
-    }
-
-    // Get backup file
-    const backupPath = await showFilePickerDialog(
-      'Restore Chroot Environment',
-      'Select the backup file to restore from.\n\nWARNING: This will permanently delete your current chroot environment!',
-      '/sdcard',
-      '',
-      true // forRestore = true
-    );
-
-    if(!backupPath) return;
-
-    // Confirm with warning
-    const confirmed = await showConfirmDialog(
-      'Restore Chroot Environment',
-      `⚠️ WARNING: This will permanently delete your current chroot environment and replace it with the backup!\n\nAll current data in the chroot will be lost.\n\nBackup file: ${backupPath}\n\nThis action cannot be undone. Continue?`,
-      'Restore',
-      'Cancel'
-    );
-
-    if(!confirmed) return;
-
-    // Close popup and wait for animation
-    closeSettingsPopup();
-    await new Promise(resolve => setTimeout(resolve, 750));
-
-    // Start restore
-    appendConsole('━━━ Starting Chroot Restore ━━━', 'warn');
-
-    const progressLine = document.createElement('div');
-    progressLine.className = 'progress-indicator';
-    progressLine.textContent = '⏳ Restoring chroot';
-    els.console.appendChild(progressLine);
-    els.console.scrollTop = els.console.scrollHeight;
-
-    let dotCount = 0;
-    const progressInterval = setInterval(() => {
-      dotCount = (dotCount + 1) % 4;
-      progressLine.textContent = '⏳ Restoring chroot' + '.'.repeat(dotCount);
-    }, 400);
-
-    disableAllActions(true);
-    disableSettingsPopup(true);
-
-    // Mark as active to prevent other commands
-    activeCommandId = 'chroot-restore';
-
-    setTimeout(() => {
-      runCmdAsync(`sh ${PATH_CHROOT_SH} restore --webui "${backupPath}"`, (result) => {
-        clearInterval(progressInterval);
-        progressLine.remove();
-
-        if(result.success) {
-          appendConsole('✓ Restore completed successfully', 'success');
-          appendConsole('The chroot environment has been restored', 'info');
-          appendConsole('━━━ Restore Complete ━━━', 'success');
-
-          updateStatus('stopped');
-          disableAllActions(true);
-        } else {
-          appendConsole('✗ Restore failed', 'err');
-          disableAllActions(false);
-        }
-
-        activeCommandId = null;
-        disableSettingsPopup(false, true);
-
-        setTimeout(() => refreshStatus(), 1000);
-      });
-    }, 50);
   }
 
-  async function uninstallChroot(){ 
-    if(activeCommandId) {
-      appendConsole('⚠ Another command is already running. Please wait...', 'warn');
-      return;
+  // Uninstall function - delegated to UninstallFeature module
+  async function uninstallChroot() {
+    if(window.UninstallFeature) {
+      await UninstallFeature.uninstallChroot();
     }
-
-    // Custom confirmation dialog with Yes/No buttons
-    const confirmed = await showConfirmDialog(
-      'Uninstall Chroot Environment',
-      'Are you sure you want to uninstall the chroot environment?\n\nThis will permanently delete all data in the chroot and cannot be undone.',
-      'Uninstall',
-      'Cancel'
-    );
-
-    if(!confirmed){
-      return;
-    }
-
-    // Small delay to ensure confirmation dialog is fully closed
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    // Close settings popup with smooth animation
-    closeSettingsPopup();
-    
-    // Wait for settings popup animation to complete (1500ms for fade out)
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    // Now we're back at main UI - start uninstall process
-    appendConsole('━━━ Starting Uninstallation ━━━', 'warn');
-    
-    // Show progress indicator IMMEDIATELY
-    const progressLine = document.createElement('div');
-    progressLine.className = 'progress-indicator';
-    progressLine.textContent = '⏳ Uninstalling chroot';
-    els.console.appendChild(progressLine);
-    els.console.scrollTop = els.console.scrollHeight;
-    
-    let dotCount = 0;
-    const progressInterval = setInterval(() => {
-      dotCount = (dotCount + 1) % 4;
-      progressLine.textContent = '⏳ Uninstalling chroot' + '.'.repeat(dotCount);
-    }, 400);
-    
-    // Disable all actions during uninstall
-    disableAllActions(true);
-    disableSettingsPopup(true);
-
-    // Mark as active to prevent other commands
-    activeCommandId = 'chroot-uninstall';
-
-    setTimeout(() => {
-      runCmdAsync(`sh ${PATH_CHROOT_SH} uninstall --webui`, (result) => {
-        clearInterval(progressInterval);
-        progressLine.remove();
-
-        if(result.success) {
-          appendConsole('✅ Chroot uninstalled successfully!', 'success');
-          appendConsole('All chroot data has been removed.', 'info');
-          appendConsole('━━━ Uninstallation Complete ━━━', 'success');
-          
-          // Update UI to reflect removal
-          updateStatus('stopped');
-          disableAllActions(true);
-        } else {
-          appendConsole('✗ Uninstallation failed', 'err');
-          appendConsole('Check the logs above for details.', 'err');
-          disableAllActions(false);
-        }
-        
-        activeCommandId = null;
-        disableSettingsPopup(false, false); // chroot no longer exists after uninstall
-        
-        // Refresh status to update UI
-        setTimeout(() => refreshStatus(), 1000);
-      });
-    }, 50);
   }
 
   // Disable settings popup when no root available
@@ -2013,64 +1618,29 @@
       if(els.closePopup) {
         // Close button stays enabled and visible
       }
-      // Also disable individual popup elements with visual feedback
-      if(els.postExecScript) {
-        const postExecDisabled = disabled || !chrootExists; // Always disable when no chroot exists
-        els.postExecScript.disabled = postExecDisabled;
-        els.postExecScript.style.opacity = postExecDisabled ? '0.5' : '';
-        els.postExecScript.style.cursor = postExecDisabled ? 'not-allowed' : '';
-        els.postExecScript.style.pointerEvents = postExecDisabled ? 'none' : '';
-      }
-      if(els.saveScript) {
-        const saveDisabled = disabled || !chrootExists; // Always disable when no chroot exists
-        els.saveScript.disabled = saveDisabled;
-        els.saveScript.style.opacity = saveDisabled ? '0.5' : '';
-        els.saveScript.style.cursor = saveDisabled ? 'not-allowed' : '';
-        els.saveScript.style.pointerEvents = saveDisabled ? 'none' : '';
-      }
-      if(els.clearScript) {
-        const clearDisabled = disabled || !chrootExists; // Always disable when no chroot exists
-        els.clearScript.disabled = clearDisabled;
-        els.clearScript.style.opacity = clearDisabled ? '0.5' : '';
-        els.clearScript.style.cursor = clearDisabled ? 'not-allowed' : '';
-        els.clearScript.style.pointerEvents = clearDisabled ? 'none' : '';
-      }
-      if(els.updateBtn) {
-        const updateDisabled = disabled || !chrootExists; // Also disable when no chroot exists
-        els.updateBtn.disabled = updateDisabled;
-        els.updateBtn.style.opacity = updateDisabled ? '0.5' : '';
-        els.updateBtn.style.cursor = updateDisabled ? 'not-allowed' : '';
-        els.updateBtn.style.pointerEvents = updateDisabled ? 'none' : '';
-      }
+      // Disable individual popup elements using centralized ButtonState
+      const buttonsToDisable = [
+        { btn: els.postExecScript, disabled: disabled || !chrootExists },
+        { btn: els.saveScript, disabled: disabled || !chrootExists },
+        { btn: els.clearScript, disabled: disabled || !chrootExists },
+        { btn: els.updateBtn, disabled: disabled || !chrootExists },
+        { btn: els.backupBtn, disabled: disabled || !chrootExists },
+        { btn: els.restoreBtn, disabled: disabled },
+        { btn: els.uninstallBtn, disabled: disabled || !chrootExists },
+        { btn: els.trimSparseBtn, disabled: disabled || !chrootExists || !sparseMigrated },
+        { btn: els.resizeSparseBtn, disabled: disabled || !chrootExists || !sparseMigrated }
+      ];
       
-      // ✅ FIXED: Backup button - disabled when chroot doesn't exist OR no root access
-      if(els.backupBtn) {
-        const backupDisabled = disabled || !chrootExists;
-        els.backupBtn.disabled = backupDisabled;
-        els.backupBtn.style.opacity = backupDisabled ? '0.5' : '';
-        els.backupBtn.style.cursor = backupDisabled ? 'not-allowed' : '';
-        els.backupBtn.style.pointerEvents = backupDisabled ? 'none' : '';
-      }
+      buttonsToDisable.forEach(({ btn, disabled: btnDisabled }) => {
+        if(btn) {
+          btn.disabled = btnDisabled;
+          btn.style.opacity = btnDisabled ? '0.5' : '';
+          btn.style.cursor = btnDisabled ? 'not-allowed' : '';
+          btn.style.pointerEvents = btnDisabled ? 'none' : '';
+        }
+      });
       
-      // ✅ FIXED: Restore button - only disabled when no root access (ALWAYS available with root)
-      if(els.restoreBtn) {
-        const restoreDisabled = disabled; // Only check the 'disabled' parameter (which reflects root access)
-        els.restoreBtn.disabled = restoreDisabled;
-        els.restoreBtn.style.opacity = restoreDisabled ? '0.5' : '';
-        els.restoreBtn.style.cursor = restoreDisabled ? 'not-allowed' : '';
-        els.restoreBtn.style.pointerEvents = restoreDisabled ? 'none' : '';
-      }
-      
-      if(els.uninstallBtn) {
-        // Uninstall should be disabled when chroot doesn't exist OR no root access
-        const uninstallDisabled = disabled || !chrootExists;
-        els.uninstallBtn.disabled = uninstallDisabled;
-        els.uninstallBtn.style.opacity = uninstallDisabled ? '0.5' : '';
-        els.uninstallBtn.style.cursor = uninstallDisabled ? 'not-allowed' : '';
-        els.uninstallBtn.style.pointerEvents = uninstallDisabled ? 'none' : '';
-      }
-      
-      // Experimental features - disable when chroot doesn't exist OR no root access OR already migrated
+      // Experimental features - migrate sparse button
       const migrateSparseBtn = document.getElementById('migrate-sparse-btn');
       if(migrateSparseBtn) {
         const migrateDisabled = disabled || !chrootExists || sparseMigrated;
@@ -2078,27 +1648,12 @@
         migrateSparseBtn.style.opacity = migrateDisabled ? '0.5' : '';
         migrateSparseBtn.style.cursor = migrateDisabled ? 'not-allowed' : '';
         migrateSparseBtn.style.pointerEvents = migrateDisabled ? 'none' : '';
-        // Change text if already migrated
-        if(sparseMigrated) {
-          migrateSparseBtn.textContent = 'Already Migrated';
-        } else {
-          migrateSparseBtn.textContent = 'Migrate to Sparse Image';
-        }
+        migrateSparseBtn.textContent = sparseMigrated ? 'Already Migrated' : 'Migrate to Sparse Image';
       }
 
-      // Sparse settings button - only show when migrated to sparse image
+      // Sparse settings button visibility
       if(els.sparseSettingsBtn) {
-        const sparseBtnVisible = !disabled && chrootExists && sparseMigrated;
-        els.sparseSettingsBtn.style.display = sparseBtnVisible ? 'inline-block' : 'none';
-      }
-      
-      // Disable/enable resize button based on sparse migration status
-      if(els.resizeSparseBtn) {
-        const resizeDisabled = disabled || !chrootExists || !sparseMigrated;
-        els.resizeSparseBtn.disabled = resizeDisabled;
-        els.resizeSparseBtn.style.opacity = resizeDisabled ? '0.5' : '';
-        els.resizeSparseBtn.style.cursor = resizeDisabled ? 'not-allowed' : '';
-        els.resizeSparseBtn.style.pointerEvents = resizeDisabled ? 'none' : '';
+        els.sparseSettingsBtn.style.display = (!disabled && chrootExists && sparseMigrated) ? 'inline-block' : 'none';
       }
     }catch(e){}
   }
@@ -2118,112 +1673,10 @@
     }
   }
 
-  // Sparse image migration function
-  async function migrateToSparseImage(){
-    // Show size selection dialog
-    const sizeGb = await showSizeSelectionDialog();
-    if(!sizeGb) return;
-
-    // Confirm migration - remove emojis from warning
-    const confirmed = await showConfirmDialog(
-      'Migrate to Sparse Image',
-      `This will convert your current rootfs to a ${sizeGb}GB sparse ext4 image.\n\n⚠️ IMPORTANT: If your chroot is currently running, it will be stopped automatically.\n\nℹ️ NOTE: Sparse images do not immediately use ${sizeGb}GB of storage. They only consume space as you write data to them, starting small and growing as needed.\n\nWARNING: This process cannot be undone. Make sure you have a backup!\n\nContinue with migration?`,
-      'Start Migration',
-      'Cancel'
-    );
-
-    if(!confirmed) return;
-
-    // Close settings popup and wait for animation (copy from restore function)
-    closeSettingsPopup();
-    await new Promise(resolve => setTimeout(resolve, 750));
-
-    // Start migration process
-    appendConsole('━━━ Starting Sparse Image Migration ━━━', 'warn');
-    appendConsole(`Target size: ${sizeGb}GB sparse ext4 image`, 'info');
-    appendConsole('DO NOT CLOSE THIS WINDOW!', 'warn');
-
-    // Create progress indicator (copy from restore function)
-    const progressLine = document.createElement('div');
-    progressLine.className = 'progress-indicator';
-    progressLine.textContent = 'Migrating...';
-    els.console.appendChild(progressLine);
-    els.console.scrollTop = els.console.scrollHeight;
-
-    let dotCount = 0;
-    const progressInterval = setInterval(() => {
-      dotCount = (dotCount + 1) % 4;
-      progressLine.textContent = 'Migrating' + '.'.repeat(dotCount);
-    }, 400);
-
-    // Disable all actions during migration
-    disableAllActions(true);
-    disableSettingsPopup(true);
-
-    // Mark as active to prevent other commands
-    activeCommandId = 'chroot-migration';
-
-    // Check if chroot is running and stop it first (like backup function)
-    const isRunning = els.statusText.textContent.trim() === 'running';
-
-    if(isRunning){
-      // Show stopping progress
-      progressLine.textContent = '⏳ Stopping chroot';
-      dotCount = 0; // reset dots
-
-      setTimeout(() => {
-        runCmdAsync(`sh ${PATH_CHROOT_SH} stop >/dev/null 2>&1`, (stopResult) => {
-          if(stopResult.success) {
-            appendConsole('✓ Chroot stopped for migration', 'success');
-            // Now proceed to migration
-            proceedToMigration();
-          } else {
-            clearInterval(progressInterval);
-            progressLine.remove();
-            appendConsole('✗ Failed to stop chroot', 'err');
-            appendConsole('Migration aborted - please stop the chroot manually first', 'err');
-            activeCommandId = null;
-            disableAllActions(false);
-            disableSettingsPopup(false, true);
-          }
-        });
-      }, 50);
-    } else {
-      // Chroot not running, proceed directly to migration
-      proceedToMigration();
-    }
-
-    function proceedToMigration(){
-      progressLine.textContent = 'Migrating...';
-      dotCount = 0;
-
-      setTimeout(() => {
-        runCmdAsync(`sh ${CHROOT_DIR}/sparsemgr.sh migrate ${sizeGb}`, (result) => {
-          clearInterval(progressInterval);
-          progressLine.remove();
-
-          if(result.success){
-            appendConsole('✅ Sparse image migration completed successfully!', 'success');
-            appendConsole('Your rootfs has been converted to a sparse image.', 'info');
-            appendConsole('━━━ Migration Complete ━━━', 'success');
-
-            // Update sparse status
-            sparseMigrated = true;
-
-            // Refresh status to show new state
-            setTimeout(() => refreshStatus(), 1000);
-          } else {
-            appendConsole('✗ Sparse image migration failed!', 'err');
-            appendConsole('Check the logs above for details.', 'err');
-            appendConsole('━━━ Migration Failed ━━━', 'err');
-          }
-
-          // Re-enable UI
-          activeCommandId = null;
-          disableAllActions(false);
-          disableSettingsPopup(false, true);
-        });
-      }, 100);
+  // Migrate function - delegated to MigrateFeature module
+  async function migrateToSparseImage() {
+    if(window.MigrateFeature) {
+      await MigrateFeature.migrateToSparseImage();
     }
   }
 
@@ -2437,95 +1890,15 @@
   }
   function showConfirmDialog(title, message, confirmText = 'Yes', cancelText = 'No'){
     return new Promise((resolve) => {
-      // Create overlay
-      const overlay = document.createElement('div');
-      overlay.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.5);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 2000;
-        opacity: 0;
-        transition: opacity 0.2s ease;
-      `;
-
-      // Create dialog
-      const dialog = document.createElement('div');
-      dialog.style.cssText = `
-        background: var(--card);
-        border-radius: var(--surface-radius);
-        box-shadow: 0 6px 20px rgba(6,8,14,0.06);
-        border: 1px solid rgba(0,0,0,0.08);
-        max-width: 400px;
-        width: 90%;
-        padding: 24px;
-        transform: scale(0.9);
-        transition: transform 0.2s ease;
-      `;
-
-      // Create title
-      const titleEl = document.createElement('h3');
-      titleEl.textContent = title;
-      titleEl.style.cssText = `
-        margin: 0 0 12px 0;
-        font-size: 18px;
-        font-weight: 600;
-        color: var(--text);
-      `;
-
-      // Create message
-      const messageEl = document.createElement('p');
-      messageEl.textContent = message;
-      messageEl.style.cssText = `
-        margin: 0 0 20px 0;
-        font-size: 14px;
-        color: var(--muted);
-        line-height: 1.5;
-        white-space: pre-line;
-      `;
-
-      // Create button container
+      const overlay = DialogManager.createOverlay();
+      const dialog = DialogManager.createDialog();
+      const titleEl = DialogManager.createTitle(title);
+      const messageEl = DialogManager.createMessage(message);
       const buttonContainer = document.createElement('div');
-      buttonContainer.style.cssText = `
-        display: flex;
-        gap: 12px;
-        justify-content: flex-end;
-      `;
+      buttonContainer.style.cssText = DialogManager.styles.buttonContainer;
 
-      // Create cancel button
-      const cancelBtn = document.createElement('button');
-      cancelBtn.textContent = cancelText;
-      cancelBtn.style.cssText = `
-        padding: 8px 16px;
-        border: 1px solid rgba(0,0,0,0.08);
-        border-radius: 8px;
-        background: transparent;
-        color: var(--text);
-        cursor: pointer;
-        font-size: 14px;
-        transition: all 0.2s ease;
-        -webkit-tap-highlight-color: transparent;
-      `;
-
-      // Create confirm button
-      const confirmBtn = document.createElement('button');
-      confirmBtn.textContent = confirmText;
-      confirmBtn.style.cssText = `
-        padding: 8px 16px;
-        border: 1px solid var(--danger);
-        border-radius: 8px;
-        background: var(--danger);
-        color: white;
-        cursor: pointer;
-        font-size: 14px;
-        transition: all 0.2s ease;
-        -webkit-tap-highlight-color: transparent;
-      `;
+      const cancelBtn = DialogManager.createButton(cancelText, 'secondary');
+      const confirmBtn = DialogManager.createButton(confirmText, 'danger');
 
       // Dark mode adjustments
       if(document.documentElement.getAttribute('data-theme') === 'dark'){
@@ -2539,14 +1912,9 @@
         });
       }
 
-      // Event listeners
       const closeDialog = (result) => {
-        overlay.style.opacity = '0';
-        dialog.style.transform = 'scale(0.9)';
-        setTimeout(() => {
-          document.body.removeChild(overlay);
-          resolve(result);
-        }, 200);
+        DialogManager.close(overlay, 200);
+        resolve(result);
       };
 
       cancelBtn.addEventListener('click', () => closeDialog(false));
@@ -2556,45 +1924,24 @@
         confirmBtn.style.transform = 'translateY(-1px)';
         confirmBtn.style.boxShadow = '0 4px 12px rgba(220, 38, 38, 0.3)';
       });
-
       confirmBtn.addEventListener('mouseleave', () => {
         confirmBtn.style.transform = 'translateY(0)';
         confirmBtn.style.boxShadow = 'none';
       });
 
-      // Close on overlay click
       overlay.addEventListener('click', (e) => {
         if(e.target === overlay) closeDialog(false);
       });
 
-      // Keyboard support - use a proper cleanup function
-      const handleKeyDown = (e) => {
-        if(e.key === 'Escape') {
-          closeDialog(false);
-          document.removeEventListener('keydown', handleKeyDown);
-        } else if(e.key === 'Enter') {
-          closeDialog(true);
-          document.removeEventListener('keydown', handleKeyDown);
-        }
-      };
-      document.addEventListener('keydown', handleKeyDown);
+      DialogManager.setupKeyboard(overlay, () => closeDialog(true), () => closeDialog(false));
 
-      // Assemble dialog
       buttonContainer.appendChild(cancelBtn);
       buttonContainer.appendChild(confirmBtn);
-
       dialog.appendChild(titleEl);
       dialog.appendChild(messageEl);
       dialog.appendChild(buttonContainer);
-
       overlay.appendChild(dialog);
-      document.body.appendChild(overlay);
-
-      // Animate in
-      setTimeout(() => {
-        overlay.style.opacity = '1';
-        dialog.style.transform = 'scale(1)';
-      }, 10);
+      DialogManager.show(overlay, dialog);
     });
   }
 
@@ -2721,7 +2068,7 @@
         });
 
         // Focus on filename input
-        setTimeout(() => filenameInput.focus(), 100);
+        setTimeout(() => filenameInput.focus(), ANIMATION_DELAYS.INPUT_FOCUS);
 
         formContainer.appendChild(pathLabel);
         formContainer.appendChild(pathInput);
@@ -2755,7 +2102,7 @@
         `;
 
         // Focus on path input
-        setTimeout(() => pathInput.focus(), 100);
+        setTimeout(() => pathInput.focus(), ANIMATION_DELAYS.INPUT_FOCUS);
 
         formContainer.appendChild(pathLabel);
         formContainer.appendChild(pathInput);
@@ -2907,7 +2254,7 @@
 
   // theme: supports either an input checkbox or a button with aria-pressed
   function initTheme(){
-    const stored = localStorage.getItem('chroot_theme') || (window.matchMedia && window.matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light');
+    const stored = Storage.get('chroot_theme') || (window.matchMedia && window.matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light');
     document.documentElement.setAttribute('data-theme', stored==='dark' ? 'dark' : '');
 
     const t = els.themeToggle;
@@ -2919,7 +2266,7 @@
       t.addEventListener('change', ()=>{
         const next = t.checked ? 'dark' : 'light';
         document.documentElement.setAttribute('data-theme', next==='dark' ? 'dark' : '');
-        try{ localStorage.setItem('chroot_theme', next); }catch(e){}
+        Storage.set('chroot_theme', next);
       });
       return;
     }
@@ -2932,7 +2279,7 @@
       const next = pressed ? 'light' : 'dark';
       t.setAttribute('aria-pressed', next === 'dark' ? 'true' : 'false');
       document.documentElement.setAttribute('data-theme', next==='dark' ? 'dark' : '');
-      try{ localStorage.setItem('chroot_theme', next); }catch(e){}
+      Storage.set('chroot_theme', next);
     });
   }
 
@@ -2940,19 +2287,22 @@
   els.startBtn.addEventListener('click', (e) => doAction('start', e.target));
   els.stopBtn.addEventListener('click', (e) => doAction('stop', e.target));
   els.restartBtn.addEventListener('click', (e) => doAction('restart', e.target));
-  document.getElementById('copy-login').addEventListener('click', copyLoginCommand);
+  const copyLoginBtn = document.getElementById('copy-login');
+  if(copyLoginBtn) {
+    copyLoginBtn.addEventListener('click', copyLoginCommand);
+  }
   els.clearConsole.addEventListener('click', (e) => { 
     animateButton(e.target);
-    els.console.innerHTML = ''; 
+    els.console.textContent = ''; // Use textContent for clearing (safer than innerHTML) 
     // Clear saved logs
-    try{ localStorage.removeItem('chroot_console_logs'); }catch(e){}
+    Storage.remove('chroot_console_logs');
     
     // If debug mode is enabled, also clear the logs folder
     if(debugModeActive){
       appendConsole('Console and logs are cleared', 'info');
       setTimeout(() => {
         runCmdAsync(`rm -rf ${LOG_DIR}`, () => {});
-      }, 100);
+      }, ANIMATION_DELAYS.INPUT_FOCUS);
     } else {
       appendConsole('Console cleared', 'info');
     }
@@ -2969,6 +2319,26 @@
     await checkRootAccess();
     await refreshStatus();
     await readBootFile(); // Also refresh boot toggle status
+    
+    // Pre-fetch interfaces in background (non-blocking) to update cache
+    // This prevents lag when opening popups later
+    // Use setTimeout to ensure it's truly non-blocking
+    if(rootAccessConfirmed) {
+      setTimeout(() => {
+        // Fetch hotspot interfaces in background (force refresh + background only)
+        if(window.HotspotFeature && HotspotFeature.fetchInterfaces) {
+          HotspotFeature.fetchInterfaces(true, true).catch(() => {
+            // Silently fail - cache will be used if fetch fails
+          });
+        }
+        // Fetch forward-nat interfaces in background (force refresh + background only)
+        if(window.ForwardNatFeature && ForwardNatFeature.fetchInterfaces) {
+          ForwardNatFeature.fetchInterfaces(true, true).catch(() => {
+            // Silently fail - cache will be used if fetch fails
+          });
+        }
+      }, ANIMATION_DELAYS.INPUT_FOCUS); // Small delay to ensure UI updates first
+    }
   });
   els.bootToggle.addEventListener('change', () => writeBootFile(els.bootToggle.checked ? 1 : 0));
   els.debugToggle.addEventListener('change', () => {
@@ -2985,20 +2355,26 @@
   // Settings popup event handlers
   els.settingsBtn.addEventListener('click', () => openSettingsPopup());
   els.closePopup.addEventListener('click', () => closeSettingsPopup());
-  els.settingsPopup.addEventListener('click', (e) => {
-    if(e.target === els.settingsPopup) closeSettingsPopup();
-  });
+  PopupManager.setupClickOutside(els.settingsPopup, closeSettingsPopup);
   els.saveScript.addEventListener('click', () => savePostExecScript());
   els.clearScript.addEventListener('click', () => clearPostExecScript());
   els.updateBtn.addEventListener('click', () => updateChroot());
-  els.backupBtn.addEventListener('click', () => backupChroot());
-  els.restoreBtn.addEventListener('click', () => restoreChroot());
-  els.uninstallBtn.addEventListener('click', () => uninstallChroot());
+  els.backupBtn.addEventListener('click', () => {
+    if(window.BackupRestoreFeature) BackupRestoreFeature.backupChroot();
+  });
+  els.restoreBtn.addEventListener('click', () => {
+    if(window.BackupRestoreFeature) BackupRestoreFeature.restoreChroot();
+  });
+  els.uninstallBtn.addEventListener('click', () => {
+    if(window.UninstallFeature) UninstallFeature.uninstallChroot();
+  });
 
   // Experimental features event handlers
   const migrateSparseBtn = document.getElementById('migrate-sparse-btn');
   if(migrateSparseBtn){
-    migrateSparseBtn.addEventListener('click', () => migrateToSparseImage());
+    migrateSparseBtn.addEventListener('click', () => {
+      if(window.MigrateFeature) MigrateFeature.migrateToSparseImage();
+    });
   }
 
   // Sparse settings event handlers
@@ -3008,35 +2384,54 @@
   if(els.closeSparsePopup){
     els.closeSparsePopup.addEventListener('click', () => closeSparseSettingsPopup());
   }
-  if(els.sparseSettingsPopup){
-    els.sparseSettingsPopup.addEventListener('click', (e) => {
-      if(e.target === els.sparseSettingsPopup) closeSparseSettingsPopup();
+  PopupManager.setupClickOutside(els.sparseSettingsPopup, closeSparseSettingsPopup);
+  if(els.trimSparseBtn){
+    els.trimSparseBtn.addEventListener('click', () => {
+      if(window.ResizeFeature) ResizeFeature.trimSparseImage();
     });
   }
-  if(els.trimSparseBtn){
-    els.trimSparseBtn.addEventListener('click', () => trimSparseImage());
-  }
   if(els.resizeSparseBtn){
-    els.resizeSparseBtn.addEventListener('click', () => resizeSparseImage());
+    els.resizeSparseBtn.addEventListener('click', () => {
+      if(window.ResizeFeature) ResizeFeature.resizeSparseImage();
+    });
   }
 
   // Hotspot event handlers
-  els.hotspotBtn.addEventListener('click', () => openHotspotPopup());
-  els.closeHotspotPopup.addEventListener('click', () => closeHotspotPopup());
-  els.hotspotPopup.addEventListener('click', (e) => {
-    if(e.target === els.hotspotPopup) closeHotspotPopup();
-  });
-  els.startHotspotBtn.addEventListener('click', () => startHotspot());
-  els.stopHotspotBtn.addEventListener('click', () => stopHotspot());
+  if(els.hotspotBtn) {
+    els.hotspotBtn.addEventListener('click', () => openHotspotPopup());
+  }
+  if(els.closeHotspotPopup) {
+    els.closeHotspotPopup.addEventListener('click', () => closeHotspotPopup());
+  }
+  if(els.hotspotPopup) {
+    PopupManager.setupClickOutside(els.hotspotPopup, closeHotspotPopup);
+  }
+  if(els.startHotspotBtn) {
+    els.startHotspotBtn.addEventListener('click', () => startHotspot());
+  }
+  if(els.stopHotspotBtn) {
+    els.stopHotspotBtn.addEventListener('click', () => stopHotspot());
+  }
+  if(els.dismissHotspotWarning) {
+    els.dismissHotspotWarning.addEventListener('click', () => dismissHotspotWarning());
+  }
 
   // Forward NAT event handlers
-  els.forwardNatBtn.addEventListener('click', () => openForwardNatPopup());
-  els.closeForwardNatPopup.addEventListener('click', () => closeForwardNatPopup());
-  els.forwardNatPopup.addEventListener('click', (e) => {
-    if(e.target === els.forwardNatPopup) closeForwardNatPopup();
-  });
-  els.startForwardingBtn.addEventListener('click', () => startForwarding());
-  els.stopForwardingBtn.addEventListener('click', () => stopForwarding());
+  if(els.forwardNatBtn) {
+    els.forwardNatBtn.addEventListener('click', () => openForwardNatPopup());
+  }
+  if(els.closeForwardNatPopup) {
+    els.closeForwardNatPopup.addEventListener('click', () => closeForwardNatPopup());
+  }
+  if(els.forwardNatPopup) {
+    PopupManager.setupClickOutside(els.forwardNatPopup, closeForwardNatPopup);
+  }
+  if(els.startForwardingBtn) {
+    els.startForwardingBtn.addEventListener('click', () => startForwarding());
+  }
+  if(els.stopForwardingBtn) {
+    els.stopForwardingBtn.addEventListener('click', () => stopForwarding());
+  }
 
   // Password toggle functionality
   const togglePasswordBtn = document.getElementById('toggle-password');
@@ -3065,8 +2460,62 @@
     els.dismissHotspotWarning.addEventListener('click', () => dismissHotspotWarning());
   }
 
-  // Band change updates channel limits
-  document.getElementById('hotspot-band').addEventListener('change', updateChannelLimits);
+  // Band change updates channel limits and saves settings
+  const hotspotBandEl = document.getElementById('hotspot-band');
+  if(hotspotBandEl) {
+    hotspotBandEl.addEventListener('change', function() {
+      const channelSelect = document.getElementById('hotspot-channel');
+      const savedChannel = channelSelect ? channelSelect.value : null; // Save current channel before updating
+      updateChannelLimits();
+      // Try to preserve saved channel if it exists in new band, otherwise use default
+      if(savedChannel && channelSelect && Array.from(channelSelect.options).some(opt => opt.value === savedChannel)) {
+        channelSelect.value = savedChannel;
+      }
+      // Save settings when band changes
+      if(window.HotspotFeature && window.HotspotFeature.saveHotspotSettings) {
+        window.HotspotFeature.saveHotspotSettings();
+      }
+    });
+  }
+
+  // Save settings when channel changes
+  const hotspotChannelEl = document.getElementById('hotspot-channel');
+  if(hotspotChannelEl) {
+    hotspotChannelEl.addEventListener('change', function() {
+      if(window.HotspotFeature && window.HotspotFeature.saveHotspotSettings) {
+        window.HotspotFeature.saveHotspotSettings();
+      }
+    });
+  }
+
+  // Auto-save settings when SSID, password, or interface changes
+  const hotspotSsidEl = document.getElementById('hotspot-ssid');
+  const hotspotPasswordEl = document.getElementById('hotspot-password');
+  const hotspotIfaceEl = document.getElementById('hotspot-iface');
+  
+  if(hotspotSsidEl) {
+    hotspotSsidEl.addEventListener('input', function() {
+      if(window.HotspotFeature && window.HotspotFeature.saveHotspotSettings) {
+        window.HotspotFeature.saveHotspotSettings();
+      }
+    });
+  }
+  
+  if(hotspotPasswordEl) {
+    hotspotPasswordEl.addEventListener('input', function() {
+      if(window.HotspotFeature && window.HotspotFeature.saveHotspotSettings) {
+        window.HotspotFeature.saveHotspotSettings();
+      }
+    });
+  }
+  
+  if(hotspotIfaceEl) {
+    hotspotIfaceEl.addEventListener('change', function() {
+      if(window.HotspotFeature && window.HotspotFeature.saveHotspotSettings) {
+        window.HotspotFeature.saveHotspotSettings();
+      }
+    });
+  }
 
   // Hotspot band change handler
   function updateChannelLimits(){
@@ -3094,53 +2543,162 @@
       channelSelect.appendChild(option);
     });
     
-    // Set default value
+    // Set default value (will be overridden if saved channel exists)
     channelSelect.value = band === '5' ? '36' : '6';
   }
 
-  // Hotspot settings persistence
-  function saveHotspotSettings(){
-    const settings = {
-      iface: document.getElementById('hotspot-iface').value,
-      ssid: document.getElementById('hotspot-ssid').value,
-      password: document.getElementById('hotspot-password').value,
-      band: document.getElementById('hotspot-band').value,
-      channel: document.getElementById('hotspot-channel').value
-    };
-    try{ localStorage.setItem('chroot_hotspot_settings', JSON.stringify(settings)); }catch(e){}
-  }
+  // Hotspot settings persistence - DELEGATED TO HotspotFeature MODULE
+  // Functions removed - use window.HotspotFeature.saveHotspotSettings() and loadHotspotSettings() instead
 
-  function loadHotspotSettings(){
-    try{
-      const settings = JSON.parse(localStorage.getItem('chroot_hotspot_settings'));
-      if(settings){
-        document.getElementById('hotspot-iface').value = settings.iface || 'wlan0';
-        document.getElementById('hotspot-ssid').value = settings.ssid || '';
-        document.getElementById('hotspot-password').value = settings.password || '';
-        document.getElementById('hotspot-band').value = settings.band || '2';
-        updateChannelLimits(); // Populate options first
-        document.getElementById('hotspot-channel').value = settings.channel || '6';
-      }
-    }catch(e){}
+  // ============================================================================
+  // INITIALIZE FEATURE MODULES
+  // ============================================================================
+  function initFeatureModules() {
+    // Create dependency objects for mutable values (using refs to sync)
+    activeCommandIdRef = { 
+      get value() { return activeCommandId; },
+      set value(v) { activeCommandId = v; }
+    };
+    rootAccessConfirmedRef = { 
+      get value() { return rootAccessConfirmed; },
+      set value(v) { rootAccessConfirmed = v; }
+    };
+    hotspotActiveRef = { 
+      get value() { return hotspotActive; },
+      set value(v) { hotspotActive = v; }
+    };
+    forwardingActiveRef = { 
+      get value() { return forwardingActive; },
+      set value(v) { forwardingActive = v; }
+    };
+    sparseMigratedRef = { 
+      get value() { return sparseMigrated; },
+      set value(v) { sparseMigrated = v; }
+    };
+
+    // Common dependencies for all features
+    const commonDeps = {
+      // Mutable state (passed as refs)
+      activeCommandId: activeCommandIdRef,
+      rootAccessConfirmed: rootAccessConfirmedRef,
+      hotspotActive: hotspotActiveRef,
+      forwardingActive: forwardingActiveRef,
+      sparseMigrated: sparseMigratedRef,
+      
+      // Constants
+      CHROOT_DIR,
+      PATH_CHROOT_SH,
+      HOTSPOT_SCRIPT,
+      FORWARD_NAT_SCRIPT,
+      OTA_UPDATER,
+      
+      // Utilities
+      Storage,
+      StateManager,
+      ButtonState,
+      ProgressIndicator,
+      PopupManager,
+      DialogManager,
+      ANIMATION_DELAYS,
+      
+      // Functions
+      appendConsole,
+      runCmdSync,
+      runCmdAsync,
+      withCommandGuard,
+      disableAllActions,
+      disableSettingsPopup,
+      refreshStatus,
+      updateStatus,
+      els
+    };
+
+    // Initialize Forward NAT feature
+    if(window.ForwardNatFeature) {
+      ForwardNatFeature.init({
+        ...commonDeps,
+        forwardingActive: forwardingActiveRef,
+        loadForwardingStatus: () => { forwardingActiveRef.value = StateManager.get('forwarding'); },
+        saveForwardingStatus: () => { StateManager.set('forwarding', forwardingActiveRef.value); }
+      });
+    }
+
+    // Initialize Hotspot feature
+    if(window.HotspotFeature) {
+      HotspotFeature.init({
+        ...commonDeps,
+        hotspotActive: hotspotActiveRef,
+        loadHotspotStatus: () => { hotspotActiveRef.value = StateManager.get('hotspot'); },
+        saveHotspotStatus: () => { StateManager.set('hotspot', hotspotActiveRef.value); },
+        FORWARD_NAT_SCRIPT
+      });
+    }
+
+    // Initialize Backup/Restore feature
+    if(window.BackupRestoreFeature) {
+      BackupRestoreFeature.init({
+        ...commonDeps,
+        showFilePickerDialog,
+        showConfirmDialog,
+        closeSettingsPopup
+      });
+    }
+
+    // Initialize Uninstall feature
+    if(window.UninstallFeature) {
+      UninstallFeature.init({
+        ...commonDeps,
+        showConfirmDialog,
+        closeSettingsPopup
+      });
+    }
+
+    // Initialize Migrate feature
+    if(window.MigrateFeature) {
+      MigrateFeature.init({
+        ...commonDeps,
+        showSizeSelectionDialog,
+        showConfirmDialog,
+        closeSettingsPopup
+      });
+    }
+
+    // Initialize Resize feature
+    if(window.ResizeFeature) {
+      ResizeFeature.init({
+        ...commonDeps,
+        sparseMigrated: sparseMigratedRef,
+        showSizeSelectionDialog,
+        showConfirmDialog,
+        closeSettingsPopup,
+        updateSparseInfo
+      });
+    }
+
   }
 
   // init
   initTheme();
   loadConsoleLogs(); // Restore previous console logs
-  loadHotspotSettings(); // Load hotspot settings
+  // Don't load hotspot settings here - will be loaded when popup opens (after interfaces are populated)
   loadHotspotStatus(); // Load hotspot status
   loadForwardingStatus(); // Load forwarding status
   loadDebugMode(); // Load debug mode status
   updateChannelLimits(); // Initialize channel options based on default/loaded band
   
   initExperimentalFeatures(); // Initialize experimental features
+  initFeatureModules(); // Initialize feature modules
   
   // small delay to let command-executor attach if present
   setTimeout(async ()=>{
-    await checkRootAccess(); // Master root detection
-    await refreshStatus(); // Wait for status check
-    await readBootFile(); // Wait for boot file read
-  }, 160);
+    try {
+      await checkRootAccess(); // Master root detection
+      await refreshStatus(); // Wait for status check
+      await readBootFile(); // Wait for boot file read
+    } catch(e) {
+      appendConsole(`Initialization error: ${e.message}`, 'err');
+    }
+  }, ANIMATION_DELAYS.INIT_DELAY);
 
   // export some helpers for debug
   window.chrootUI = { refreshStatus, doAction, appendConsole };
