@@ -79,18 +79,10 @@
   // Track sparse image migration status
   let sparseMigrated = false;
 
-  /**
-   * Load hotspot status from localStorage on page load
-   */
+  // Hotspot status loading/saving is now handled by HotspotFeature module
+  // These functions are kept for backward compatibility during initialization
   function loadHotspotStatus(){
     hotspotActive = StateManager.get('hotspot');
-  }
-
-  /**
-   * Save hotspot status to localStorage
-   */
-  function saveHotspotStatus(){
-    StateManager.set('hotspot', hotspotActive);
   }
 
   /**
@@ -131,17 +123,39 @@
 
   /**
    * Save console logs to localStorage
+   * Limits to max lines to prevent localStorage overflow
    */
   function saveConsoleLogs(){
-    Storage.set('chroot_console_logs', els.console.innerHTML);
+    const lines = els.console.querySelectorAll('div');
+    const maxLines = APP_CONSTANTS.CONSOLE.MAX_LINES;
+    if(lines.length > maxLines) {
+      // Remove oldest lines
+      const toRemove = lines.length - maxLines;
+      Array.from(lines).slice(0, toRemove).forEach(line => line.remove());
+    }
+    // Save current state
+    const logs = els.console.innerHTML;
+    Storage.set('chroot_console_logs', logs);
   }
 
   /**
    * Load console logs from localStorage
+   * Enforces max line limit when loading
    */
   function loadConsoleLogs(){
     const logs = Storage.get('chroot_console_logs');
-    if(logs) els.console.innerHTML = logs;
+    if(logs) {
+      els.console.innerHTML = logs;
+      // Enforce max line limit after loading (in case saved logs exceed limit)
+      const lines = els.console.querySelectorAll('div');
+      const maxLines = APP_CONSTANTS.CONSOLE.MAX_LINES;
+      if(lines.length > maxLines) {
+        const toRemove = lines.length - maxLines;
+        Array.from(lines).slice(0, toRemove).forEach(line => line.remove());
+        // Save trimmed version back to localStorage
+        saveConsoleLogs();
+      }
+    }
   }
 
   /**
@@ -188,9 +202,19 @@
 
   /**
    * Append text to console with optional styling
+   * Enforces max line limit to prevent memory issues
    */
   function appendConsole(text, cls){
     const pre = els.console;
+    const maxLines = APP_CONSTANTS.CONSOLE.MAX_LINES;
+    const lines = pre.querySelectorAll('div');
+    
+    // Remove oldest lines if we exceed the limit
+    if(lines.length >= maxLines) {
+      const toRemove = lines.length - maxLines + 1;
+      Array.from(lines).slice(0, toRemove).forEach(line => line.remove());
+    }
+    
     const line = document.createElement('div');
     if(cls) line.className = cls;
     line.textContent = text + '\n';
@@ -206,9 +230,43 @@
   /**
    * Add button press animation
    */
-  function animateButton(btn){
+  function animateButton(btn, actionText = null){
+    if(!btn || btn.disabled) return Promise.resolve();
+    
+    // Remove any existing pressed state first
+    btn.classList.remove('btn-pressed', 'btn-released');
+    // Clear any inline styles that might interfere
+    btn.style.transform = '';
+    btn.style.boxShadow = '';
+    // Force a reflow to ensure the class and style are reset
+    void btn.offsetWidth;
+    
+    // Add pressed state (this will apply scale(0.96) and shadow from CSS)
     btn.classList.add('btn-pressed');
-    setTimeout(() => btn.classList.remove('btn-pressed'), ANIMATION_DELAYS.BUTTON_ANIMATION);
+    
+    // Return a promise that resolves after animation completes
+    return new Promise((resolve) => {
+      // Show action message in console during animation
+      if(actionText) {
+        appendConsole(actionText, 'info');
+      }
+      // Remove after animation delay
+      setTimeout(() => {
+        btn.classList.remove('btn-pressed');
+        btn.classList.add('btn-released');
+        // Force reflow
+        void btn.offsetWidth;
+        // After transition, remove released class and reset
+        setTimeout(() => {
+          btn.classList.remove('btn-released');
+          btn.style.transform = '';
+          btn.style.boxShadow = '';
+          // Blur to remove :active state (fixes stuck buttons on touch devices)
+          btn.blur();
+          resolve();
+        }, ANIMATION_DELAYS.BUTTON_RELEASE);
+      }, ANIMATION_DELAYS.BUTTON_ANIMATION);
+    });
   }
 
   // ============================================================================
@@ -267,12 +325,43 @@
     POPUP_CLOSE_VERY_LONG: 1500,
     UI_UPDATE: 50,
     STATUS_REFRESH: 500,
-    BUTTON_ANIMATION: 150,
+    BUTTON_ANIMATION: 120, // Reduced for snappier feel
+    BUTTON_RELEASE: 120, // Delay for button release animation
     INPUT_FOCUS: 100, // Delay for focusing inputs after DOM manipulation
     INIT_DELAY: 160, // Initial page load delay
     PRE_FETCH_DELAY: 500, // Delay before pre-fetching interfaces
     SETTINGS_LOAD: 100, // Delay for loading settings after popup opens
-    CHANNEL_VERIFY: 100 // Delay for verifying channel value after load
+    CHANNEL_VERIFY: 100, // Delay for verifying channel value after load
+    CHANNEL_UPDATE_DELAY: 50, // Delay after updating channel options before setting value
+    DIALOG_CLOSE: 200, // Delay for dialog close animation
+    PROGRESS_SPINNER: 200, // Interval for spinner animation
+    PROGRESS_DOTS: 400 // Interval for dots animation
+  };
+
+  // ============================================================================
+  // APPLICATION CONSTANTS
+  // ============================================================================
+  const APP_CONSTANTS = {
+    HOTSPOT: {
+      PASSWORD_MIN_LENGTH: 8,
+      DEFAULT_BAND: '2',
+      DEFAULT_CHANNEL_2_4GHZ: '6',
+      DEFAULT_CHANNEL_5GHZ: '36',
+      CHANNELS_2_4GHZ: [1,2,3,4,5,6,7,8,9,10,11],
+      CHANNELS_5GHZ: [36,40,44,48,52,56,60,64,100,104,108,112,116,120,124,128,132,136,140,149,153,157,161,165]
+    },
+    CONSOLE: {
+      MAX_LINES: 1000 // Maximum number of console lines to keep
+    },
+    SPARSE_IMAGE: {
+      SIZE_BASE: 1000, // Use base 1000 (GB) not 1024 (GiB)
+      DEFAULT_SIZE_GB: 8,
+      AVAILABLE_SIZES: [4, 8, 16, 32, 64, 128, 256, 512]
+    },
+    UI: {
+      Z_INDEX_OVERLAY: 2000, // Z-index for overlay dialogs
+      BYTES_BASE: 1000 // Base for byte calculations (KB, MB, GB)
+    }
   };
 
   // ============================================================================
@@ -345,7 +434,7 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        z-index: 2000;
+        z-index: 2000; /* APP_CONSTANTS.UI.Z_INDEX_OVERLAY */
         opacity: 0;
         transition: opacity 0.2s ease;
       `,
@@ -479,10 +568,12 @@
       }, 10);
     },
 
-    close(overlay, delay = 200) {
+    close(overlay, delay = ANIMATION_DELAYS.DIALOG_CLOSE) {
       overlay.style.opacity = '0';
       const dialog = overlay.querySelector('div');
       if(dialog) dialog.style.transform = 'scale(0.9)';
+      // Clean up keyboard handler
+      this.cleanupKeyboard(overlay);
       setTimeout(() => {
         if(overlay.parentNode) {
           overlay.parentNode.removeChild(overlay);
@@ -501,7 +592,16 @@
         }
       };
       document.addEventListener('keydown', handleKeyDown);
+      // Store handler on overlay for cleanup
+      overlay._keyboardHandler = handleKeyDown;
       return handleKeyDown;
+    },
+    
+    cleanupKeyboard(overlay) {
+      if(overlay && overlay._keyboardHandler) {
+        document.removeEventListener('keydown', overlay._keyboardHandler);
+        delete overlay._keyboardHandler;
+      }
     }
   };
 
@@ -512,7 +612,8 @@
     create(text, type = 'spinner') {
       const progressLine = document.createElement('div');
       progressLine.className = 'progress-indicator';
-      progressLine.textContent = '⏳ ' + text;
+      const baseText = '⏳ ' + text;
+      progressLine.textContent = baseText;
       els.console.appendChild(progressLine);
       els.console.scrollTop = els.console.scrollHeight;
       
@@ -521,15 +622,20 @@
         let spinIndex = 0;
         const spinner = ['|', '/', '-', '\\'];
         interval = setInterval(() => {
-          spinIndex = (spinIndex + 1) % 4;
-          progressLine.textContent = '⏳ ' + text + ' ' + spinner[spinIndex];
-        }, 200);
+          if(progressLine.parentNode) { // Check if still in DOM
+            spinIndex = (spinIndex + 1) % 4;
+            progressLine.textContent = baseText + ' ' + spinner[spinIndex];
+          }
+        }, ANIMATION_DELAYS.PROGRESS_SPINNER);
       } else if(type === 'dots') {
-        let dotCount = 0;
+        // Use blinking animation instead of dots to prevent getting stuck
+        let isVisible = true;
         interval = setInterval(() => {
-          dotCount = (dotCount + 1) % 4;
-          progressLine.textContent = '⏳ ' + text + '.'.repeat(dotCount);
-        }, 400);
+          if(progressLine.parentNode) { // Check if still in DOM
+            progressLine.textContent = isVisible ? baseText : '';
+            isVisible = !isVisible;
+          }
+        }, ANIMATION_DELAYS.PROGRESS_SPINNER);
       }
       
       return { progressLine, interval };
@@ -537,11 +643,13 @@
     
     remove(progressLine, interval) {
       if(interval) clearInterval(interval);
-      if(progressLine) progressLine.remove();
+      if(progressLine && progressLine.parentNode) {
+        progressLine.remove();
+      }
     },
     
     update(progressLine, text) {
-      if(progressLine) {
+      if(progressLine && progressLine.parentNode) {
         progressLine.textContent = '⏳ ' + text;
       }
     }
@@ -561,6 +669,12 @@
       }
       if(visible !== null) {
         btn.style.display = visible ? '' : 'none';
+      }
+      // Clear button states when disabled
+      if(!enabled) {
+        btn.classList.remove('btn-pressed', 'btn-released');
+        btn.style.transform = '';
+        btn.style.boxShadow = '';
       }
     },
     
@@ -747,9 +861,9 @@
     // Prepend LOGGING_ENABLED=1 if debug mode is active
     const finalCmd = debugModeActive ? `LOGGING_ENABLED=1 ${cmd}` : cmd;
 
-    // FIXED: Set activeCommandId BEFORE calling executeAsync to prevent race condition
-    // The executeAsync method returns a commandId, so we set activeCommandId after getting it
-    // But we also track it locally to prevent race conditions in the callback
+    // Store local reference for callback to use (captured in closure)
+    let localCommandId = null;
+    
     const commandId = cmdExec.executeAsync(finalCmd, true, {
       onOutput: (output) => {
         // Display output, but filter out executing messages
@@ -767,17 +881,19 @@
       },
       onComplete: (result) => {
         // Only clear if this is still the active command (prevents race conditions)
-        // This ensures we don't clear activeCommandId if a new command started
-        if(activeCommandId === commandId) {
+        // Use localCommandId from closure to ensure we're checking the right command
+        if(activeCommandId === localCommandId) {
           activeCommandId = null;
         }
         if(onComplete) onComplete(result);
       }
     });
 
-    // Set activeCommandId AFTER getting commandId but BEFORE callback can fire
-    // This prevents race condition where callback clears it before we set it
+    // Set activeCommandId immediately after getting commandId
+    // Since JavaScript is single-threaded, callbacks won't fire until current execution completes
+    localCommandId = commandId;
     activeCommandId = commandId;
+    
     return commandId;
   }
 
@@ -866,64 +982,88 @@
    */
   async function doAction(action, btn){
     await withCommandGuard(`chroot-${action}`, async () => {
-      animateButton(btn);
-      const actionText = action.charAt(0).toUpperCase() + action.slice(1) + 'ing chroot';
-      appendConsole(`━━━ Starting ${action} ━━━`, 'info');
-      
-      // Show progress indicator using centralized utility
-      const { progressLine, interval: progressInterval } = ProgressIndicator.create(actionText, 'dots');
-      
-      // Disable ALL UI elements during execution
-      disableAllActions(true);
-      disableSettingsPopup(true);
+    // Update status immediately to show action in progress
+    const statusState = action === 'start' ? 'starting' : action === 'stop' ? 'stopping' : 'restarting';
+    updateStatus(statusState);
+    
+    // Disable the button immediately (keep it visually pressed)
+    btn.disabled = true;
+    btn.style.opacity = '0.5';
+    btn.classList.remove('btn-pressed', 'btn-released');
+    btn.style.transform = '';
+    btn.style.boxShadow = '';
+    
+    const actionText = action.charAt(0).toUpperCase() + action.slice(1) + 'ing chroot';
+    appendConsole(`━━━ ${actionText} ━━━`, 'info');
+    
+    // Show progress indicator using centralized utility
+    const { progressLine, interval: progressInterval } = ProgressIndicator.create(actionText, 'dots');
+    
+    // Disable ALL UI elements during execution
+    disableAllActions(true);
+    disableSettingsPopup(true);
 
-      // Check for hotspot on stop/restart
-      let hotspotWasRunning = false;
-      if(action === 'stop' || action === 'restart'){
-        try{
-          hotspotWasRunning = await checkAp0Interface();
-          if(hotspotWasRunning){
+    // Check for hotspot on stop/restart
+    let hotspotWasRunning = false;
+    if(action === 'stop' || action === 'restart'){
+      try{
+        hotspotWasRunning = await checkAp0Interface();
+        if(hotspotWasRunning){
             ProgressIndicator.update(progressLine, 'Stopping hotspot first');
-            
-            // Stop hotspot first
-            await new Promise((resolve, reject) => {
-              runCmdAsync(`sh ${HOTSPOT_SCRIPT} -k 2>&1`, (result) => {
-                if(result.success) {
-                  appendConsole('✓ Hotspot stopped successfully', 'success');
-                  hotspotActive = false;
-                  saveHotspotStatus();
-                  resolve();
-                } else {
-                  appendConsole('✗ Failed to stop hotspot, continuing with chroot action', 'warn');
-                  resolve(); // Continue anyway
-                }
-              });
+          
+          // Stop hotspot first
+          await new Promise((resolve, reject) => {
+            runCmdAsync(`sh ${HOTSPOT_SCRIPT} -k 2>&1`, (result) => {
+              if(result.success) {
+                appendConsole('✓ Hotspot stopped successfully', 'success');
+                // Update state through StateManager
+                hotspotActive = false;
+                StateManager.set('hotspot', false);
+                if(hotspotActiveRef) hotspotActiveRef.value = false;
+                resolve();
+              } else {
+                appendConsole('✗ Failed to stop hotspot, continuing with chroot action', 'warn');
+                resolve(); // Continue anyway
+              }
             });
-          }
-        }catch(e){
-          appendConsole('⚠ Could not check hotspot status, proceeding with chroot action', 'warn');
+          });
         }
+      }catch(e){
+        appendConsole('⚠ Could not check hotspot status, proceeding with chroot action', 'warn');
       }
+    }
 
-      // Use --no-shell flag to prevent blocking on interactive shell
-      const cmd = `sh ${PATH_CHROOT_SH} ${action} --no-shell`;
-      
-      setTimeout(() => {
-        runCmdAsync(cmd, (result) => {
+    // Use --no-shell flag to prevent blocking on interactive shell
+    const cmd = `sh ${PATH_CHROOT_SH} ${action} --no-shell`;
+    
+    setTimeout(() => {
+      runCmdAsync(cmd, (result) => {
           ProgressIndicator.remove(progressLine, progressInterval);
-          
-          if(result.success) {
-            appendConsole(`✓ ${action} completed successfully`, 'success');
-          } else {
-            appendConsole(`✗ ${action} failed`, 'err');
-          }
-          
-          activeCommandId = null;
-          disableAllActions(false);
-          disableSettingsPopup(false, true);
-          if(els.closePopup) els.closePopup.style.display = '';
+        
+        if(result.success) {
+          appendConsole(`✓ ${action} completed successfully`, 'success');
+          // Refresh status to get actual state (running/stopped)
           setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH);
+        } else {
+          appendConsole(`✗ ${action} failed`, 'err');
+          // Refresh status even on failure to show actual state
+          setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH);
+        }
+        
+        activeCommandId = null;
+        disableAllActions(false);
+        disableSettingsPopup(false, true);
+        if(els.closePopup) els.closePopup.style.display = '';
+        
+        // Clear button states after operation completes
+        [els.startBtn, els.stopBtn, els.restartBtn].forEach(btn => {
+          if(btn) {
+            btn.classList.remove('btn-pressed', 'btn-released');
+            btn.style.transform = '';
+            btn.style.boxShadow = '';
+          }
         });
+      });
       }, ANIMATION_DELAYS.UI_UPDATE);
     });
   }
@@ -968,14 +1108,15 @@
           await fetchUsers();
         }
 
-        // Check hotspot state if running
+        // Check hotspot state if running - sync with actual system state
         let currentHotspotActive = false;
         if(running && rootAccessConfirmed){
           currentHotspotActive = await checkAp0Interface();
           if(currentHotspotActive !== hotspotActive){
             // State mismatch - update our saved state to match reality
             hotspotActive = currentHotspotActive;
-            saveHotspotStatus();
+            StateManager.set('hotspot', currentHotspotActive);
+            if(hotspotActiveRef) hotspotActiveRef.value = currentHotspotActive;
             appendConsole(`Hotspot state corrected: ${currentHotspotActive ? 'running' : 'stopped'}`, currentHotspotActive ? 'info' : 'warn');
           }
         }
@@ -1074,6 +1215,15 @@
     } else if(state === 'stopped'){
       dot.className = 'dot dot-off';
       text.textContent = 'stopped';
+    } else if(state === 'starting'){
+      dot.className = 'dot dot-on';
+      text.textContent = 'starting';
+    } else if(state === 'stopping'){
+      dot.className = 'dot dot-off';
+      text.textContent = 'stopping';
+    } else if(state === 'restarting'){
+      dot.className = 'dot dot-warn';
+      text.textContent = 'restarting';
     } else if(state === 'not_found'){
       dot.className = 'dot dot-off';
       text.textContent = 'chroot not found';
@@ -1102,6 +1252,16 @@
         els.stopBtn.style.opacity = '0.5';
         els.restartBtn.style.opacity = '0.5';
         els.startBtn.style.opacity = '';
+      } else if(state === 'starting' || state === 'stopping' || state === 'restarting'){
+        // Operation in progress - disable all action buttons
+        els.stopBtn.disabled = true;
+        els.restartBtn.disabled = true;
+        els.startBtn.disabled = true;
+        els.userSelect.disabled = true;
+        // Visual feedback - all buttons appear pressed/disabled
+        els.stopBtn.style.opacity = '0.5';
+        els.restartBtn.style.opacity = '0.5';
+        els.startBtn.style.opacity = '0.5';
       } else if(state === 'not_found'){
         // Similar to stopped, but start button also disabled since no chroot to start
         els.stopBtn.disabled = true;
@@ -1325,7 +1485,15 @@
       const script = els.postExecScript.value.trim();
       // Use base64 encoding to safely transfer complex scripts with special characters
       // This avoids all shell escaping issues
-      const base64Script = btoa(unescape(encodeURIComponent(script)));
+      // Properly encode UTF-8 to base64 (handle large scripts by chunking)
+      const utf8Bytes = new TextEncoder().encode(script);
+      let binaryString = '';
+      const chunkSize = 8192;
+      for(let i = 0; i < utf8Bytes.length; i += chunkSize) {
+        const chunk = utf8Bytes.slice(i, i + chunkSize);
+        binaryString += String.fromCharCode.apply(null, chunk);
+      }
+      const base64Script = btoa(binaryString);
       await runCmdSync(`echo '${base64Script}' | base64 -d > ${POST_EXEC_SCRIPT}`);
       await runCmdSync(`chmod 755 ${POST_EXEC_SCRIPT}`);
       appendConsole('Post-exec script saved successfully', 'success');
@@ -1349,9 +1517,9 @@
   }
 
   // Hotspot functions - delegated to HotspotFeature module
-  function openHotspotPopup() {
+  async function openHotspotPopup() {
     if(window.HotspotFeature) {
-      HotspotFeature.openHotspotPopup();
+      await HotspotFeature.openHotspotPopup();
     }
   }
 
@@ -1385,13 +1553,10 @@
     }
   }
 
-  // Forward NAT functions - delegated to ForwardNatFeature module
+  // Forward NAT status loading/saving is now handled by ForwardNatFeature module
+  // These functions are kept for backward compatibility during initialization
   function loadForwardingStatus() {
     forwardingActive = StateManager.get('forwarding');
-  }
-
-  function saveForwardingStatus() {
-    StateManager.set('forwarding', forwardingActive);
   }
 
   function openForwardNatPopup() {
@@ -1431,7 +1596,7 @@
   // Helper function to format bytes to human readable format (base 1000, GB)
   function formatBytes(bytes) {
     if (bytes === 0) return '0 B';
-    const k = 1000; // Use base 1000 for GB instead of GiB
+    const k = APP_CONSTANTS.UI.BYTES_BASE; // Use base 1000 for GB instead of GiB
     const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
@@ -1516,6 +1681,12 @@
     // Wait for popup animation to complete
     await new Promise(resolve => setTimeout(resolve, ANIMATION_DELAYS.POPUP_CLOSE));
 
+    // Check if chroot is not running - updater will start it, so show "starting" status
+    const isNotRunning = els.statusText && els.statusText.textContent.trim() !== 'running';
+    if(isNotRunning) {
+      updateStatus('starting');
+    }
+
     appendConsole('━━━ Starting Chroot Update ━━━', 'info');
 
     // Show progress indicator using centralized utility
@@ -1536,6 +1707,9 @@
           
           els.console.scrollTop = els.console.scrollHeight;
           setTimeout(() => {
+            // Update status to show restarting
+            updateStatus('restarting');
+            
             // Show restart animation using centralized utility
             const { progressLine: restartLine, interval: restartInterval } = ProgressIndicator.create('Restarting chroot', 'dots');
 
@@ -1561,7 +1735,7 @@
                 setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH);
               });
             }, 100);
-          }, 750);
+          }, ANIMATION_DELAYS.POPUP_CLOSE_LONG);
         } else {
           appendConsole('✗ Chroot update failed', 'err');
           
@@ -1637,7 +1811,7 @@
           btn.style.opacity = btnDisabled ? '0.5' : '';
           btn.style.cursor = btnDisabled ? 'not-allowed' : '';
           btn.style.pointerEvents = btnDisabled ? 'none' : '';
-        }
+      }
       });
       
       // Experimental features - migrate sparse button
@@ -1648,7 +1822,9 @@
         migrateSparseBtn.style.opacity = migrateDisabled ? '0.5' : '';
         migrateSparseBtn.style.cursor = migrateDisabled ? 'not-allowed' : '';
         migrateSparseBtn.style.pointerEvents = migrateDisabled ? 'none' : '';
-        migrateSparseBtn.textContent = sparseMigrated ? 'Already Migrated' : 'Migrate to Sparse Image';
+        // Only show "Already Migrated" if chroot exists AND is migrated
+        // If chroot doesn't exist, always show "Migrate to Sparse Image" (disabled)
+        migrateSparseBtn.textContent = (chrootExists && sparseMigrated) ? 'Already Migrated' : 'Migrate to Sparse Image';
       }
 
       // Sparse settings button visibility
@@ -1695,7 +1871,7 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        z-index: 2000;
+        z-index: 2000; /* APP_CONSTANTS.UI.Z_INDEX_OVERLAY */
         opacity: 0;
         transition: opacity 0.2s ease;
       `;
@@ -1752,13 +1928,14 @@
         margin-bottom: 8px;
       `;
 
-      // Add size options
-      const sizes = [4, 8, 16, 32, 64, 128, 256, 512];
+      // Add size options from constants
+      const sizes = APP_CONSTANTS.SPARSE_IMAGE.AVAILABLE_SIZES;
+      const defaultSize = APP_CONSTANTS.SPARSE_IMAGE.DEFAULT_SIZE_GB;
       sizes.forEach(size => {
         const option = document.createElement('option');
         option.value = size;
         option.textContent = `${size}GB`;
-        if(size === 8) option.selected = true; // Default to 8GB
+        if(size === defaultSize) option.selected = true;
         sizeSelect.appendChild(option);
       });
 
@@ -1829,10 +2006,17 @@
       const closeDialog = (result) => {
         overlay.style.opacity = '0';
         dialog.style.transform = 'scale(0.9)';
+        // Clean up keyboard handler
+        if(overlay._keyboardHandler) {
+          document.removeEventListener('keydown', overlay._keyboardHandler);
+          delete overlay._keyboardHandler;
+        }
         setTimeout(() => {
-          document.body.removeChild(overlay);
+          if(overlay.parentNode) {
+            document.body.removeChild(overlay);
+          }
           resolve(result);
-        }, 200);
+        }, ANIMATION_DELAYS.DIALOG_CLOSE);
       };
 
       cancelBtn.addEventListener('click', () => closeDialog(null));
@@ -1857,7 +2041,7 @@
         if(e.target === overlay) closeDialog(null);
       });
 
-      // Keyboard support
+      // Keyboard support - store handler for cleanup
       const handleKeyDown = (e) => {
         if(e.key === 'Escape') {
           closeDialog(null);
@@ -1868,6 +2052,7 @@
         }
       };
       document.addEventListener('keydown', handleKeyDown);
+      overlay._keyboardHandler = handleKeyDown; // Store for cleanup
 
       // Assemble dialog
       buttonContainer.appendChild(cancelBtn);
@@ -1913,8 +2098,8 @@
       }
 
       const closeDialog = (result) => {
-        DialogManager.close(overlay, 200);
-        resolve(result);
+        DialogManager.close(overlay, ANIMATION_DELAYS.DIALOG_CLOSE);
+          resolve(result);
       };
 
       cancelBtn.addEventListener('click', () => closeDialog(false));
@@ -1960,7 +2145,7 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        z-index: 2000;
+        z-index: 2000; /* APP_CONSTANTS.UI.Z_INDEX_OVERLAY */
         opacity: 0;
         transition: opacity 0.2s ease;
       `;
@@ -2169,10 +2354,17 @@
       const closeDialog = (result) => {
         overlay.style.opacity = '0';
         dialog.style.transform = 'scale(0.9)';
+        // Clean up keyboard handler
+        if(overlay._keyboardHandler) {
+          document.removeEventListener('keydown', overlay._keyboardHandler);
+          delete overlay._keyboardHandler;
+        }
         setTimeout(() => {
-          document.body.removeChild(overlay);
+          if(overlay.parentNode) {
+            document.body.removeChild(overlay);
+          }
           resolve(result);
-        }, 200);
+        }, ANIMATION_DELAYS.DIALOG_CLOSE);
       };
 
       cancelBtn.addEventListener('click', () => closeDialog(null));
@@ -2252,7 +2444,7 @@
   }
 
 
-  // theme: supports either an input checkbox or a button with aria-pressed
+  // Theme toggle - button with aria-pressed (checkbox code removed as HTML only has button)
   function initTheme(){
     const stored = Storage.get('chroot_theme') || (window.matchMedia && window.matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light');
     document.documentElement.setAttribute('data-theme', stored==='dark' ? 'dark' : '');
@@ -2260,18 +2452,7 @@
     const t = els.themeToggle;
     if(!t) return;
 
-    // If it's an input checkbox
-    if(t.tagName === 'INPUT' && t.type === 'checkbox'){
-      t.checked = stored === 'dark';
-      t.addEventListener('change', ()=>{
-        const next = t.checked ? 'dark' : 'light';
-        document.documentElement.setAttribute('data-theme', next==='dark' ? 'dark' : '');
-        Storage.set('chroot_theme', next);
-      });
-      return;
-    }
-
-    // Otherwise assume it's a button toggle. Use aria-pressed boolean.
+    // Button toggle with aria-pressed
     const isDark = stored === 'dark';
     t.setAttribute('aria-pressed', isDark ? 'true' : 'false');
     t.addEventListener('click', ()=>{
@@ -2289,10 +2470,17 @@
   els.restartBtn.addEventListener('click', (e) => doAction('restart', e.target));
   const copyLoginBtn = document.getElementById('copy-login');
   if(copyLoginBtn) {
-    copyLoginBtn.addEventListener('click', copyLoginCommand);
+    copyLoginBtn.addEventListener('click', (e) => {
+      // Start animation (don't await - let it run in background)
+      animateButton(e.target);
+      // Copy immediately (don't wait for animation)
+      copyLoginCommand();
+    });
   }
   els.clearConsole.addEventListener('click', (e) => { 
+    // Start animation (don't await - let it run in background)
     animateButton(e.target);
+    // Clear console immediately (don't wait for animation)
     els.console.textContent = ''; // Use textContent for clearing (safer than innerHTML) 
     // Clear saved logs
     Storage.remove('chroot_console_logs');
@@ -2308,11 +2496,17 @@
     }
   });
   els.copyConsole.addEventListener('click', (e) => {
-    animateButton(e.target);
+    e.preventDefault();
+    e.stopPropagation();
+    // Start animation (don't await - let it run in background)
+    animateButton(e.currentTarget);
+    // Copy immediately (don't wait for animation)
     copyConsoleLogs();
   });
   els.refreshStatus.addEventListener('click', async (e) => {
+    // Start animation (don't await - let it run in background)
     animateButton(e.target);
+    // Execute refresh immediately (don't wait for animation)
     appendConsole('Refreshing...', 'info');
     
     // Do a comprehensive refresh: re-check root access, then refresh status
@@ -2356,8 +2550,18 @@
   els.settingsBtn.addEventListener('click', () => openSettingsPopup());
   els.closePopup.addEventListener('click', () => closeSettingsPopup());
   PopupManager.setupClickOutside(els.settingsPopup, closeSettingsPopup);
-  els.saveScript.addEventListener('click', () => savePostExecScript());
-  els.clearScript.addEventListener('click', () => clearPostExecScript());
+  els.saveScript.addEventListener('click', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    await animateButton(e.currentTarget);
+    savePostExecScript();
+  });
+  els.clearScript.addEventListener('click', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    await animateButton(e.currentTarget);
+    clearPostExecScript();
+  });
   els.updateBtn.addEventListener('click', () => updateChroot());
   els.backupBtn.addEventListener('click', () => {
     if(window.BackupRestoreFeature) BackupRestoreFeature.backupChroot();
@@ -2398,19 +2602,19 @@
 
   // Hotspot event handlers
   if(els.hotspotBtn) {
-    els.hotspotBtn.addEventListener('click', () => openHotspotPopup());
+  els.hotspotBtn.addEventListener('click', () => openHotspotPopup());
   }
   if(els.closeHotspotPopup) {
-    els.closeHotspotPopup.addEventListener('click', () => closeHotspotPopup());
+  els.closeHotspotPopup.addEventListener('click', () => closeHotspotPopup());
   }
   if(els.hotspotPopup) {
     PopupManager.setupClickOutside(els.hotspotPopup, closeHotspotPopup);
   }
   if(els.startHotspotBtn) {
-    els.startHotspotBtn.addEventListener('click', () => startHotspot());
+  els.startHotspotBtn.addEventListener('click', () => startHotspot());
   }
   if(els.stopHotspotBtn) {
-    els.stopHotspotBtn.addEventListener('click', () => stopHotspot());
+  els.stopHotspotBtn.addEventListener('click', () => stopHotspot());
   }
   if(els.dismissHotspotWarning) {
     els.dismissHotspotWarning.addEventListener('click', () => dismissHotspotWarning());
@@ -2433,26 +2637,23 @@
     els.stopForwardingBtn.addEventListener('click', () => stopForwarding());
   }
 
-  // Password toggle functionality
+  // Password toggle functionality - use data attribute instead of innerHTML replacement
   const togglePasswordBtn = document.getElementById('toggle-password');
   if(togglePasswordBtn){
+    const passwordInput = document.getElementById('hotspot-password');
+    const iconEye = togglePasswordBtn.querySelector('svg');
+    
+    // Store original SVG content
+    const eyeOpenSvg = `<path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12C23 12 19 20 12 20C5 20 1 12 1 12Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5"/>`;
+    const eyeClosedSvg = `<path d="M2.99902 3L20.999 21M9.8433 9.91364C9.32066 10.4536 8.99902 11.1892 8.99902 12C8.99902 13.6569 10.3422 15 12 15C12.8215 15 13.5667 14.669 14.1086 14.133M6.49902 6.64715C4.59972 7.90034 3.15305 9.78394 2.45703 12C3.73128 16.0571 7.52159 19 11.9992 19C13.9881 19 15.8414 18.4194 17.3988 17.4184M10.999 5.04939C11.328 5.01673 11.6617 5 11.9992 5C16.4769 5 20.2672 7.94291 21.5414 12C21.2607 12.894 20.8577 13.7338 20.3522 14.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`;
+    
     togglePasswordBtn.addEventListener('click', () => {
-      const passwordInput = document.getElementById('hotspot-password');
-      const icon = togglePasswordBtn.querySelector('svg');
-      
       if(passwordInput.type === 'password'){
         passwordInput.type = 'text';
-        // Change icon to show "eye-off" (closed eye)
-        icon.innerHTML = `
-          <path d="M2.99902 3L20.999 21M9.8433 9.91364C9.32066 10.4536 8.99902 11.1892 8.99902 12C8.99902 13.6569 10.3422 15 12 15C12.8215 15 13.5667 14.669 14.1086 14.133M6.49902 6.64715C4.59972 7.90034 3.15305 9.78394 2.45703 12C3.73128 16.0571 7.52159 19 11.9992 19C13.9881 19 15.8414 18.4194 17.3988 17.4184M10.999 5.04939C11.328 5.01673 11.6617 5 11.9992 5C16.4769 5 20.2672 7.94291 21.5414 12C21.2607 12.894 20.8577 13.7338 20.3522 14.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        `;
+        iconEye.innerHTML = eyeClosedSvg;
       } else {
         passwordInput.type = 'password';
-        // Change icon back to show "eye" (open eye)
-        icon.innerHTML = `
-          <path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12C23 12 19 20 12 20C5 20 1 12 1 12Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5"/>
-        `;
+        iconEye.innerHTML = eyeOpenSvg;
       }
     });
   }
@@ -2467,13 +2668,13 @@
       const channelSelect = document.getElementById('hotspot-channel');
       const newBand = this.value;
       
-      // Update channel options based on new band
-      updateChannelLimits(newBand);
-      
-      // Save settings when band changes
-      if(window.HotspotFeature && window.HotspotFeature.saveHotspotSettings) {
-        window.HotspotFeature.saveHotspotSettings();
-      }
+      // Update channel options based on new band (wait for completion)
+      updateChannelLimits(newBand).then(() => {
+        // Save settings when band changes (after channel options are updated)
+        if(window.HotspotFeature && window.HotspotFeature.saveHotspotSettings) {
+          window.HotspotFeature.saveHotspotSettings();
+        }
+      });
     });
   }
 
@@ -2518,37 +2719,47 @@
 
   // Hotspot band change handler
   // Update channel options based on band value (can be passed as parameter or read from dropdown)
+  // Returns a promise that resolves when options are populated (for race condition prevention)
   function updateChannelLimits(bandValue = null){
-    const bandSelect = document.getElementById('hotspot-band');
-    const channelSelect = document.getElementById('hotspot-channel');
-    
-    if(!bandSelect || !channelSelect) return;
-    
-    // Use provided band value, or read from dropdown
-    const band = bandValue !== null ? bandValue : bandSelect.value;
-    
-    // Clear existing options
-    channelSelect.innerHTML = '';
-    
-    let channels = [];
-    if(band === '5'){
-      // 5GHz channels
-      channels = [36,40,44,48,52,56,60,64,100,104,108,112,116,120,124,128,132,136,140,149,153,157,161,165];
-    } else {
-      // 2.4GHz channels
-      channels = [1,2,3,4,5,6,7,8,9,10,11];
-    }
-    
-    // Add options
-    channels.forEach(ch => {
-      const option = document.createElement('option');
-      option.value = String(ch);
-      option.textContent = String(ch);
-      channelSelect.appendChild(option);
+    return new Promise((resolve) => {
+      const bandSelect = document.getElementById('hotspot-band');
+      const channelSelect = document.getElementById('hotspot-channel');
+      
+      if(!bandSelect || !channelSelect) {
+        resolve();
+        return;
+      }
+      
+      // Use provided band value, or read from dropdown
+      const band = bandValue !== null ? bandValue : bandSelect.value;
+      
+      // Clear existing options
+      channelSelect.innerHTML = '';
+      
+      // Get channels from constants
+      const channels = band === '5' 
+        ? APP_CONSTANTS.HOTSPOT.CHANNELS_5GHZ 
+        : APP_CONSTANTS.HOTSPOT.CHANNELS_2_4GHZ;
+      
+      // Add options
+      channels.forEach(ch => {
+        const option = document.createElement('option');
+        option.value = String(ch);
+        option.textContent = String(ch);
+        channelSelect.appendChild(option);
+      });
+      
+      // Set default value (will be overridden if saved channel exists)
+      const defaultChannel = band === '5' 
+        ? APP_CONSTANTS.HOTSPOT.DEFAULT_CHANNEL_5GHZ 
+        : APP_CONSTANTS.HOTSPOT.DEFAULT_CHANNEL_2_4GHZ;
+      channelSelect.value = defaultChannel;
+      
+      // Use requestAnimationFrame to ensure DOM is updated before resolving
+      requestAnimationFrame(() => {
+        setTimeout(resolve, ANIMATION_DELAYS.CHANNEL_UPDATE_DELAY);
+      });
     });
-    
-    // Set default value (will be overridden if saved channel exists)
-    channelSelect.value = band === '5' ? '36' : '6';
   }
 
   // Hotspot settings persistence - DELEGATED TO HotspotFeature MODULE
@@ -2663,7 +2874,8 @@
         ...commonDeps,
         showSizeSelectionDialog,
         showConfirmDialog,
-        closeSettingsPopup
+        closeSettingsPopup,
+        updateStatus
       });
     }
 
@@ -2698,50 +2910,67 @@
     
     // Get saved settings to determine which band to use
     const savedSettings = Storage.getJSON('chroot_hotspot_settings');
-    const band = savedSettings && savedSettings.band ? savedSettings.band : '2';
+    const defaultBand = APP_CONSTANTS.HOTSPOT.DEFAULT_BAND;
+    const defaultChannel2_4 = APP_CONSTANTS.HOTSPOT.DEFAULT_CHANNEL_2_4GHZ;
+    const defaultChannel5 = APP_CONSTANTS.HOTSPOT.DEFAULT_CHANNEL_5GHZ;
+    const band = savedSettings && savedSettings.band ? savedSettings.band : defaultBand;
     
     // Set band value first
     bandSelect.value = band;
     
-    // Populate channel options based on saved band
-    updateChannelLimits(band);
-    
-    // Set channel value if saved
-    if(savedSettings && savedSettings.channel && channelSelect) {
-      const savedChannel = String(savedSettings.channel);
-      // Wait a tiny bit to ensure options are populated
-      setTimeout(() => {
+    // Populate channel options based on saved band (use promise to prevent race condition)
+    updateChannelLimits(band).then(() => {
+      // Set channel value if saved (after options are populated)
+      if(savedSettings && savedSettings.channel && channelSelect) {
+        const savedChannel = String(savedSettings.channel);
         const channelExists = Array.from(channelSelect.options).some(opt => opt.value === savedChannel);
         if(channelExists) {
           channelSelect.value = savedChannel;
         } else {
           // Channel doesn't exist for this band, use default
-          channelSelect.value = band === '5' ? '36' : '6';
+          channelSelect.value = band === '5' ? defaultChannel5 : defaultChannel2_4;
         }
-      }, 10);
-    } else if(channelSelect) {
-      // No saved channel, use default
-      channelSelect.value = band === '5' ? '36' : '6';
-    }
+      } else if(channelSelect) {
+        // No saved channel, use default
+        channelSelect.value = band === '5' ? defaultChannel5 : defaultChannel2_4;
+      }
+    });
   }
   
   // Initialize channel options on page load
   initializeChannelOptions();
   
+  // Simple fix for stuck buttons on touch devices: blur on touchend
+  // Store handler reference for cleanup to prevent memory leaks
+  const touchEndHandler = (e) => {
+    if(e.target && e.target.classList && e.target.classList.contains('btn-pressed')) {
+      e.target.blur();
+      e.target.classList.remove('btn-pressed', 'btn-released');
+    }
+  };
+  document.addEventListener('touchend', touchEndHandler, { passive: true });
+  
+  // Store cleanup function for potential future use (e.g., page unload)
+  window._chrootUICleanup = () => {
+    document.removeEventListener('touchend', touchEndHandler);
+  };
+
   initExperimentalFeatures(); // Initialize experimental features
   initFeatureModules(); // Initialize feature modules
   
   // small delay to let command-executor attach if present
   setTimeout(async ()=>{
     try {
-      await checkRootAccess(); // Master root detection
-      await refreshStatus(); // Wait for status check
-      await readBootFile(); // Wait for boot file read
+    await checkRootAccess(); // Master root detection
+    await refreshStatus(); // Wait for status check
+    await readBootFile(); // Wait for boot file read
     } catch(e) {
       appendConsole(`Initialization error: ${e.message}`, 'err');
     }
   }, ANIMATION_DELAYS.INIT_DELAY);
 
-  // export some helpers for debug
+  // Export some helpers for debug and expose constants to feature modules
   window.chrootUI = { refreshStatus, doAction, appendConsole };
+  window.APP_CONSTANTS = APP_CONSTANTS; // Expose constants for feature modules
+  window.updateChannelLimits = updateChannelLimits; // Expose for hotspot feature
 })();

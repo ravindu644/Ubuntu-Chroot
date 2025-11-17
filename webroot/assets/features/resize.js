@@ -107,7 +107,10 @@
     try {
       const usageBytesCmd = `du -b ${CHROOT_DIR}/rootfs.img | cut -f1`;
       const actualUsageBytes = await runCmdSync(usageBytesCmd);
-      currentAllocatedGb = Math.ceil(parseInt(actualUsageBytes.trim()) / 1024 / 1024 / 1024) + 'GB';
+      // Use base 1000 (GB) to match formatBytes function consistency
+      const bytes = parseInt(actualUsageBytes.trim());
+      const gb = bytes / 1000 / 1000 / 1000;
+      currentAllocatedGb = Math.ceil(gb) + 'GB';
     } catch(e) {
       // Keep as 'Unknown' if we can't determine
     }

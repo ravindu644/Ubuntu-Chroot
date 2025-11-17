@@ -55,7 +55,8 @@ class CommandExecutor {
                 ksu.exec(fullCommand, '{}', callback);
                 if (onOutput) onOutput(`[Executing: ${command}]\n`);
             } catch (e) {
-                delete window[callback];
+                // Clean up on synchronous error
+                if (window[callback]) delete window[callback];
                 this.runningCommands.delete(commandId);
                 if (onError) onError(String(e));
                 if (onComplete) onComplete({ success: false, error: String(e) });
@@ -81,6 +82,7 @@ class CommandExecutor {
                     }
                 });
             } catch (e) {
+                // Clean up on synchronous error
                 this.runningCommands.delete(commandId);
                 if (onError) onError(String(e));
                 if (onComplete) onComplete({ success: false, error: String(e) });

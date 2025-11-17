@@ -12,7 +12,7 @@
     const {
       activeCommandId, appendConsole, showConfirmDialog, closeSettingsPopup,
       ANIMATION_DELAYS, PATH_CHROOT_SH, ProgressIndicator, disableAllActions,
-      disableSettingsPopup, updateStatus, refreshStatus, runCmdAsync
+      disableSettingsPopup, updateStatus, refreshStatus, runCmdAsync, els
     } = dependencies;
 
     if(activeCommandId.value) {
@@ -35,6 +35,12 @@
 
     closeSettingsPopup();
     await new Promise(resolve => setTimeout(resolve, ANIMATION_DELAYS.POPUP_CLOSE_VERY_LONG));
+
+    // Check if chroot is running and update status to stopping
+    const isRunning = els.statusText && els.statusText.textContent.trim() === 'running';
+    if(isRunning) {
+      updateStatus('stopping');
+    }
 
     appendConsole('━━━ Starting Uninstallation ━━━', 'warn');
     

@@ -149,18 +149,19 @@
     }
   }
 
-  function openHotspotPopup() {
+  async function openHotspotPopup() {
     showHotspotWarning();
+    
+    // Load settings BEFORE opening popup to prevent visible flicker
+    // First ensure interfaces are populated (use cache, no fetch)
+    await fetchInterfaces(false, false);
+    
+    // Load settings and wait for completion before popup becomes visible
+    // This ensures all values (especially channel) are set correctly before user sees the popup
+    await loadHotspotSettings();
+    
+    // Now open the popup - all values should already be correct, no flicker
     dependencies.PopupManager.open(dependencies.els.hotspotPopup);
-    // Only show cached interfaces - NO fetching (that causes lag!)
-    // Fetch only happens if cache is empty
-    fetchInterfaces(false, false);
-    // Load saved settings AFTER interfaces are populated
-    // Use a small delay to ensure DOM is ready and interfaces are populated
-    const { ANIMATION_DELAYS } = dependencies;
-    setTimeout(() => {
-      loadHotspotSettings();
-    }, ANIMATION_DELAYS.SETTINGS_LOAD);
   }
 
   function closeHotspotPopup() {
@@ -213,7 +214,7 @@
     if(iface) Storage.set('chroot_hotspot_iface', iface);
   }
 
-  function loadHotspotSettings() {
+  async function loadHotspotSettings() {
     const { Storage } = dependencies;
     const settings = Storage.getJSON('chroot_hotspot_settings');
     
@@ -249,46 +250,52 @@
         passwordEl.value = settings.password;
       }
       
-      // Load band and channel - CRITICAL: Set band first, then update channels, then set channel
-      const band = settings.band || '2';
+      // Load band and channel - Use promise-based update to prevent race condition
+      const constants = window.APP_CONSTANTS?.HOTSPOT || {};
+      const defaultBand = constants.DEFAULT_BAND || '2';
+      const defaultChannel2_4 = constants.DEFAULT_CHANNEL_2_4GHZ || '6';
+      const defaultChannel5 = constants.DEFAULT_CHANNEL_5GHZ || '36';
+      
+      const band = settings.band || defaultBand;
       const savedChannel = settings.channel ? String(settings.channel) : null;
       
       // Step 1: Set band value (don't trigger change event)
       bandEl.value = band;
       
-      // Step 2: Update channel options based on the loaded band value (not dropdown value)
-      // Pass band value directly to avoid reading from dropdown which might not be updated yet
+      // Step 2: Update channel options and wait for completion (AWAIT to ensure it's done)
       if(window.updateChannelLimits) {
-        window.updateChannelLimits(band);
-      }
-      
-      // Step 3: Set channel value AFTER options are populated
-      // Use a small delay to ensure DOM is updated
-      if(savedChannel && channelEl) {
-        // First, try immediately
-        const channelExists = Array.from(channelEl.options).some(opt => opt.value === savedChannel);
-        if(channelExists) {
-          channelEl.value = savedChannel;
-          // Verify it was set correctly
-          if(channelEl.value !== savedChannel) {
-            // If not set, try again after a brief delay
-            setTimeout(() => {
-              const channelExists2 = Array.from(channelEl.options).some(opt => opt.value === savedChannel);
-              if(channelExists2) {
-                channelEl.value = savedChannel;
-              } else {
-                // Channel doesn't exist for this band, use default
-                channelEl.value = band === '5' ? '36' : '6';
-              }
-            }, 50);
+        await window.updateChannelLimits(band);
+        // Step 3: Set channel value AFTER options are populated (promise ensures this)
+        // Only update if the value is different to prevent visible flicker
+        if(savedChannel && channelEl) {
+          const channelExists = Array.from(channelEl.options).some(opt => opt.value === savedChannel);
+          if(channelExists) {
+            // Only update if different to prevent flicker
+            if(channelEl.value !== savedChannel) {
+              channelEl.value = savedChannel;
+            }
+          } else {
+            // Channel doesn't exist for this band, use default
+            const defaultChannel = band === '5' ? defaultChannel5 : defaultChannel2_4;
+            if(channelEl.value !== defaultChannel) {
+              channelEl.value = defaultChannel;
+            }
           }
-        } else {
-          // Channel doesn't exist for this band, use default
-          channelEl.value = band === '5' ? '36' : '6';
+        } else if(channelEl) {
+          // No saved channel, use default - only update if different
+          const defaultChannel = band === '5' ? defaultChannel5 : defaultChannel2_4;
+          if(channelEl.value !== defaultChannel) {
+            channelEl.value = defaultChannel;
+          }
         }
-      } else if(channelEl) {
-        // No saved channel, use default
-        channelEl.value = band === '5' ? '36' : '6';
+      } else {
+        // Fallback if updateChannelLimits not available
+        if(channelEl) {
+          const targetChannel = savedChannel || (band === '5' ? defaultChannel5 : defaultChannel2_4);
+          if(channelEl.value !== targetChannel) {
+            channelEl.value = targetChannel;
+          }
+        }
       }
       
       // Load interface (must be done after interfaces are populated)
@@ -300,13 +307,26 @@
       }
     } else {
       // No saved settings - initialize with defaults
-      // Get current band value or default to '2'
-      const currentBand = bandEl.value || '2';
+      const constants = window.APP_CONSTANTS?.HOTSPOT || {};
+      const defaultBand = constants.DEFAULT_BAND || '2';
+      const defaultChannel2_4 = constants.DEFAULT_CHANNEL_2_4GHZ || '6';
+      const defaultChannel5 = constants.DEFAULT_CHANNEL_5GHZ || '36';
+      
+      const currentBand = bandEl.value || defaultBand;
       if(window.updateChannelLimits) {
-        window.updateChannelLimits(currentBand);
-      }
-      if(channelEl) {
-        channelEl.value = currentBand === '5' ? '36' : '6';
+        await window.updateChannelLimits(currentBand);
+        if(channelEl) {
+          const defaultChannel = currentBand === '5' ? defaultChannel5 : defaultChannel2_4;
+          // Only update if different to prevent flicker
+          if(channelEl.value !== defaultChannel) {
+            channelEl.value = defaultChannel;
+          }
+        }
+      } else if(channelEl) {
+        const defaultChannel = currentBand === '5' ? defaultChannel5 : defaultChannel2_4;
+        if(channelEl.value !== defaultChannel) {
+          channelEl.value = defaultChannel;
+        }
       }
     }
     
@@ -337,8 +357,9 @@
         return;
       }
 
-      if(password.length < 8) {
-        appendConsole('Password must be at least 8 characters', 'err');
+      const minPasswordLength = window.APP_CONSTANTS?.HOTSPOT?.PASSWORD_MIN_LENGTH || 8;
+      if(password.length < minPasswordLength) {
+        appendConsole(`Password must be at least ${minPasswordLength} characters`, 'err');
         return;
       }
 

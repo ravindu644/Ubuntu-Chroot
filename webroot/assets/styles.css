@@ -50,7 +50,7 @@ textarea {
  
 .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;position:fixed;top:0;left:50%;transform:translateX(-50%);padding:calc(var(--top-inset) + 8px) 12px 8px;background:var(--bg);z-index:10;width:100%;max-width:1200px;box-sizing:border-box;border-bottom:1px solid rgba(0,0,0,0.05)}
 .panel{display:grid;grid-template-columns:1fr;gap:14px;min-width:0;margin-top:calc(60px + var(--top-inset))}
-.card{background:var(--card);border-radius:var(--surface-radius);padding:16px;box-shadow:0 6px 20px rgba(6,8,14,0.06);box-sizing:border-box;min-width:0}
+.card{background:var(--card);border-radius:var(--surface-radius);padding:16px;box-shadow:0 6px 20px rgba(6,8,14,0.06);box-sizing:border-box;min-width:0;border:1px solid rgba(0,0,0,0.12)}
 .title{margin:0 0 10px 0;display:flex;align-items:center}
 .row{display:flex;align-items:center;justify-content:space-between;margin-top:8px}
 .status-row{align-items:center}
@@ -59,11 +59,11 @@ textarea {
 .dot-on{background:#22c55e;box-shadow:0 0 8px rgba(34,197,94,0.18)}
 .dot-off{background:#ef4444;opacity:0.95}
 .dot-unknown{background:#f59e0b;box-shadow:0 0 8px rgba(245,158,11,0.12)}
-.dot-warn{background:#f59e0b}
+.dot-warn{background:#f59e0b;box-shadow:0 0 8px rgba(245,158,11,0.18)}
 .actions{display:flex;gap:8px}
-.btn{background:var(--accent);color:white;border:0;padding:8px 12px;border-radius:8px;cursor:pointer;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+.btn{background:var(--accent);color:white;border:0;padding:8px 12px;border-radius:8px;cursor:pointer;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;box-shadow:none}
 .btn.small{padding:6px 8px;font-size:13px}
-.btn.outline{background:transparent;border:1px solid rgba(15,23,32,0.08);color:var(--text)}
+.btn.outline{background:transparent;border:1px solid rgba(15,23,32,0.08);color:var(--text);box-shadow:none !important}
 
 .btn.primary{background:var(--accent)}
 .btn.stop{background:#dc2626 !important;}
@@ -71,22 +71,108 @@ textarea {
 #start-btn{background:#16a34a !important;}
 .btn[disabled]{opacity:0.5;cursor:not-allowed}
 
-/* Add life to main action buttons with enhanced hover effects */
-.btn.stop:hover:not([disabled]){background:#b91c1c !important; transform:translateY(-2px); box-shadow:0 6px 16px rgba(220, 38, 38, 0.3);}
-#restart-btn:hover:not([disabled]){background:#c2410c !important; transform:translateY(-2px); box-shadow:0 6px 16px rgba(234, 88, 12, 0.3);}
-#start-btn:hover:not([disabled]){background:#15803d !important; transform:translateY(-2px); box-shadow:0 6px 16px rgba(22, 163, 74, 0.3);}
+/* Enhanced hover effects for main action buttons */
+.btn.stop:hover:not([disabled]):not(.btn-pressed):not(.btn-released) {
+  box-shadow: 0 6px 16px rgba(220, 38, 38, 0.3) !important;
+  background: #b91c1c !important;
+  transform: translateY(-2px) !important;
+}
+
+#restart-btn:hover:not([disabled]):not(.btn-pressed):not(.btn-released) {
+  box-shadow: 0 6px 16px rgba(234, 88, 12, 0.3) !important;
+  background: #c2410c !important;
+  transform: translateY(-2px) !important;
+}
+
+#start-btn:hover:not([disabled]):not(.btn-pressed):not(.btn-released) {
+  box-shadow: 0 6px 16px rgba(22, 163, 74, 0.3) !important;
+  background: #15803d !important;
+  transform: translateY(-2px) !important;
+}
+
+/* Ensure no shadow when not hovered and no state */
+.btn.stop:not(:hover):not(.btn-pressed):not(.btn-released),
+#restart-btn:not(:hover):not(.btn-pressed):not(.btn-released),
+#start-btn:not(:hover):not(.btn-pressed):not(.btn-released) {
+  box-shadow: none !important;
+}
 .row-label{color:var(--muted);font-size:14px;font-weight:500}
 .toggle-inline{display:inline-flex;gap:8px;align-items:center;font-size:14px}
 .note{color:var(--muted);font-size:14px}
 .console-card{display:flex;flex-direction:column;min-height:200px;max-height:400px;min-width:0}
 .console-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 .console-title{font-weight:600;font-size:16px;color:var(--muted)}
-.console-copy-btn{background:transparent;border:1px solid rgba(15,23,32,0.08);color:var(--text);border-radius:4px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:13px;transition:all 0.2s ease;padding:0;min-height:auto}
-.console-copy-btn:hover{background:rgba(0,0,0,0.05);border-color:rgba(15,23,32,0.15)}
+.console-copy-btn {
+  background: transparent;
+  border: 1px solid rgba(15,23,32,0.08);
+  color: var(--text);
+  border-radius: 4px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  transition: transform 0.12s cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 0.12s cubic-bezier(0.4, 0, 0.2, 1),
+              background 0.15s ease,
+              border-color 0.15s ease;
+  padding: 0;
+  min-height: auto;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+  box-shadow: none;
+  transform: none;
+  will-change: transform, box-shadow;
+}
+.console-copy-btn:hover:not([disabled]):not(.btn-pressed):not(.btn-released) {
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1) !important;
+  background: rgba(0,0,0,0.05);
+  border-color: rgba(15,23,32,0.15);
+}
+.console-copy-btn:active,
+.console-copy-btn:focus {
+  background: transparent !important;
+  border-color: rgba(15,23,32,0.08) !important;
+  transform: none !important;
+  outline: none !important;
+}
+.console-copy-btn.btn-pressed {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2) !important;
+  transform: scale(0.96) !important;
+  background: transparent !important;
+  border-color: rgba(15,23,32,0.08) !important;
+}
+.console-copy-btn.btn-released {
+  box-shadow: none !important;
+  transform: none !important;
+}
+.console-copy-btn:not(:hover):not(.btn-pressed):not(.btn-released) {
+  box-shadow: none !important;
+  transform: none !important;
+}
 .console-copy-btn svg{width:16px;height:16px}
 
-[data-theme="dark"] .console-copy-btn{border-color:rgba(255,255,255,0.08)}
-[data-theme="dark"] .console-copy-btn:hover{background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.15)}
+[data-theme="dark"] .console-copy-btn {
+  border-color: rgba(255,255,255,0.08);
+  outline: none;
+}
+[data-theme="dark"] .console-copy-btn:hover:not([disabled]):not(.btn-pressed):not(.btn-released) {
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1) !important;
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.15);
+}
+[data-theme="dark"] .console-copy-btn:active,
+[data-theme="dark"] .console-copy-btn:focus {
+  background: transparent !important;
+  border-color: rgba(255,255,255,0.08) !important;
+  transform: none !important;
+  outline: none !important;
+}
+[data-theme="dark"] .console-copy-btn:not(:hover):not(.btn-pressed):not(.btn-released) {
+  box-shadow: none !important;
+  transform: none !important;
+}
 .console{flex:1;background:var(--console-bg);border-radius:10px;padding:12px;min-height:200px;max-height:300px;overflow:auto;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;border:1px solid rgba(0,0,0,0.06);font-size:13px;line-height:1.5;white-space:pre;box-sizing:border-box;min-width:0;width:100%}
 .console-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
 .foot{margin-top:12px;color:var(--muted);font-size:14px;text-align:center;display:flex;align-items:center;justify-content:center;gap:12px;font-weight:500}
@@ -135,10 +221,14 @@ textarea {
 .btn{min-height:36px}
 
 /* box containing the three main buttons */
-.btn-box{background:var(--card);border-radius:10px;padding:8px}
+.btn-box{background:var(--card);border-radius:10px;padding:8px;border:1px solid rgba(0,0,0,0.12)}
 .btn-row{display:flex;gap:10px}
 .btn-row .btn{flex:1;text-align:center}
 .btn-row .btn.stop{flex:1}
+
+[data-theme="dark"] .card {
+  border: 1px solid rgba(255,255,255,0.12);
+}
 
 [data-theme="dark"] .btn-box{
   background: var(--card);
@@ -158,9 +248,11 @@ textarea {
 }
 
 /* theme button */
-.theme-btn{display:inline-flex;gap:8px;align-items:center;background:transparent;border:1px solid rgba(15,23,32,0.1);padding:6px 10px;border-radius:999px;cursor:pointer;color:var(--text);-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+.theme-btn{display:inline-flex;gap:8px;align-items:center;background:transparent;border:1px solid rgba(15,23,32,0.1);padding:6px 10px;border-radius:999px;cursor:pointer;color:var(--text);-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;box-shadow:none !important;transition:box-shadow 0.15s ease}
 .theme-btn .icon{opacity:1;transition:transform .18s,opacity .18s}
-.theme-btn:focus{outline:none;box-shadow:0 0 0 4px rgba(37,99,235,0.08)}
+.theme-btn:focus{outline:none;box-shadow:0 0 0 4px rgba(37,99,235,0.08) !important}
+.theme-btn:not(:focus){box-shadow:none !important}
+.theme-btn:active{box-shadow:none !important}
 
 /* when dark, show moon and hide sun via css */
 :root .icon-moon{display:none}
@@ -221,11 +313,80 @@ textarea {
   50%{opacity:0.6}
 }
 
-/* Button press animation */
-.btn{transition:transform 0.1s ease, box-shadow 0.1s ease}
-.btn:active,.btn.btn-pressed{transform:scale(0.96);box-shadow:0 2px 8px rgba(0,0,0,0.15)}
-.btn:hover:not([disabled]){transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,0.12)}
-.btn[disabled]{transform:none;box-shadow:none}
+/* ============================================================================
+ * BUTTON STATES - Robust implementation with guaranteed shadow cleanup
+ * ============================================================================
+ * Uses class-based state management for reliable cleanup
+ * Shadow is ALWAYS cleared when button returns to normal state
+ * ============================================================================ */
+
+/* Base button styles - NO shadow by default */
+.btn {
+  transition: transform 0.12s cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 0.12s cubic-bezier(0.4, 0, 0.2, 1),
+              background 0.15s ease,
+              border-color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+  box-shadow: none;
+  transform: none;
+  will-change: transform, box-shadow;
+}
+
+/* Disable native browser active/focus states */
+/* CRITICAL: Prevent :active from getting stuck on mobile */
+.btn:active,
+.btn:focus {
+  transform: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* CRITICAL: Force reset :active state after interaction */
+.btn:active {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+/* Ensure buttons don't stay in active state */
+.btn:not(:focus):not(.btn-pressed):not(.btn-released) {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Disabled state - NO shadows, NO transforms, NO hover effects */
+.btn[disabled] {
+  box-shadow: none !important;
+  transform: none !important;
+  cursor: not-allowed;
+}
+.btn[disabled]:hover {
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+/* Pressed state - applied via class */
+.btn.btn-pressed {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+  transform: scale(0.97) !important;
+}
+
+/* Released state - transition state for smooth release */
+.btn.btn-released {
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+/* Hover state - ONLY when NOT disabled and NOT pressed/released */
+.btn:hover:not([disabled]):not(.btn-pressed):not(.btn-released) {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+  transform: translateY(-1px) !important;
+}
+
+/* Default state - ensure no shadow when no state classes */
+.btn:not(.btn-pressed):not(.btn-released):not(:hover):not([disabled]) {
+  box-shadow: none !important;
+  transform: none !important;
+}
 
 /* Smooth console scrolling */
 .console{scroll-behavior:smooth}
@@ -447,6 +608,35 @@ textarea {
   border-color: rgba(220, 38, 38, 0.2);
 }
 
+/* Danger Zone Section Styling - Red outline on focus/hover */
+.danger-zone-section {
+  border-color: rgba(220, 38, 38, 0.2) !important;
+}
+
+.danger-zone-section:hover {
+  border-color: var(--danger) !important;
+}
+
+.danger-zone-section:focus,
+.danger-zone-section:focus-within {
+  outline: none;
+  border-color: var(--danger) !important;
+}
+
+[data-theme="dark"] .danger-zone-section {
+  border-color: rgba(251, 113, 133, 0.2) !important;
+}
+
+[data-theme="dark"] .danger-zone-section:hover {
+  border-color: var(--danger) !important;
+}
+
+[data-theme="dark"] .danger-zone-section:focus,
+[data-theme="dark"] .danger-zone-section:focus-within {
+  outline: none;
+  border-color: var(--danger) !important;
+}
+
 .setting-section h4 {
   margin: 0 0 6px 0;
   font-size: 16px;
@@ -519,21 +709,33 @@ textarea {
   background: var(--danger);
   color: white;
   border: 1px solid var(--danger);
+  box-shadow: none !important;
 }
 
-.btn.danger:hover {
+.btn.danger:hover:not([disabled]):not(.btn-pressed):not(.btn-released) {
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3) !important;
   background: #b91c1c;
   border-color: #b91c1c;
+}
+
+.btn.danger:not(:hover):not(.btn-pressed):not(.btn-released) {
+  box-shadow: none !important;
 }
 
 [data-theme="dark"] .btn.danger {
   background: var(--danger);
   border-color: var(--danger);
+  box-shadow: none !important;
 }
 
-[data-theme="dark"] .btn.danger:hover {
+[data-theme="dark"] .btn.danger:hover:not([disabled]):not(.btn-pressed):not(.btn-released) {
   background: #dc2626;
   border-color: #dc2626;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3) !important;
+}
+
+[data-theme="dark"] .btn.danger:not(:hover):not(.btn-pressed):not(.btn-released) {
+  box-shadow: none !important;
 }
 
 /* Console actions alignment */
@@ -634,12 +836,32 @@ textarea {
 
 /* Experimental Section Styling */
 .experimental-section {
-  border-color: #f59e0b !important;
+  border-color: rgba(245, 158, 11, 0.3) !important;
   background: linear-gradient(135deg, rgba(245, 158, 11, 0.05), rgba(245, 158, 11, 0.02));
 }
 
 .experimental-section:hover {
+  border-color: rgba(245, 158, 11, 0.5) !important;
+}
+
+.experimental-section:focus,
+.experimental-section:focus-within {
+  outline: none;
   border-color: #f59e0b !important;
+}
+
+[data-theme="dark"] .experimental-section {
+  border-color: rgba(251, 191, 36, 0.3) !important;
+}
+
+[data-theme="dark"] .experimental-section:hover {
+  border-color: rgba(251, 191, 36, 0.5) !important;
+}
+
+[data-theme="dark"] .experimental-section:focus,
+[data-theme="dark"] .experimental-section:focus-within {
+  outline: none;
+  border-color: #fbbf24 !important;
 }
 
 .experimental-toggle {
@@ -673,9 +895,33 @@ textarea {
   margin-right: 8px;
 }
 
-/* Optional Section Styling */
+/* Optional Section Styling - Red outline same as Danger Zone */
 .optional-section {
-  border-color: rgba(0,0,0,0.08);
+  border-color: rgba(220, 38, 38, 0.2) !important;
+}
+
+.optional-section:hover {
+  border-color: var(--danger) !important;
+}
+
+.optional-section:focus,
+.optional-section:focus-within {
+  outline: none;
+  border-color: var(--danger) !important;
+}
+
+[data-theme="dark"] .optional-section {
+  border-color: rgba(251, 113, 133, 0.2) !important;
+}
+
+[data-theme="dark"] .optional-section:hover {
+  border-color: var(--danger) !important;
+}
+
+[data-theme="dark"] .optional-section:focus,
+[data-theme="dark"] .optional-section:focus-within {
+  outline: none;
+  border-color: var(--danger) !important;
 }
 
 .optional-toggle {
@@ -734,14 +980,18 @@ textarea {
   color: #92400e !important;
   border: 1px solid #f59e0b !important;
   font-weight: 600 !important;
-  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3) !important;
+  box-shadow: none !important;
 }
 
-.btn.warning:hover {
+.btn.warning:hover:not([disabled]):not(.btn-pressed):not(.btn-released) {
   background: #d97706 !important;
   border-color: #d97706 !important;
   box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4) !important;
   transform: translateY(-1px) !important;
+}
+
+.btn.warning:not(:hover):not(.btn-pressed):not(.btn-released) {
+  box-shadow: none !important;
 }
 
 [data-theme="dark"] .btn.warning {
