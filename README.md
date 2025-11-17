@@ -360,6 +360,7 @@ CONFIG_SYSVIPC_SYSCTL=y
 - [Chroot-distro](https://github.com/Magisk-Modules-Alt-Repo/chroot-distro) for the internet connectivity fix in initial versions
 - [docker-systemctl-replacement](https://github.com/gdraheim/docker-systemctl-replacement) for [systemctl](./Docker/scripts/systemctl3.py) implementation in chroot
 - [optimizer](https://github.com/OptimizerS1) for the cool banner design :)
+- [Maxim-Root](https://github.com/Maxim-Root) for providing me with a server and additional resources for the project
 
 <a id="license"></a>
 ## 📜 License
