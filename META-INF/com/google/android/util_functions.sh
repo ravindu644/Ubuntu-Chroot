@@ -38,6 +38,7 @@ setup_chroot() {
     unzip -oj "$ZIPFILE" 'tools/chroot.sh' -d "$CHROOT_DIR" >&2
     unzip -oj "$ZIPFILE" 'tools/start-hotspot' -d "$CHROOT_DIR" >&2
     unzip -oj "$ZIPFILE" 'tools/sparsemgr.sh' -d "$CHROOT_DIR" >&2
+    unzip -oj "$ZIPFILE" 'tools/forward-nat.sh' -d "$CHROOT_DIR" >&2
     echo "- Core chroot files extracted"
 }
 

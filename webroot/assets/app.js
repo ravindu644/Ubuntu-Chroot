@@ -7,6 +7,7 @@
   const BOOT_FILE = `${CHROOT_DIR}/boot-service`;
   const POST_EXEC_SCRIPT = `${CHROOT_DIR}/post_exec.sh`;
   const HOTSPOT_SCRIPT = `${CHROOT_DIR}/start-hotspot`;
+  const FORWARD_NAT_SCRIPT = `${CHROOT_DIR}/forward-nat.sh`;
   const OTA_UPDATER = `${CHROOT_DIR}/ota/updater.sh`;
   const LOG_DIR = `${CHROOT_DIR}/logs`;
 
@@ -47,7 +48,13 @@
     uninstallBtn: document.getElementById('uninstall-btn'),
     hotspotBtn: document.getElementById('hotspot-btn'),
     hotspotPopup: document.getElementById('hotspot-popup'),
-    closeHotspotPopup: document.getElementById('close-hotspot-popup')
+    closeHotspotPopup: document.getElementById('close-hotspot-popup'),
+    forwardNatBtn: document.getElementById('forward-nat-btn'),
+    forwardNatPopup: document.getElementById('forward-nat-popup'),
+    closeForwardNatPopup: document.getElementById('close-forward-nat-popup'),
+    forwardNatIface: document.getElementById('forward-nat-iface'),
+    startForwardingBtn: document.getElementById('start-forwarding-btn'),
+    stopForwardingBtn: document.getElementById('stop-forwarding-btn')
   };
 
   // Track running commands to prevent UI blocking
@@ -55,6 +62,9 @@
 
   // Track hotspot state - much more reliable than filesystem checks
   let hotspotActive = false;
+
+  // Track forward-nat state
+  let forwardingActive = false;
 
   // Track debug mode state
   let debugModeActive = false;
@@ -293,6 +303,9 @@
       els.userSelect.disabled = disabled;
       els.settingsBtn.disabled = disabled;
       els.settingsBtn.style.opacity = disabled ? '0.5' : '';
+      els.forwardNatBtn.disabled = disabled;
+      els.forwardNatBtn.style.opacity = disabled ? '0.5' : '';
+      // Note: visibility is controlled by refreshStatus(), not here
       els.hotspotBtn.disabled = disabled;
       els.hotspotBtn.style.opacity = disabled ? '0.5' : '';
       
@@ -519,6 +532,28 @@
         copyLoginBtn.disabled = !isEnabled;
         copyLoginBtn.style.opacity = isEnabled ? '' : '0.5';
         copyLoginBtn.style.display = '';
+      }
+
+      // Forward NAT button - visible but disabled when chroot is not running
+      if(chrootExists && running && rootAccessConfirmed){
+        els.forwardNatBtn.disabled = false;
+        els.forwardNatBtn.style.opacity = '';
+        els.forwardNatBtn.style.display = '';
+        // Individual forwarding buttons
+        els.startForwardingBtn.disabled = forwardingActive;
+        els.stopForwardingBtn.disabled = !forwardingActive;
+        els.startForwardingBtn.style.opacity = forwardingActive ? '0.5' : '';
+        els.stopForwardingBtn.style.opacity = !forwardingActive ? '0.5' : '';
+      } else {
+        // Keep button visible but disabled when chroot is stopped, not found, or no root access
+        els.forwardNatBtn.disabled = true;
+        els.forwardNatBtn.style.opacity = '0.5';
+        els.forwardNatBtn.style.display = '';
+        // Individual forwarding buttons
+        els.startForwardingBtn.disabled = true;
+        els.stopForwardingBtn.disabled = true;
+        els.startForwardingBtn.style.opacity = '0.5';
+        els.stopForwardingBtn.style.opacity = '0.5';
       }
 
       // Hotspot button
@@ -1071,6 +1106,291 @@
         disableSettingsPopup(false, true);
         
         // Refresh status after hotspot operation
+        setTimeout(() => refreshStatus(), 500);
+      });
+    }, 50);
+  }
+
+  // Forward NAT functions
+  /**
+   * Load forwarding status from localStorage on page load
+   */
+  function loadForwardingStatus(){
+    try{
+      const saved = localStorage.getItem('forwarding_active');
+      forwardingActive = saved === 'true';
+    }catch(e){
+      forwardingActive = false;
+    }
+  }
+
+  /**
+   * Save forwarding status to localStorage
+   */
+  function saveForwardingStatus(){
+    try{
+      localStorage.setItem('forwarding_active', forwardingActive.toString());
+    }catch(e){/* ignore storage errors */}
+  }
+
+  /**
+   * Fetch available interfaces from forward-nat.sh
+   * Handles both formats: "iface1,iface2" or "iface1:ip1,iface2:ip2"
+   */
+  async function fetchInterfaces(){
+    if(!rootAccessConfirmed){
+      return;
+    }
+    
+    try{
+      const cmd = `sh ${FORWARD_NAT_SCRIPT} list-iface`;
+      const out = await runCmdSync(cmd);
+      const interfacesRaw = String(out || '').trim().split(',').filter(i => i && i.length > 0);
+
+      // Clear existing options
+      const select = els.forwardNatIface;
+      select.innerHTML = '';
+
+      if(interfacesRaw.length === 0){
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'No interfaces found';
+        select.appendChild(option);
+        select.disabled = true;
+        return;
+      }
+
+      // Add interface options
+      // Handle format: "iface:ip" or just "iface"
+      interfacesRaw.forEach(ifaceRaw => {
+        const trimmed = ifaceRaw.trim();
+        if(trimmed.length > 0){
+          const option = document.createElement('option');
+          
+          // Check if it contains IPv4 address (format: iface:ip)
+          if(trimmed.includes(':')){
+            const [iface, ip] = trimmed.split(':');
+            option.value = iface.trim();
+            option.textContent = `${iface.trim()} (${ip.trim()})`;
+          } else {
+            // Just interface name
+            option.value = trimmed;
+            option.textContent = trimmed;
+          }
+          
+          select.appendChild(option);
+        }
+      });
+
+      select.disabled = false;
+
+      // Try to restore previously selected interface
+      const savedIface = localStorage.getItem('chroot_selected_interface');
+      if(savedIface){
+        // Try to find exact match first
+        const exactMatch = Array.from(select.options).find(opt => opt.value === savedIface);
+        if(exactMatch){
+          select.value = savedIface;
+        } else if(interfacesRaw.length > 0){
+          // Fallback to first interface
+          const firstIface = interfacesRaw[0].trim();
+          select.value = firstIface.includes(':') ? firstIface.split(':')[0].trim() : firstIface;
+        }
+      } else if(interfacesRaw.length > 0){
+        // Default to first interface
+        const firstIface = interfacesRaw[0].trim();
+        select.value = firstIface.includes(':') ? firstIface.split(':')[0].trim() : firstIface;
+      }
+    }catch(e){
+      appendConsole(`Could not fetch interfaces: ${e.message}`, 'warn');
+      els.forwardNatIface.innerHTML = '<option value="">Failed to load interfaces</option>';
+      els.forwardNatIface.disabled = true;
+    }
+  }
+
+  function openForwardNatPopup(){
+    // Fetch interfaces when opening popup
+    fetchInterfaces();
+    els.forwardNatPopup.classList.add('active');
+  }
+
+  function closeForwardNatPopup(){
+    els.forwardNatPopup.classList.remove('active');
+  }
+
+  async function startForwarding(){
+    if(activeCommandId) {
+      appendConsole('⚠ Another command is already running. Please wait...', 'warn');
+      return;
+    }
+
+    if(!rootAccessConfirmed){
+      appendConsole('Cannot start forwarding: root access not available', 'err');
+      return;
+    }
+
+    const iface = els.forwardNatIface.value.trim();
+    if(!iface){
+      appendConsole('Please select a network interface', 'err');
+      return;
+    }
+
+    // Save selected interface
+    try{ localStorage.setItem('chroot_selected_interface', iface); }catch(e){}
+
+    closeForwardNatPopup();
+    // Wait for popup animation to complete
+    await new Promise(resolve => setTimeout(resolve, 450));
+
+    appendConsole(`━━━ Starting forwarding on ${iface} ━━━`, 'info');
+    
+    // Show progress indicator IMMEDIATELY
+    const progressLine = document.createElement('div');
+    progressLine.className = 'progress-indicator';
+    const actionText = `Starting forwarding on ${iface}`;
+    progressLine.textContent = '⏳ ' + actionText;
+    els.console.appendChild(progressLine);
+    els.console.scrollTop = els.console.scrollHeight;
+    
+    let spinIndex = 0;
+    const spinner = ['|', '/', '-', '\\'];
+    const progressInterval = setInterval(() => {
+      spinIndex = (spinIndex + 1) % 4;
+      progressLine.textContent = '⏳ ' + actionText + ' ' + spinner[spinIndex];
+    }, 200);
+    
+    // Disable ALL UI elements during forwarding operation
+    disableAllActions(true);
+    disableSettingsPopup(true);
+
+    // Mark as active to prevent other commands
+    activeCommandId = 'forwarding-start';
+
+    // Redirect stderr to stdout to capture all output
+    const cmd = `sh ${FORWARD_NAT_SCRIPT} -i "${iface}" 2>&1`;
+    
+    // Use setTimeout to allow UI to update, then run sync command wrapped as async
+    setTimeout(async () => {
+      try {
+        const output = await runCmdSync(cmd);
+        clearInterval(progressInterval);
+        progressLine.remove();
+        
+        // Display all output line by line
+        if(output) {
+          const lines = String(output).split('\n');
+          lines.forEach(line => {
+            if(line.trim()) {
+              appendConsole(line);
+            }
+          });
+        }
+        
+        // Check for success indicators in output
+        if(output && (output.includes('Localhost routing active') || output.includes('Gateway:'))) {
+          appendConsole(`✓ Forwarding started successfully on ${iface}`, 'success');
+          forwardingActive = true; // Update state
+          saveForwardingStatus(); // Save to localStorage
+          // Immediately update button states
+          els.startForwardingBtn.disabled = true;
+          els.stopForwardingBtn.disabled = false;
+          els.startForwardingBtn.style.opacity = '0.5';
+          els.stopForwardingBtn.style.opacity = '';
+        } else {
+          appendConsole(`✗ Failed to start forwarding`, 'err');
+        }
+      } catch(error) {
+        clearInterval(progressInterval);
+        progressLine.remove();
+        
+        // Display error output line by line
+        const errorMsg = String(error.message || error);
+        const lines = errorMsg.split('\n');
+        lines.forEach(line => {
+          if(line.trim()) {
+            appendConsole(line, 'err');
+          }
+        });
+        
+        appendConsole(`✗ Forwarding failed to start`, 'err');
+      } finally {
+        activeCommandId = null;
+        disableAllActions(false);
+        disableSettingsPopup(false, true);
+        
+        // Refresh status after forwarding operation
+        setTimeout(() => refreshStatus(), 500);
+      }
+    }, 50);
+  }
+
+  async function stopForwarding(){
+    if(activeCommandId) {
+      appendConsole('⚠ Another command is already running. Please wait...', 'warn');
+      return;
+    }
+
+    if(!rootAccessConfirmed){
+      appendConsole('Cannot stop forwarding: root access not available', 'err');
+      return;
+    }
+
+    closeForwardNatPopup();
+    // Wait for popup animation to complete
+    await new Promise(resolve => setTimeout(resolve, 450));
+
+    appendConsole(`━━━ Stopping forwarding ━━━`, 'info');
+
+    // Show progress indicator IMMEDIATELY
+    const progressLine = document.createElement('div');
+    progressLine.className = 'progress-indicator';
+    const actionText = 'Stopping forwarding';
+    progressLine.textContent = '⏳ ' + actionText;
+    els.console.appendChild(progressLine);
+    els.console.scrollTop = els.console.scrollHeight;
+
+    let spinIndex = 0;
+    const spinner = ['|', '/', '-', '\\'];
+    const progressInterval = setInterval(() => {
+      spinIndex = (spinIndex + 1) % 4;
+      progressLine.textContent = '⏳ ' + actionText + ' ' + spinner[spinIndex];
+    }, 200);
+
+    // Disable ALL UI elements during forwarding operation
+    disableAllActions(true);
+    disableSettingsPopup(true);
+
+    // Mark as active to prevent other commands
+    activeCommandId = 'forwarding-stop';
+
+    // Redirect stderr to stdout to capture all output
+    const cmd = `sh ${FORWARD_NAT_SCRIPT} -k 2>&1`;
+
+    // Use setTimeout to allow UI to update before blocking command
+    setTimeout(() => {
+      runCmdAsync(cmd, (result) => {
+        clearInterval(progressInterval);
+        progressLine.remove();
+        
+        if(result.success) {
+          appendConsole(`✓ Forwarding stopped successfully`, 'success');
+          forwardingActive = false; // Update state
+          saveForwardingStatus(); // Save to localStorage
+          // Immediately update button states
+          els.startForwardingBtn.disabled = false;
+          els.stopForwardingBtn.disabled = true;
+          els.startForwardingBtn.style.opacity = '';
+          els.stopForwardingBtn.style.opacity = '0.5';
+        } else {
+          appendConsole(`✗ Failed to stop forwarding (exit code: ${result.exitCode || 'unknown'})`, 'err');
+        }
+        
+        // Re-enable ALL UI elements
+        activeCommandId = null;
+        disableAllActions(false);
+        disableSettingsPopup(false, true);
+        
+        // Refresh status after forwarding operation
         setTimeout(() => refreshStatus(), 500);
       });
     }, 50);
@@ -2709,6 +3029,15 @@
   els.startHotspotBtn.addEventListener('click', () => startHotspot());
   els.stopHotspotBtn.addEventListener('click', () => stopHotspot());
 
+  // Forward NAT event handlers
+  els.forwardNatBtn.addEventListener('click', () => openForwardNatPopup());
+  els.closeForwardNatPopup.addEventListener('click', () => closeForwardNatPopup());
+  els.forwardNatPopup.addEventListener('click', (e) => {
+    if(e.target === els.forwardNatPopup) closeForwardNatPopup();
+  });
+  els.startForwardingBtn.addEventListener('click', () => startForwarding());
+  els.stopForwardingBtn.addEventListener('click', () => stopForwarding());
+
   // Password toggle functionality
   const togglePasswordBtn = document.getElementById('toggle-password');
   if(togglePasswordBtn){
@@ -2800,6 +3129,7 @@
   loadConsoleLogs(); // Restore previous console logs
   loadHotspotSettings(); // Load hotspot settings
   loadHotspotStatus(); // Load hotspot status
+  loadForwardingStatus(); // Load forwarding status
   loadDebugMode(); // Load debug mode status
   updateChannelLimits(); // Initialize channel options based on default/loaded band
   
