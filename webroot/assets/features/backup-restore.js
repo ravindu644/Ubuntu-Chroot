@@ -12,7 +12,8 @@
     const {
       activeCommandId, appendConsole, showFilePickerDialog, showConfirmDialog,
       closeSettingsPopup, ANIMATION_DELAYS, PATH_CHROOT_SH, ProgressIndicator,
-      disableAllActions, disableSettingsPopup, refreshStatus, runCmdAsync
+      disableAllActions, disableSettingsPopup, refreshStatus, runCmdAsync,
+      updateStatus, els
     } = dependencies;
 
     if(activeCommandId.value) {
@@ -40,6 +41,12 @@
 
     closeSettingsPopup();
     await new Promise(resolve => setTimeout(resolve, ANIMATION_DELAYS.POPUP_CLOSE_LONG));
+
+    // Check if chroot is running and update status to stopping
+    const isRunning = els.statusText && els.statusText.textContent.trim() === 'running';
+    if(isRunning) {
+      updateStatus('stopping');
+    }
 
     appendConsole('━━━ Starting Chroot Backup ━━━', 'info');
 
@@ -80,7 +87,7 @@
       activeCommandId, rootAccessConfirmed, appendConsole, showFilePickerDialog,
       showConfirmDialog, closeSettingsPopup, ANIMATION_DELAYS, PATH_CHROOT_SH,
       ProgressIndicator, disableAllActions, disableSettingsPopup, updateStatus,
-      refreshStatus, runCmdAsync
+      refreshStatus, runCmdAsync, els
     } = dependencies;
 
     if(activeCommandId.value) {
@@ -114,6 +121,12 @@
 
     closeSettingsPopup();
     await new Promise(resolve => setTimeout(resolve, ANIMATION_DELAYS.POPUP_CLOSE_LONG));
+
+    // Check if chroot is running and update status to stopping
+    const isRunning = els.statusText && els.statusText.textContent.trim() === 'running';
+    if(isRunning) {
+      updateStatus('stopping');
+    }
 
     appendConsole('━━━ Starting Chroot Restore ━━━', 'warn');
 

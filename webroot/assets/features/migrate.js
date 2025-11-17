@@ -13,7 +13,7 @@
       showSizeSelectionDialog, showConfirmDialog, closeSettingsPopup,
       ANIMATION_DELAYS, els, PATH_CHROOT_SH, CHROOT_DIR, appendConsole,
       ProgressIndicator, disableAllActions, disableSettingsPopup, activeCommandId,
-      refreshStatus, sparseMigrated, runCmdAsync
+      refreshStatus, sparseMigrated, runCmdAsync, updateStatus
     } = dependencies;
 
     const sizeGb = await showSizeSelectionDialog();
@@ -44,6 +44,8 @@
     const isRunning = els.statusText.textContent.trim() === 'running';
 
     if(isRunning) {
+      // Update status to show stopping
+      updateStatus('stopping');
       ProgressIndicator.update(progressLine, 'Stopping chroot');
 
       setTimeout(() => {
