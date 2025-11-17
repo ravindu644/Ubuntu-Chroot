@@ -51,7 +51,7 @@
       <section class="card">
         <h2 class="title">
           Ubuntu Chroot
-          <span id="debug-indicator" class="debug-indicator-tiny" style="display:none">DEBUG</span>
+          <span id="debug-indicator" class="debug-indicator-tiny debug-indicator-hidden">DEBUG</span>
         </h2>
         <div class="row status-row">
           <div class="status-pill">
@@ -61,25 +61,25 @@
         </div>
 
         <!-- button box under status -->
-        <div class="btn-box card" style="margin-top:12px;padding:10px">
+        <div class="btn-box card btn-box-spaced">
             <div class="btn-row">
               <button id="start-btn" class="btn">Start</button>
               <button id="stop-btn" class="btn stop" disabled>Stop</button>
               <button id="restart-btn" class="btn">Restart</button>
             </div>
             <div class="section-separator"></div>
-            <div style="margin-top:10px;display:flex;flex-direction:column;gap:12px">
-              <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-                <div style="display:flex;align-items:center;gap:8px">
-                  <label for="user-select" class="row-label" style="margin:0">User:</label>
+            <div class="form-group-spaced">
+              <div class="form-row">
+                <div class="form-row-inline">
+                  <label for="user-select" class="row-label row-label-no-margin">User:</label>
                   <select id="user-select" class="user-select" disabled>
                     <option value="root">root</option>
                   </select>
                 </div>
                 <button id="copy-login" class="btn outline small" title="Copy login command" disabled>Copy login command</button>
               </div>
-              <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-                <label class="row-label" style="margin:0">Run at boot:</label>
+              <div class="form-row">
+                <label class="row-label row-label-no-margin">Run at boot:</label>
                 <label class="toggle-inline">
                   <input id="boot-toggle" type="checkbox">
                   <span>Enable</span>
@@ -153,9 +153,9 @@
           </div>
 
           <!-- Experimental Section (Hidden by default) -->
-          <details class="setting-section experimental-section" style="display:none">
+          <details class="setting-section experimental-section experimental-section-hidden">
             <summary class="experimental-toggle">
-              <h4>Experimental Features <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" style="vertical-align: middle; margin-left: 4px;"><path fill="currentColor" fill-rule="evenodd" d="M11.233 1L1 21h22L12.767 1zM12 3.891L19.73 19H4.27zM13.2 16.4a1.2 1.2 0 1 1-2.4 0a1.2 1.2 0 0 1 2.4 0M13 14h-2v-4h2z" clip-rule="evenodd"/></svg></h4>
+              <h4>Experimental Features <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" class="icon-inline"><path fill="currentColor" fill-rule="evenodd" d="M11.233 1L1 21h22L12.767 1zM12 3.891L19.73 19H4.27zM13.2 16.4a1.2 1.2 0 1 1-2.4 0a1.2 1.2 0 0 1 2.4 0M13 14h-2v-4h2z" clip-rule="evenodd"/></svg></h4>
             </summary>
             <p class="setting-desc"><br>Advanced experimental features - use at your own risk</p>
 
@@ -163,10 +163,10 @@
             <div class="setting-subsection">
               <h5>Migrate to Sparse Image</h5>
               <p class="setting-desc">Convert your current directory-based rootfs to a sparse ext4 image for better performance and space efficiency</p>
-              <div style="display:flex;gap:12px;align-items:center">
+              <div class="flex-row">
                 <button id="migrate-sparse-btn" class="btn warning">Migrate to Sparse Image</button>
-                <button id="sparse-settings-btn" class="btn outline small" title="Sparse Image Settings" style="display:none;width:36px;height:36px;padding:6px;aspect-ratio:1;min-height:auto;display:flex;align-items:center;justify-content:center;">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 24 24" style="width: 18px; height: 18px; opacity: 0.8;"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M20 7h-9m3 10H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></g></svg>
+                <button id="sparse-settings-btn" class="btn outline small sparse-settings-btn-icon sparse-settings-btn-hidden" title="Sparse Image Settings">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M20 7h-9m3 10H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></g></svg>
                 </button>
               </div>
             </div>
@@ -183,12 +183,12 @@
             <div class="setting-subsection">
               <h5>Debug Mode</h5>
               <p class="setting-desc">Enable detailed logging for troubleshooting. Logs will be saved to /data/logs/ubuntu-chroot/logs</p>
-              <p class="setting-desc" style="color: #ff6b6b; font-weight: bold; text-transform: uppercase; font-size: 0.85em; margin-top: 8px;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" style="vertical-align: middle; margin-right: 6px;"><path fill="currentColor" fill-rule="evenodd" d="M11.233 1L1 21h22L12.767 1zM12 3.891L19.73 19H4.27zM13.2 16.4a1.2 1.2 0 1 1-2.4 0a1.2 1.2 0 0 1 2.4 0M13 14h-2v-4h2z" clip-rule="evenodd"/></svg>
+              <p class="setting-desc debug-warning-text">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" class="icon-inline-right"><path fill="currentColor" fill-rule="evenodd" d="M11.233 1L1 21h22L12.767 1zM12 3.891L19.73 19H4.27zM13.2 16.4a1.2 1.2 0 1 1-2.4 0a1.2 1.2 0 0 1 2.4 0M13 14h-2v-4h2z" clip-rule="evenodd"/></svg>
                 ENABLE THIS ONLY WHEN ABSOLUTE NECESSARY. MAY CAUSE ISSUES IN SOME TOOLS LIKE DOCKER
               </p>
-              <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-                <label class="row-label" style="margin:0">Enable debug logging:</label>
+              <div class="form-row">
+                <label class="row-label row-label-no-margin">Enable debug logging:</label>
                 <label class="toggle-inline">
                   <input id="debug-toggle" type="checkbox">
                   <span>Enable</span>
@@ -261,7 +261,9 @@
             <form id="hotspot-form">
               <div class="form-group">
                 <label for="hotspot-iface">Upstream Interface:</label>
-                <input type="text" id="hotspot-iface" value="wlan0" required>
+                <select id="hotspot-iface" required>
+                  <option value="">Loading interfaces...</option>
+                </select>
               </div>
               <div class="form-group">
                 <label for="hotspot-ssid">SSID (Hotspot Name):</label>
@@ -297,6 +299,9 @@
               <button id="start-hotspot-btn" class="btn">Start Hotspot</button>
               <button id="stop-hotspot-btn" class="btn danger">Stop Hotspot</button>
             </div>
+            <p class="hotspot-note">
+              * If your interface is not listed, press the Refresh button to update the interface list.
+            </p>
           </div>
         </div>
       </div>
@@ -313,12 +318,12 @@
           <div class="setting-section">
             <p class="setting-desc">Forward localhost services (VNC, XRDP, SSH) from the chroot to a network interface.<br><br>This allows you to access chroot services from other devices on your network.</p>
             
-            <div class="form-group">
-              <label for="forward-nat-iface">Network Interface:</label>
-              <select id="forward-nat-iface" required>
-                <option value="">Loading interfaces...</option>
-              </select>
-            </div>
+                <div class="form-group">
+                  <label for="forward-nat-iface">Network Interface:</label>
+                  <select id="forward-nat-iface" required>
+                    <option value="">Loading interfaces...</option>
+                  </select>
+                </div>
             
             <div class="script-actions">
               <button id="start-forwarding-btn" class="btn">Start Forwarding</button>
@@ -340,6 +345,12 @@
   </div>
 
   <script src="assets/command-executor.js"></script>
+  <script src="assets/features/forward-nat.js"></script>
+  <script src="assets/features/hotspot.js"></script>
+  <script src="assets/features/backup-restore.js"></script>
+  <script src="assets/features/uninstall.js"></script>
+  <script src="assets/features/migrate.js"></script>
+  <script src="assets/features/resize.js"></script>
   <script src="assets/app.js"></script>
 </body>
 </html>
