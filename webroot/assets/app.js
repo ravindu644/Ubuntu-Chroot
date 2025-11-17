@@ -2465,12 +2465,11 @@
   if(hotspotBandEl) {
     hotspotBandEl.addEventListener('change', function() {
       const channelSelect = document.getElementById('hotspot-channel');
-      const savedChannel = channelSelect ? channelSelect.value : null; // Save current channel before updating
-      updateChannelLimits();
-      // Try to preserve saved channel if it exists in new band, otherwise use default
-      if(savedChannel && channelSelect && Array.from(channelSelect.options).some(opt => opt.value === savedChannel)) {
-        channelSelect.value = savedChannel;
-      }
+      const newBand = this.value;
+      
+      // Update channel options based on new band
+      updateChannelLimits(newBand);
+      
       // Save settings when band changes
       if(window.HotspotFeature && window.HotspotFeature.saveHotspotSettings) {
         window.HotspotFeature.saveHotspotSettings();
@@ -2518,10 +2517,15 @@
   }
 
   // Hotspot band change handler
-  function updateChannelLimits(){
+  // Update channel options based on band value (can be passed as parameter or read from dropdown)
+  function updateChannelLimits(bandValue = null){
     const bandSelect = document.getElementById('hotspot-band');
     const channelSelect = document.getElementById('hotspot-channel');
-    const band = bandSelect.value;
+    
+    if(!bandSelect || !channelSelect) return;
+    
+    // Use provided band value, or read from dropdown
+    const band = bandValue !== null ? bandValue : bandSelect.value;
     
     // Clear existing options
     channelSelect.innerHTML = '';
@@ -2538,8 +2542,8 @@
     // Add options
     channels.forEach(ch => {
       const option = document.createElement('option');
-      option.value = ch;
-      option.textContent = ch;
+      option.value = String(ch);
+      option.textContent = String(ch);
       channelSelect.appendChild(option);
     });
     
@@ -2684,7 +2688,45 @@
   loadHotspotStatus(); // Load hotspot status
   loadForwardingStatus(); // Load forwarding status
   loadDebugMode(); // Load debug mode status
-  updateChannelLimits(); // Initialize channel options based on default/loaded band
+  
+  // Initialize channel options on page load based on saved settings
+  function initializeChannelOptions() {
+    const bandSelect = document.getElementById('hotspot-band');
+    const channelSelect = document.getElementById('hotspot-channel');
+    
+    if(!bandSelect || !channelSelect) return;
+    
+    // Get saved settings to determine which band to use
+    const savedSettings = Storage.getJSON('chroot_hotspot_settings');
+    const band = savedSettings && savedSettings.band ? savedSettings.band : '2';
+    
+    // Set band value first
+    bandSelect.value = band;
+    
+    // Populate channel options based on saved band
+    updateChannelLimits(band);
+    
+    // Set channel value if saved
+    if(savedSettings && savedSettings.channel && channelSelect) {
+      const savedChannel = String(savedSettings.channel);
+      // Wait a tiny bit to ensure options are populated
+      setTimeout(() => {
+        const channelExists = Array.from(channelSelect.options).some(opt => opt.value === savedChannel);
+        if(channelExists) {
+          channelSelect.value = savedChannel;
+        } else {
+          // Channel doesn't exist for this band, use default
+          channelSelect.value = band === '5' ? '36' : '6';
+        }
+      }, 10);
+    } else if(channelSelect) {
+      // No saved channel, use default
+      channelSelect.value = band === '5' ? '36' : '6';
+    }
+  }
+  
+  // Initialize channel options on page load
+  initializeChannelOptions();
   
   initExperimentalFeatures(); // Initialize experimental features
   initFeatureModules(); // Initialize feature modules

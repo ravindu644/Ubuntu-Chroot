@@ -15,7 +15,17 @@
     
     select.innerHTML = '';
 
-    if(interfacesRaw.length === 0) {
+    // Filter out ap0 interface - it should never be shown
+    const filteredInterfaces = interfacesRaw.filter(ifaceRaw => {
+      const trimmed = ifaceRaw.trim();
+      if(trimmed.includes(':')) {
+        const [iface] = trimmed.split(':');
+        return iface.trim() !== 'ap0';
+      }
+      return trimmed !== 'ap0';
+    });
+
+    if(filteredInterfaces.length === 0) {
       const option = document.createElement('option');
       option.value = '';
       option.textContent = 'No interfaces found';
@@ -24,7 +34,7 @@
       return;
     }
 
-    interfacesRaw.forEach(ifaceRaw => {
+    filteredInterfaces.forEach(ifaceRaw => {
       const trimmed = ifaceRaw.trim();
       if(trimmed.length > 0) {
         const option = document.createElement('option');
@@ -84,7 +94,16 @@
     // NO background refresh when opening popup - that's what causes the lag!
     if(cached && Array.isArray(cached) && cached.length > 0 && !forceRefresh) {
       if(!backgroundOnly && select) {
-        populateInterfaces(cached);
+        // Filter out ap0 from cached data (in case old cache contains it)
+        const filteredCached = cached.filter(ifaceRaw => {
+          const trimmed = ifaceRaw.trim();
+          if(trimmed.includes(':')) {
+            const [iface] = trimmed.split(':');
+            return iface.trim() !== 'ap0';
+          }
+          return trimmed !== 'ap0';
+        });
+        populateInterfaces(filteredCached);
       }
       // Return immediately - don't fetch in background when opening popup
       return;
@@ -97,12 +116,22 @@
       const out = await runCmdSync(cmd);
       const interfacesRaw = String(out || '').trim().split(',').filter(i => i && i.length > 0);
 
-      // Always update cache
-      Storage.setJSON('chroot_hotspot_interfaces_cache', interfacesRaw);
+      // Filter out ap0 before caching
+      const filteredForCache = interfacesRaw.filter(ifaceRaw => {
+        const trimmed = ifaceRaw.trim();
+        if(trimmed.includes(':')) {
+          const [iface] = trimmed.split(':');
+          return iface.trim() !== 'ap0';
+        }
+        return trimmed !== 'ap0';
+      });
+
+      // Always update cache (without ap0)
+      Storage.setJSON('chroot_hotspot_interfaces_cache', filteredForCache);
 
       // Only populate UI if not background-only mode
       if(!backgroundOnly && select) {
-        populateInterfaces(interfacesRaw);
+        populateInterfaces(filteredForCache);
       }
     } catch(e) {
       if(!backgroundOnly) {
@@ -127,25 +156,10 @@
     // Fetch only happens if cache is empty
     fetchInterfaces(false, false);
     // Load saved settings AFTER interfaces are populated
-    // Use setTimeout to ensure interfaces are loaded first
-    // Increased delay to ensure channel options are fully populated
+    // Use a small delay to ensure DOM is ready and interfaces are populated
     const { ANIMATION_DELAYS } = dependencies;
     setTimeout(() => {
       loadHotspotSettings();
-      // Double-check channel value after a brief delay to catch any race conditions
-      setTimeout(() => {
-        const settings = dependencies.Storage.getJSON('chroot_hotspot_settings');
-        if(settings && settings.channel) {
-          const channelEl = document.getElementById('hotspot-channel');
-          if(channelEl && channelEl.value !== settings.channel) {
-            // Channel was reset, restore it
-            const channelExists = Array.from(channelEl.options).some(opt => opt.value === settings.channel);
-            if(channelExists) {
-              channelEl.value = settings.channel;
-            }
-          }
-        }
-      }, ANIMATION_DELAYS.CHANNEL_VERIFY);
     }, ANIMATION_DELAYS.SETTINGS_LOAD);
   }
 
@@ -213,6 +227,17 @@
       return; // Elements not ready yet
     }
     
+    // Temporarily disable auto-save during load to prevent conflicts
+    const originalSave = window.HotspotFeature?.saveHotspotSettings;
+    let isLoading = true;
+    if(window.HotspotFeature && originalSave) {
+      window.HotspotFeature.saveHotspotSettings = function() {
+        if(!isLoading) {
+          originalSave.call(this);
+        }
+      };
+    }
+    
     if(settings) {
       // Load SSID
       if(settings.ssid) {
@@ -224,78 +249,47 @@
         passwordEl.value = settings.password;
       }
       
-      // Load band FIRST, then update channel options, then restore saved channel
+      // Load band and channel - CRITICAL: Set band first, then update channels, then set channel
       const band = settings.band || '2';
-      const savedChannel = settings.channel;
+      const savedChannel = settings.channel ? String(settings.channel) : null;
       
-      // Temporarily disable auto-save during load
-      const originalSave = window.HotspotFeature?.saveHotspotSettings;
-      let isLoading = true;
-      if(window.HotspotFeature) {
-        window.HotspotFeature.saveHotspotSettings = function() {
-          if(!isLoading) {
-            originalSave.call(this);
-          }
-        };
+      // Step 1: Set band value (don't trigger change event)
+      bandEl.value = band;
+      
+      // Step 2: Update channel options based on the loaded band value (not dropdown value)
+      // Pass band value directly to avoid reading from dropdown which might not be updated yet
+      if(window.updateChannelLimits) {
+        window.updateChannelLimits(band);
       }
       
-      // Set band value - only trigger change if it's different
-      const currentBand = bandEl.value;
-      if(currentBand !== band) {
-        bandEl.value = band;
-        // Manually trigger updateChannelLimits if band changed
-        if(window.updateChannelLimits) {
-          window.updateChannelLimits();
-        }
-      } else {
-        // Band is same, but still need to ensure channel options are populated
-        if(window.updateChannelLimits) {
-          window.updateChannelLimits();
-        }
-      }
-      
-      // Restore saved channel AFTER options are populated
+      // Step 3: Set channel value AFTER options are populated
+      // Use a small delay to ensure DOM is updated
       if(savedChannel && channelEl) {
-        // Wait a tiny bit to ensure DOM is updated
-        requestAnimationFrame(() => {
-          // Force set the channel value multiple times to ensure it sticks
-          const setChannel = () => {
-            const channelExists = Array.from(channelEl.options).some(opt => opt.value === savedChannel);
-            if(channelExists) {
-              channelEl.value = savedChannel;
-              // Double-check
-              if(channelEl.value !== savedChannel) {
-                channelEl.value = savedChannel; // Try again
-              }
-            } else {
-              // Channel doesn't exist for this band, use default
-              channelEl.value = band === '5' ? '36' : '6';
-            }
-          };
-          
-          setChannel();
-          // Verify after a brief delay
-          const { ANIMATION_DELAYS } = dependencies;
-          setTimeout(() => {
-            if(channelEl.value !== savedChannel) {
-              const channelExists = Array.from(channelEl.options).some(opt => opt.value === savedChannel);
-              if(channelExists) {
+        // First, try immediately
+        const channelExists = Array.from(channelEl.options).some(opt => opt.value === savedChannel);
+        if(channelExists) {
+          channelEl.value = savedChannel;
+          // Verify it was set correctly
+          if(channelEl.value !== savedChannel) {
+            // If not set, try again after a brief delay
+            setTimeout(() => {
+              const channelExists2 = Array.from(channelEl.options).some(opt => opt.value === savedChannel);
+              if(channelExists2) {
                 channelEl.value = savedChannel;
+              } else {
+                // Channel doesn't exist for this band, use default
+                channelEl.value = band === '5' ? '36' : '6';
               }
-            }
-          }, ANIMATION_DELAYS.UI_UPDATE || 50); // Use UI_UPDATE delay for consistency
-        });
+            }, 50);
+          }
+        } else {
+          // Channel doesn't exist for this band, use default
+          channelEl.value = band === '5' ? '36' : '6';
+        }
       } else if(channelEl) {
+        // No saved channel, use default
         channelEl.value = band === '5' ? '36' : '6';
       }
-      
-      // Re-enable save function after a brief delay
-      setTimeout(() => {
-        isLoading = false;
-        if(window.HotspotFeature && originalSave) {
-          window.HotspotFeature.saveHotspotSettings = originalSave;
-        }
-      }, 200);
       
       // Load interface (must be done after interfaces are populated)
       if(settings.iface && ifaceSelect.options.length > 1) {
@@ -306,9 +300,20 @@
       }
     } else {
       // No saved settings - initialize with defaults
+      // Get current band value or default to '2'
+      const currentBand = bandEl.value || '2';
       if(window.updateChannelLimits) {
-        window.updateChannelLimits();
+        window.updateChannelLimits(currentBand);
       }
+      if(channelEl) {
+        channelEl.value = currentBand === '5' ? '36' : '6';
+      }
+    }
+    
+    // Re-enable save function
+    isLoading = false;
+    if(window.HotspotFeature && originalSave) {
+      window.HotspotFeature.saveHotspotSettings = originalSave;
     }
   }
 
