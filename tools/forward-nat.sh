@@ -189,8 +189,6 @@ setup_routing() {
     log "Gateway: $GATEWAY_IP"
     echo ""
     log "Connect from PC:"
-    log "  VNC:  $GATEWAY_IP:5901"
-    log "  XRDP: $GATEWAY_IP:3389"
     log "  SSH:  $GATEWAY_IP"
 }
 

@@ -113,49 +113,6 @@ if [ ! -f "$SETUP_FLAG" ]; then
 SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", MODE="0666", GROUP="plugdev"
 UDEV_EOF
 
-    # Configure VNC for the new user
-    echo "--- Configuring VNC for user $username ---"
-    
-    # Create the legacy .vnc directory for the password and xstartup files
-    mkdir -p /home/$username/.vnc
-    
-    # Set the user's VNC password
-    echo "$password" | vncpasswd -f > /home/$username/.vnc/passwd
-    chmod 600 /home/$username/.vnc/passwd
-
-    # Create the MODERN .config directory for the main config file
-    mkdir -p /home/$username/.config/tigervnc
-
-    # Create the main VNC config file that tells the server how to authenticate and run.
-    # This prevents all interactive prompts on startup.
-    cat > /home/$username/.config/tigervnc/config << VNC_CONFIG
-# Use the standard VNC password file for authentication
-SecurityTypes=VncAuth
-# Explicitly define the path to the password file
-PasswordFile=/home/$username/.vnc/passwd
-# Define session, geometry, and localhost behavior here
-session=xfce4-session
-geometry=1920x1080
-localhost=no
-alwaysshared
-VNC_CONFIG
-
-    # Replace the placeholder USER with the actual username's home directory
-    sed -i "s|/home/USER|/home/$username|g" /home/$username/.config/tigervnc/config
-
-    # Create the xstartup script
-    cat > /home/$username/.vnc/xstartup << 'VNC_XSTARTUP'
-#!/bin/sh
-# Unset these to prevent session conflicts
-unset SESSION_MANAGER
-unset DBUS_SESSION_BUS_ADDRESS
-# Start XFCE with proper dbus session
-exec dbus-launch --exit-with-session xfce4-session
-VNC_XSTARTUP
-    chmod +x /home/$username/.vnc/xstartup
-
-    echo "--- VNC configuration complete ---"
-
     # Configure user's bashrc
     cat >> /home/$username/.bashrc << 'BASHRC'
 export PS1="\[\e[38;5;208m\]\u@\h\[\e[m\]:\[\e[34m\]\w\[\e[m\]\$ "
@@ -209,9 +166,6 @@ HELPER_SCRIPT
     echo "       Restart the Chroot to take effect."
     echo "          To log in as '$username',"
     echo "        copy the login command from the webui."
-    echo "      VNC server will start on the next boot."
-    echo "      You also have the ability to use XRDP..."
-    echo "      To start XRDP, checkout the post_exec."
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
 
