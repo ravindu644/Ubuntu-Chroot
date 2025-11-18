@@ -13,7 +13,7 @@
       activeCommandId, appendConsole, showFilePickerDialog, showConfirmDialog,
       closeSettingsPopup, ANIMATION_DELAYS, PATH_CHROOT_SH, ProgressIndicator,
       disableAllActions, disableSettingsPopup, refreshStatus, runCmdAsync,
-      updateStatus, els
+      updateStatus, scrollConsoleToBottom, els
     } = dependencies;
 
     if(activeCommandId.value) {
@@ -42,44 +42,46 @@
     closeSettingsPopup();
     await new Promise(resolve => setTimeout(resolve, ANIMATION_DELAYS.POPUP_CLOSE_LONG));
 
-    // Check if chroot is running and update status to stopping
+    // STEP 1: Scroll to bottom FIRST
+    await scrollConsoleToBottom();
+
+    // STEP 2: Print header
+    appendConsole('━━━ Starting Chroot Backup ━━━', 'info');
+
+    // STEP 3: Show animated progress (keep visible during execution)
+    const { progressLine, interval: progressInterval } = ProgressIndicator.create('Backing up chroot', 'dots');
+
+    // Update UI state
     const isRunning = els.statusText && els.statusText.textContent.trim() === 'running';
     if(isRunning) {
       updateStatus('stopping');
+      if(window.StopNetServices) {
+        await StopNetServices.stopNetworkServices();
+      }
     }
-
-    appendConsole('━━━ Starting Chroot Backup ━━━', 'info');
-
-    const { progressLine, interval: progressInterval } = ProgressIndicator.create('Backing up chroot', 'dots');
 
     disableAllActions(true);
     disableSettingsPopup(true);
+    activeCommandId.value = 'chroot-backup';
 
-    proceedToBackup();
+    // STEP 4: Execute command (animation stays visible)
+    runCmdAsync(`sh ${PATH_CHROOT_SH} backup --webui "${backupPath}"`, (result) => {
+      // STEP 5: Clear animation ONLY when command completes
+      ProgressIndicator.remove(progressLine, progressInterval);
 
-    function proceedToBackup() {
-      ProgressIndicator.update(progressLine, 'Creating backup');
+      if(result.success) {
+        appendConsole('✓ Backup completed successfully', 'success');
+        appendConsole(`Saved to: ${backupPath}`, 'info');
+        appendConsole('━━━ Backup Complete ━━━', 'success');
+      } else {
+        appendConsole('✗ Backup failed', 'err');
+      }
 
-      setTimeout(() => {
-        runCmdAsync(`sh ${PATH_CHROOT_SH} backup --webui "${backupPath}"`, (result) => {
-          ProgressIndicator.remove(progressLine, progressInterval);
-
-          if(result.success) {
-            appendConsole('✓ Backup completed successfully', 'success');
-            appendConsole(`Saved to: ${backupPath}`, 'info');
-            appendConsole('━━━ Backup Complete ━━━', 'success');
-          } else {
-            appendConsole('✗ Backup failed', 'err');
-          }
-
-          activeCommandId.value = null;
-          disableAllActions(false);
-          disableSettingsPopup(false, true);
-
-          setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH);
-        });
-      }, ANIMATION_DELAYS.UI_UPDATE);
-    }
+      activeCommandId.value = null;
+      disableAllActions(false);
+      disableSettingsPopup(false, true);
+      setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH);
+    });
   }
 
   async function restoreChroot() {
@@ -87,7 +89,7 @@
       activeCommandId, rootAccessConfirmed, appendConsole, showFilePickerDialog,
       showConfirmDialog, closeSettingsPopup, ANIMATION_DELAYS, PATH_CHROOT_SH,
       ProgressIndicator, disableAllActions, disableSettingsPopup, updateStatus,
-      refreshStatus, runCmdAsync, els
+      refreshStatus, runCmdAsync, scrollConsoleToBottom, els
     } = dependencies;
 
     if(activeCommandId.value) {
@@ -122,42 +124,49 @@
     closeSettingsPopup();
     await new Promise(resolve => setTimeout(resolve, ANIMATION_DELAYS.POPUP_CLOSE_LONG));
 
-    // Check if chroot is running and update status to stopping
+    // STEP 1: Scroll to bottom FIRST
+    await scrollConsoleToBottom();
+
+    // STEP 2: Print header
+    appendConsole('━━━ Starting Chroot Restore ━━━', 'warn');
+
+    // STEP 3: Show animated progress (keep visible during execution)
+    const { progressLine, interval: progressInterval } = ProgressIndicator.create('Restoring chroot', 'dots');
+
+    // Update UI state
     const isRunning = els.statusText && els.statusText.textContent.trim() === 'running';
     if(isRunning) {
       updateStatus('stopping');
+      if(window.StopNetServices) {
+        await StopNetServices.stopNetworkServices();
+      }
     }
-
-    appendConsole('━━━ Starting Chroot Restore ━━━', 'warn');
-
-    const { progressLine, interval: progressInterval } = ProgressIndicator.create('Restoring chroot', 'dots');
+    updateStatus('restoring');
 
     disableAllActions(true);
     disableSettingsPopup(true);
     activeCommandId.value = 'chroot-restore';
 
-    setTimeout(() => {
-      runCmdAsync(`sh ${PATH_CHROOT_SH} restore --webui "${backupPath}"`, (result) => {
-        ProgressIndicator.remove(progressLine, progressInterval);
+    // STEP 4: Execute command (animation stays visible)
+    runCmdAsync(`sh ${PATH_CHROOT_SH} restore --webui "${backupPath}"`, (result) => {
+      // STEP 5: Clear animation ONLY when command completes
+      ProgressIndicator.remove(progressLine, progressInterval);
 
-        if(result.success) {
-          appendConsole('✓ Restore completed successfully', 'success');
-          appendConsole('The chroot environment has been restored', 'info');
-          appendConsole('━━━ Restore Complete ━━━', 'success');
+      if(result.success) {
+        appendConsole('✓ Restore completed successfully', 'success');
+        appendConsole('The chroot environment has been restored', 'info');
+        appendConsole('━━━ Restore Complete ━━━', 'success');
+        updateStatus('stopped');
+        disableAllActions(true);
+      } else {
+        appendConsole('✗ Restore failed', 'err');
+        disableAllActions(false);
+      }
 
-          updateStatus('stopped');
-          disableAllActions(true);
-        } else {
-          appendConsole('✗ Restore failed', 'err');
-          disableAllActions(false);
-        }
-
-        activeCommandId.value = null;
-        disableSettingsPopup(false, true);
-
-        setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH * 2);
-      });
-    }, ANIMATION_DELAYS.UI_UPDATE);
+      activeCommandId.value = null;
+      disableSettingsPopup(false, true);
+      setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH * 2);
+    });
   }
 
   window.BackupRestoreFeature = {
