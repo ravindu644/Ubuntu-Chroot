@@ -10,10 +10,10 @@
 
   async function backupChroot() {
     const {
-      activeCommandId, appendConsole, showFilePickerDialog, showConfirmDialog,
+      activeCommandId, rootAccessConfirmed, appendConsole, showFilePickerDialog, showConfirmDialog,
       closeSettingsPopup, ANIMATION_DELAYS, PATH_CHROOT_SH, ProgressIndicator,
       disableAllActions, disableSettingsPopup, refreshStatus, runCmdAsync,
-      updateStatus, scrollConsoleToBottom, els
+      updateStatus, ensureChrootStopped, prepareActionExecution, executeCommandWithProgress, els
     } = dependencies;
 
     if(activeCommandId.value) {
@@ -42,46 +42,61 @@
     closeSettingsPopup();
     await new Promise(resolve => setTimeout(resolve, ANIMATION_DELAYS.POPUP_CLOSE_LONG));
 
-    // STEP 1: Scroll to bottom FIRST
-    await scrollConsoleToBottom();
+    disableAllActions(true);
+    disableSettingsPopup(true);
 
-    // STEP 2: Print header
-    appendConsole('━━━ Starting Chroot Backup ━━━', 'info');
-
-    // STEP 3: Show animated progress (keep visible during execution)
-    const { progressLine, interval: progressInterval } = ProgressIndicator.create('Backing up chroot', 'dots');
-
-    // Update UI state
+    // Stop chroot if running (uses centralized flow internally)
     const isRunning = els.statusText && els.statusText.textContent.trim() === 'running';
     if(isRunning) {
-      updateStatus('stopping');
-      if(window.StopNetServices) {
-        await StopNetServices.stopNetworkServices();
+      const stopped = await ensureChrootStopped();
+      if(!stopped) {
+        appendConsole('✗ Failed to stop chroot - backup aborted', 'err');
+        activeCommandId.value = null;
+        disableAllActions(false);
+        disableSettingsPopup(false, true);
+        return;
       }
     }
 
-    disableAllActions(true);
-    disableSettingsPopup(true);
-    activeCommandId.value = 'chroot-backup';
+    // Update status first, then use centralized flow
+    updateStatus('backing up');
+    
+    // Now use centralized flow for backup action
+    const { progressLine, interval: progressInterval } = await prepareActionExecution(
+      'Starting Chroot Backup',
+      'Backing up chroot',
+      'dots'
+    );
 
-    // STEP 4: Execute command (animation stays visible)
-    runCmdAsync(`sh ${PATH_CHROOT_SH} backup --webui "${backupPath}"`, (result) => {
-      // STEP 5: Clear animation ONLY when command completes
-      ProgressIndicator.remove(progressLine, progressInterval);
-
-      if(result.success) {
+    // Execute command using helper (handles validation, execution, cleanup, scrolling)
+    const cmd = `sh ${PATH_CHROOT_SH} backup --webui "${backupPath}"`;
+    
+    const commandId = executeCommandWithProgress({
+      cmd,
+      progress: { progressLine, progressInterval },
+      onSuccess: (result) => {
         appendConsole('✓ Backup completed successfully', 'success');
         appendConsole(`Saved to: ${backupPath}`, 'info');
         appendConsole('━━━ Backup Complete ━━━', 'success');
-      } else {
+        disableAllActions(false);
+        disableSettingsPopup(false, true);
+        setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH);
+      },
+      onError: (result) => {
         appendConsole('✗ Backup failed', 'err');
-      }
-
-      activeCommandId.value = null;
+        disableAllActions(false);
+        disableSettingsPopup(false, true);
+        setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH);
+      },
+      useValue: true,
+      activeCommandIdRef: activeCommandId
+    });
+    
+    if(!commandId) {
+      // Validation failed - cleanup already done by helper
       disableAllActions(false);
       disableSettingsPopup(false, true);
-      setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH);
-    });
+    }
   }
 
   async function restoreChroot() {
@@ -89,7 +104,7 @@
       activeCommandId, rootAccessConfirmed, appendConsole, showFilePickerDialog,
       showConfirmDialog, closeSettingsPopup, ANIMATION_DELAYS, PATH_CHROOT_SH,
       ProgressIndicator, disableAllActions, disableSettingsPopup, updateStatus,
-      refreshStatus, runCmdAsync, scrollConsoleToBottom, els
+      refreshStatus, runCmdAsync, ensureChrootStopped, prepareActionExecution, executeCommandWithProgress, els
     } = dependencies;
 
     if(activeCommandId.value) {
@@ -124,49 +139,62 @@
     closeSettingsPopup();
     await new Promise(resolve => setTimeout(resolve, ANIMATION_DELAYS.POPUP_CLOSE_LONG));
 
-    // STEP 1: Scroll to bottom FIRST
-    await scrollConsoleToBottom();
-
-    // STEP 2: Print header
-    appendConsole('━━━ Starting Chroot Restore ━━━', 'warn');
-
-    // STEP 3: Show animated progress (keep visible during execution)
-    const { progressLine, interval: progressInterval } = ProgressIndicator.create('Restoring chroot', 'dots');
-
-    // Update UI state
-    const isRunning = els.statusText && els.statusText.textContent.trim() === 'running';
-    if(isRunning) {
-      updateStatus('stopping');
-      if(window.StopNetServices) {
-        await StopNetServices.stopNetworkServices();
-      }
-    }
-    updateStatus('restoring');
-
     disableAllActions(true);
     disableSettingsPopup(true);
-    activeCommandId.value = 'chroot-restore';
 
-    // STEP 4: Execute command (animation stays visible)
-    runCmdAsync(`sh ${PATH_CHROOT_SH} restore --webui "${backupPath}"`, (result) => {
-      // STEP 5: Clear animation ONLY when command completes
-      ProgressIndicator.remove(progressLine, progressInterval);
+    // Stop chroot if running (uses centralized flow internally)
+    const isRunning = els.statusText && els.statusText.textContent.trim() === 'running';
+    if(isRunning) {
+      const stopped = await ensureChrootStopped();
+      if(!stopped) {
+        appendConsole('✗ Failed to stop chroot - restore aborted', 'err');
+        activeCommandId.value = null;
+        disableAllActions(false);
+        disableSettingsPopup(false, true);
+        return;
+      }
+    }
 
-      if(result.success) {
+    // Update status first, then use centralized flow
+    updateStatus('restoring');
+    
+    // Now use centralized flow for restore action
+    const { progressLine, interval: progressInterval } = await prepareActionExecution(
+      'Starting Chroot Restore',
+      'Restoring chroot',
+      'dots'
+    );
+
+    // Execute command using helper (handles validation, execution, cleanup, scrolling)
+    const cmd = `sh ${PATH_CHROOT_SH} restore --webui "${backupPath}"`;
+    
+    const commandId = executeCommandWithProgress({
+      cmd,
+      progress: { progressLine, progressInterval },
+      onSuccess: (result) => {
         appendConsole('✓ Restore completed successfully', 'success');
         appendConsole('The chroot environment has been restored', 'info');
         appendConsole('━━━ Restore Complete ━━━', 'success');
         updateStatus('stopped');
         disableAllActions(true);
-      } else {
+        disableSettingsPopup(false, true);
+        setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH * 2);
+      },
+      onError: (result) => {
         appendConsole('✗ Restore failed', 'err');
         disableAllActions(false);
-      }
-
-      activeCommandId.value = null;
-      disableSettingsPopup(false, true);
-      setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH * 2);
+        disableSettingsPopup(false, true);
+        setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH * 2);
+      },
+      useValue: true,
+      activeCommandIdRef: activeCommandId
     });
+    
+    if(!commandId) {
+      // Validation failed - cleanup already done by helper
+      disableAllActions(false);
+      disableSettingsPopup(false, true);
+    }
   }
 
   window.BackupRestoreFeature = {

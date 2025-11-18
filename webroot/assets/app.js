@@ -141,21 +141,53 @@
   /**
    * Load console logs from localStorage
    * Enforces max line limit when loading
+   * Always scrolls to bottom instantly on page load (no animation)
+   * Completely rewritten from scratch - aggressive scroll-to-bottom approach
    */
   function loadConsoleLogs(){
     const logs = Storage.get('chroot_console_logs');
-    if(logs) {
-      els.console.innerHTML = logs;
-      // Enforce max line limit after loading (in case saved logs exceed limit)
-      const lines = els.console.querySelectorAll('div');
-      const maxLines = APP_CONSTANTS.CONSOLE.MAX_LINES;
-      if(lines.length > maxLines) {
-        const toRemove = lines.length - maxLines;
-        Array.from(lines).slice(0, toRemove).forEach(line => line.remove());
-        // Save trimmed version back to localStorage
-        saveConsoleLogs();
-      }
+    if(!logs || !els.console) return;
+    
+    const pre = els.console;
+    
+    // CRITICAL: Disable smooth scrolling BEFORE any operations
+    // Use setProperty to ensure it overrides CSS
+    pre.style.setProperty('scroll-behavior', 'auto', 'important');
+    
+    // Set content
+    pre.innerHTML = logs;
+    
+    // Enforce max line limit
+    const lines = pre.querySelectorAll('div');
+    const maxLines = APP_CONSTANTS.CONSOLE.MAX_LINES;
+    if(lines.length > maxLines) {
+      const toRemove = lines.length - maxLines;
+      Array.from(lines).slice(0, toRemove).forEach(line => line.remove());
+      saveConsoleLogs();
     }
+    
+    // Aggressive scroll-to-bottom: try multiple times to ensure it sticks
+    // The browser might reset scroll position, so we force it multiple times
+    function forceScrollToBottom() {
+      // Force layout recalculation
+      void pre.offsetHeight;
+      // Set scroll position directly
+      pre.scrollTop = pre.scrollHeight;
+    }
+    
+    // Try immediately
+    forceScrollToBottom();
+    
+    // Try after one frame (browser has calculated layout)
+    requestAnimationFrame(() => {
+      forceScrollToBottom();
+      // Try one more time after a microtask (ensures all rendering is done)
+      Promise.resolve().then(() => {
+        forceScrollToBottom();
+        // Restore smooth scrolling for future interactions
+        pre.style.removeProperty('scroll-behavior');
+      });
+    });
   }
 
   /**
@@ -224,11 +256,21 @@
     line.textContent = text + '\n';
     pre.appendChild(line);
     
-    // Auto-scroll to bottom smoothly
-    pre.scrollTo({
-      top: pre.scrollHeight,
-      behavior: 'smooth'
-    });
+    // Auto-scroll to bottom smoothly, but only if user is already near bottom
+    // This prevents jarring scroll jumps when user is reading logs at the top
+    const maxScroll = Math.max(0, pre.scrollHeight - pre.clientHeight);
+    const currentScrollTop = pre.scrollTop;
+    const distanceFromBottom = maxScroll - currentScrollTop;
+    const isNearBottom = distanceFromBottom <= 100; // Within 100px of bottom
+    
+    if(isNearBottom || maxScroll === 0) {
+      // User is near bottom or console is empty - scroll to keep them at bottom
+      pre.scrollTo({
+        top: pre.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
+    // If user is reading logs at the top, don't scroll - let them read in peace
     
     // Save logs after each append
     saveConsoleLogs();
@@ -329,7 +371,7 @@
   const ANIMATION_DELAYS = {
     POPUP_CLOSE: 450,
     POPUP_CLOSE_LONG: 750,
-    POPUP_CLOSE_VERY_LONG: 1500,
+    POPUP_CLOSE_VERY_LONG: 850,
     UI_UPDATE: 50,
     STATUS_REFRESH: 500,
     BUTTON_ANIMATION: 120, // Reduced for snappier feel
@@ -750,13 +792,17 @@
       await beforeExecute();
     }
 
-    // Show progress indicator
-    appendConsole(`━━━ ${progressText} ━━━`, 'info');
-    const { progressLine, interval } = ProgressIndicator.create(progressText, progressType);
-
     // Disable UI
     disableAllActions(true);
     disableSettingsPopup(true);
+
+    // Use centralized flow for action execution
+    const { progressLine, interval } = await prepareActionExecution(
+      progressText,
+      progressText,
+      progressType
+    );
+
     activeCommandId = id;
 
     // Execute command
@@ -787,6 +833,9 @@
             onSuccess(output);
           }
 
+          // Force scroll to bottom after output
+          forceScrollAfterDOMUpdate();
+
           // Cleanup
           activeCommandId = null;
           disableAllActions(false);
@@ -810,6 +859,9 @@
           if(onError) {
             onError(error);
           }
+
+          // Force scroll to bottom after error output
+          forceScrollAfterDOMUpdate();
 
           // Cleanup
           activeCommandId = null;
@@ -851,51 +903,220 @@
   };
 
   /**
+   * Force scroll console to absolute bottom (instant, no smooth scroll)
+   * Used after command completion to ensure we stay at bottom
+   */
+  function forceScrollToBottom() {
+    if(!els.console) return;
+    const pre = els.console;
+    // Force layout recalculation
+    void pre.offsetHeight;
+    // Set scroll position to absolute bottom
+    pre.scrollTop = pre.scrollHeight;
+    // Force another layout recalculation to sync scrollbar
+    void pre.offsetHeight;
+  }
+
+  /**
+   * Helper: Force scroll after DOM updates complete (double RAF pattern)
+   * Replaces repeated requestAnimationFrame(() => requestAnimationFrame(() => forceScrollToBottom()))
+   */
+  function forceScrollAfterDOMUpdate() {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        forceScrollToBottom();
+      });
+    });
+  }
+
+  /**
+   * Helper: Validate root access and backend availability before command execution
+   * Returns { valid: boolean, error?: string } - if !valid, caller should cleanup and return
+   * @param {Object} progress - { progressLine, progressInterval } to cleanup on error
+   * @param {boolean} useValue - Whether to check rootAccessConfirmed.value (for feature modules)
+   */
+  function validateCommandExecution(progress = null, useValue = false) {
+    // When useValue is true, we're called from feature modules where rootAccessConfirmed is a ref object
+    // When useValue is false, we're called from app.js where rootAccessConfirmed is a boolean
+    let rootAccess;
+    if(useValue) {
+      // For feature modules: rootAccessConfirmed is passed as rootAccessConfirmedRef which has .value
+      // But we need to check the global rootAccessConfirmedRef if it exists, or fall back to rootAccessConfirmed
+      rootAccess = rootAccessConfirmedRef ? rootAccessConfirmedRef.value : rootAccessConfirmed;
+    } else {
+      // For app.js: rootAccessConfirmed is a direct boolean
+      rootAccess = rootAccessConfirmed;
+    }
+    
+    if(!rootAccess) {
+      if(progress) ProgressIndicator.remove(progress.progressLine, progress.progressInterval);
+      appendConsole('No root execution method available', 'err');
+      return { valid: false, error: 'No root execution method available' };
+    }
+    
+    if(!window.cmdExec || typeof cmdExec.executeAsync !== 'function') {
+      if(progress) ProgressIndicator.remove(progress.progressLine, progress.progressInterval);
+      appendConsole('Backend not available', 'err');
+      return { valid: false, error: 'Backend not available' };
+    }
+    
+    return { valid: true };
+  }
+
+  /**
+   * Helper: Execute command with full lifecycle management
+   * Handles validation, execution, cleanup, and scrolling automatically
+   * @param {Object} options - Command execution options
+   * @param {string} options.cmd - Command to execute
+   * @param {Object} options.progress - { progressLine, progressInterval } from prepareActionExecution
+   * @param {Function} options.onSuccess - Called on success with result
+   * @param {Function} options.onError - Called on error with result
+   * @param {Function} options.onComplete - Called after success/error (optional)
+   * @param {boolean} options.useValue - Whether to use .value for rootAccessConfirmed (feature modules)
+   * @param {Object} options.activeCommandIdRef - Reference object like {value: string} for feature modules, or null for app.js
+   * @returns {string|null} Command ID or null if validation failed
+   */
+  function executeCommandWithProgress({
+    cmd,
+    progress,
+    onSuccess = null,
+    onError = null,
+    onComplete = null,
+    useValue = false,
+    activeCommandIdRef = null
+  }) {
+    // Validate before execution
+    const validation = validateCommandExecution(progress, useValue);
+    if(!validation.valid) {
+      if(activeCommandIdRef && activeCommandIdRef.value !== undefined) {
+        activeCommandIdRef.value = null;
+      } else if(!useValue) {
+        activeCommandId = null;
+      }
+      return null;
+    }
+
+    let localCommandId = null;
+    const commandId = runCmdAsync(cmd, (result) => {
+      // Cleanup progress indicator
+      if(progress) ProgressIndicator.remove(progress.progressLine, progress.progressInterval);
+      
+      // Clear active command ID
+      if(activeCommandIdRef && activeCommandIdRef.value !== undefined) {
+        if(activeCommandIdRef.value === localCommandId) {
+          activeCommandIdRef.value = null;
+        }
+      } else if(!useValue && activeCommandId === localCommandId) {
+        activeCommandId = null;
+      }
+      
+      // Handle result (callbacks may add console messages)
+      if(result.success && onSuccess) {
+        onSuccess(result);
+      } else if(!result.success && onError) {
+        onError(result);
+      }
+      
+      // Optional completion callback (may also add console messages)
+      if(onComplete) onComplete(result);
+      
+      // Force scroll after ALL DOM updates (callbacks may have added messages)
+      // Use setTimeout to ensure all synchronous console appends are complete
+      setTimeout(() => {
+        forceScrollAfterDOMUpdate();
+      }, 50);
+    });
+    
+    localCommandId = commandId;
+    
+    // Set active command ID
+    if(activeCommandIdRef && activeCommandIdRef.value !== undefined) {
+      activeCommandIdRef.value = commandId;
+    } else if(!useValue) {
+      activeCommandId = commandId;
+    }
+    
+    return commandId;
+  }
+
+  /**
+   * Centralized function to prepare action execution
+   * Handles: scroll to bottom, print header, show animation, ensure DOM updates
+   * This is the core logic for handling console log flow
+   * 
+   * @param {string} headerText - The header text to display (e.g., "Starting Chroot Backup")
+   * @param {string} progressText - The progress indicator text (e.g., "Backing up chroot")
+   * @param {string} progressType - Type of progress indicator ('spinner' or 'dots', default: 'dots')
+   * @returns {Object} Object with { progressLine, progressInterval } for cleanup
+   */
+  async function prepareActionExecution(headerText, progressText, progressType = 'dots') {
+    // STEP 1: Scroll to bottom - must complete before anything else
+    await scrollConsoleToBottom();
+    
+    // STEP 2: Print header message
+    appendConsole(`━━━ ${headerText} ━━━`, 'info');
+    
+    // STEP 3: Show animated progress indicator (keep visible during execution)
+    const { progressLine, interval: progressInterval } = ProgressIndicator.create(progressText, progressType);
+    
+    // Ensure DOM updates are painted before command execution starts
+    // This prevents UI freeze and ensures header/animation are visible
+    await new Promise(resolve => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          resolve();
+        });
+      });
+    });
+    
+    return { progressLine, progressInterval };
+  }
+
+  /**
    * Scroll console to bottom smoothly and wait for completion
-   * Must complete before any command execution to ensure logs are visible
+   * Simplified version - removes redundant checks while maintaining reliability
    */
   async function scrollConsoleToBottom() {
     if(!els.console) return;
     
     const pre = els.console;
-    const maxScroll = Math.max(0, pre.scrollHeight - pre.clientHeight);
+    void pre.offsetHeight; // Force layout recalculation
     
-    // If already at bottom, no need to scroll
-    if(Math.abs(pre.scrollTop - maxScroll) < 2) {
+    const maxScroll = Math.max(0, pre.scrollHeight - pre.clientHeight);
+    const isAtBottom = Math.abs(pre.scrollTop - maxScroll) <= 1;
+    
+    if(isAtBottom) {
+      // Already at bottom, just ensure sync
+      pre.scrollTop = pre.scrollHeight;
+      void pre.offsetHeight;
       return;
     }
     
-    // Use smooth scrolling (CSS already has scroll-behavior: smooth)
-    pre.scrollTo({
-      top: pre.scrollHeight,
-      behavior: 'smooth'
-    });
+    // Smooth scroll to bottom
+    pre.scrollTo({ top: pre.scrollHeight, behavior: 'smooth' });
     
-    // Wait for smooth scroll to complete
-    // Check scroll position periodically until it reaches bottom
+    // Wait for scroll completion with timeout
     return new Promise((resolve) => {
       const startTime = Date.now();
-      const maxWaitTime = 1000; // Max 1 second wait
+      const maxWaitTime = 1500;
       
       function checkScroll() {
-        const currentScrollTop = pre.scrollTop;
+        void pre.offsetHeight; // Force layout recalculation
+        
         const currentMaxScroll = Math.max(0, pre.scrollHeight - pre.clientHeight);
-        const isAtBottom = Math.abs(currentScrollTop - currentMaxScroll) < 2;
+        const isAtBottom = Math.abs(pre.scrollTop - currentMaxScroll) <= 1;
         
         if(isAtBottom || Date.now() - startTime > maxWaitTime) {
-          // Ensure we're at bottom (final sync)
+          // Final sync to exact bottom
           pre.scrollTop = pre.scrollHeight;
+          void pre.offsetHeight;
           resolve();
         } else {
-          // Check again in next frame
           requestAnimationFrame(checkScroll);
         }
       }
       
-      // Start checking after a small delay to allow smooth scroll to begin
-      requestAnimationFrame(() => {
-        requestAnimationFrame(checkScroll);
-      });
+      requestAnimationFrame(() => requestAnimationFrame(checkScroll));
     });
   }
 
@@ -1067,19 +1288,17 @@
       disableAllActions(true);
       disableSettingsPopup(true);
       
-      // STEP 1: Scroll to bottom - must complete before anything else
-      await scrollConsoleToBottom();
-      
-      // STEP 2: Print header message
-      const actionText = action.charAt(0).toUpperCase() + action.slice(1) + 'ing chroot';
-      appendConsole(`━━━ ${actionText} ━━━`, 'info');
-      
-      // STEP 3: Show animated progress indicator (keep visible during execution)
-      const { progressLine, interval: progressInterval } = ProgressIndicator.create(actionText, 'dots');
-      
-      // Update UI state
+      // Update UI state IMMEDIATELY (before scrolling/preparation)
       const statusState = action === 'start' ? 'starting' : action === 'stop' ? 'stopping' : 'restarting';
       updateStatus(statusState);
+      
+      // Use centralized flow: scroll, header, animation
+      const actionText = action.charAt(0).toUpperCase() + action.slice(1) + 'ing chroot';
+      const { progressLine, interval: progressInterval } = await prepareActionExecution(
+        actionText,
+        actionText,
+        'dots'
+      );
 
       // Stop network services on stop/restart
       if(action === 'stop' || action === 'restart'){
@@ -1087,16 +1306,6 @@
           await StopNetServices.stopNetworkServices({ progressLine });
         }
       }
-
-      // Ensure DOM updates are painted before command execution starts
-      // This prevents UI freeze and ensures header/animation are visible
-      await new Promise(resolve => {
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            resolve();
-          });
-        });
-      });
 
       // STEP 4: Execute command (animation stays visible during execution)
       const cmd = `sh ${PATH_CHROOT_SH} ${action} --no-shell`;
@@ -1137,6 +1346,9 @@
           setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH);
         }
         
+        // Force scroll to bottom after completion messages are added
+        forceScrollAfterDOMUpdate();
+        
         // Cleanup UI
         activeCommandId = null;
         disableAllActions(false);
@@ -1157,6 +1369,170 @@
     });
   }
 
+
+  /**
+   * Stop chroot properly (like the Stop button does)
+   * Shows stopping status, stops network services, then executes stop command
+   * Uses centralized prepareActionExecution flow
+   * Returns true if chroot is now stopped, false otherwise
+   */
+  async function ensureChrootStopped() {
+    if(!rootAccessConfirmed) {
+      return false;
+    }
+    
+    // Check current status
+    try {
+      const out = await runCmdSync(`sh ${PATH_CHROOT_SH} status`);
+      const s = String(out || '');
+      const isRunning = /Status:\s*RUNNING/i.test(s);
+      
+      if(!isRunning) {
+        return true; // Already stopped
+      }
+    } catch(e) {
+      // Status check failed, try to stop anyway
+    }
+    
+    // Chroot is running, stop it properly using centralized flow
+    const { progressLine, progressInterval } = await prepareActionExecution(
+      'Stopping Chroot',
+      'Stopping chroot',
+      'dots'
+    );
+    
+    updateStatus('stopping');
+    
+    // Stop network services first (like the Stop button does)
+    if(window.StopNetServices) {
+      await StopNetServices.stopNetworkServices({ progressLine });
+    }
+    
+    return new Promise((resolve) => {
+      const stopCmd = `sh ${PATH_CHROOT_SH} stop --no-shell`;
+      let localStopCommandId = null;
+      
+      const stopCommandId = runCmdAsync(stopCmd, (stopResult) => {
+        // Clear progress indicator
+        ProgressIndicator.remove(progressLine, progressInterval);
+        
+        if(activeCommandId === localStopCommandId) {
+          activeCommandId = null;
+        }
+        
+        if(stopResult.success) {
+          // Update status immediately after stop completes (before verification)
+          updateStatus('stopped');
+          
+          // Wait a bit and verify it's actually stopped
+          setTimeout(async () => {
+            try {
+              const verifyOut = await runCmdSync(`sh ${PATH_CHROOT_SH} status`);
+              const verifyStatus = String(verifyOut || '');
+              const isRunning = /Status:\s*RUNNING/i.test(verifyStatus);
+              if(!isRunning) {
+                appendConsole('✓ Chroot stopped successfully', 'success');
+                // Force scroll to bottom after completion message
+                forceScrollAfterDOMUpdate();
+                resolve(true);
+              } else {
+                appendConsole('⚠ Chroot stop completed but status check failed', 'warn');
+                resolve(false);
+              }
+            } catch(e) {
+              appendConsole('⚠ Chroot stop completed but status verification failed', 'warn');
+              resolve(false);
+            }
+          }, 500);
+        } else {
+          appendConsole('✗ Failed to stop chroot', 'err');
+          resolve(false);
+        }
+      });
+      
+      localStopCommandId = stopCommandId;
+      activeCommandId = stopCommandId;
+    });
+  }
+
+  /**
+   * Ensure chroot is started and wait for it to be running
+   * Uses centralized prepareActionExecution flow
+   * Returns true if chroot is now running, false otherwise
+   */
+  async function ensureChrootStarted() {
+    if(!rootAccessConfirmed) {
+      return false;
+    }
+    
+    // Check current status
+    try {
+      const out = await runCmdSync(`sh ${PATH_CHROOT_SH} status`);
+      const s = String(out || '');
+      const isRunning = /Status:\s*RUNNING/i.test(s);
+      
+      if(isRunning) {
+        return true; // Already running
+      }
+    } catch(e) {
+      // Status check failed, try to start anyway
+    }
+    
+    // Chroot is not running, start it using centralized flow
+    const { progressLine, progressInterval } = await prepareActionExecution(
+      'Starting Chroot',
+      'Starting chroot',
+      'dots'
+    );
+    
+    updateStatus('starting');
+    
+    return new Promise((resolve) => {
+      const startCmd = `sh ${PATH_CHROOT_SH} start --no-shell`;
+      let localStartCommandId = null;
+      
+      const startCommandId = runCmdAsync(startCmd, (startResult) => {
+        // Clear progress indicator
+        ProgressIndicator.remove(progressLine, progressInterval);
+        
+        if(activeCommandId === localStartCommandId) {
+          activeCommandId = null;
+        }
+        
+        if(startResult.success) {
+          // Update status immediately after start completes (before verification)
+          updateStatus('running');
+          
+          // Wait a bit and verify it's actually running
+          setTimeout(async () => {
+            try {
+              const verifyOut = await runCmdSync(`sh ${PATH_CHROOT_SH} status`);
+              const verifyStatus = String(verifyOut || '');
+              const isRunning = /Status:\s*RUNNING/i.test(verifyStatus);
+              if(isRunning) {
+                appendConsole('✓ Chroot started successfully', 'success');
+                // Force scroll to bottom after completion message
+                forceScrollAfterDOMUpdate();
+                resolve(true);
+              } else {
+                appendConsole('⚠ Chroot start completed but status check failed', 'warn');
+                resolve(false);
+              }
+            } catch(e) {
+              appendConsole('⚠ Chroot start completed but status verification failed', 'warn');
+              resolve(false);
+            }
+          }, 1000);
+        } else {
+          appendConsole('✗ Failed to start chroot', 'err');
+          resolve(false);
+        }
+      });
+      
+      localStartCommandId = startCommandId;
+      activeCommandId = startCommandId;
+    });
+  }
 
   /**
    * Refresh chroot status (non-blocking)
@@ -1206,7 +1582,7 @@
             hotspotActive = currentHotspotActive;
             StateManager.set('hotspot', currentHotspotActive);
             if(hotspotActiveRef) hotspotActiveRef.value = currentHotspotActive;
-            appendConsole(`Hotspot state corrected: ${currentHotspotActive ? 'running' : 'stopped'}`, currentHotspotActive ? 'info' : 'warn');
+            // Don't log during refresh - keep it quiet
           }
         }
       }
@@ -1216,7 +1592,7 @@
       // Status update - but don't overwrite custom statuses during active operations
       // Only preserve custom statuses if there's an active command running
       const currentStatus = els.statusText ? els.statusText.textContent.trim() : '';
-      const customStatuses = ['restoring', 'migrating', 'uninstalling', 'updating'];
+      const customStatuses = ['backing up', 'restoring', 'migrating', 'uninstalling', 'updating', 'trimming', 'resizing'];
       const isCustomStatus = customStatuses.includes(currentStatus);
       
       // Only preserve custom status if there's an active command AND it's a long-running operation status
@@ -1326,6 +1702,9 @@
     } else if(state === 'restarting'){
       dot.className = 'dot dot-warn';
       text.textContent = 'restarting';
+    } else if(state === 'backing up'){
+      dot.className = 'dot dot-warn';
+      text.textContent = 'backing up';
     } else if(state === 'restoring'){
       dot.className = 'dot dot-warn';
       text.textContent = 'restoring';
@@ -1338,6 +1717,12 @@
     } else if(state === 'updating'){
       dot.className = 'dot dot-warn';
       text.textContent = 'updating';
+    } else if(state === 'trimming'){
+      dot.className = 'dot dot-warn';
+      text.textContent = 'trimming';
+    } else if(state === 'resizing'){
+      dot.className = 'dot dot-warn';
+      text.textContent = 'resizing';
     } else if(state === 'not_found'){
       dot.className = 'dot dot-off';
       text.textContent = 'chroot not found';
@@ -1418,7 +1803,7 @@
       await readBootFile();
     }
   }
-  async function readBootFile(){
+  async function readBootFile(silent = false){
     if(!rootAccessConfirmed){
       els.bootToggle.checked = false; // Default to disabled
       return; // Don't attempt command - root check already printed error
@@ -1429,14 +1814,20 @@
         const out = await cmdExec.execute(`cat ${BOOT_FILE} 2>/dev/null || echo 0`, true);
         const v = String(out||'').trim();
         els.bootToggle.checked = v === '1';
-        appendConsole('Run-at-boot: '+ (v==='1' ? 'enabled' : 'disabled'));
+        if(!silent) {
+          appendConsole('Run-at-boot: '+ (v==='1' ? 'enabled' : 'disabled'));
+        }
       } else {
-        appendConsole('Backend not available', 'err');
+        if(!silent) {
+          appendConsole('Backend not available', 'err');
+        }
         els.bootToggle.checked = false;
       }
     }catch(e){
       console.error(e);
-      appendConsole(`Failed to read boot setting: ${e.message}`, 'err');
+      if(!silent) {
+        appendConsole(`Failed to read boot setting: ${e.message}`, 'err');
+      }
       els.bootToggle.checked = false;
     }
   }
@@ -1514,9 +1905,11 @@
   }
 
   // Master root detection function - checks backend once and sets UI state
-  async function checkRootAccess(){
+  async function checkRootAccess(silent = false){
     if(!window.cmdExec || typeof cmdExec.execute !== 'function'){
-      appendConsole('No root bridge detected — running offline. Actions disabled.');
+      if(!silent) {
+        appendConsole('No root bridge detected — running offline. Actions disabled.');
+      }
       disableAllActions(true, true);
       disableSettingsPopup(true, true); // assume chroot exists for now
       return;
@@ -1783,97 +2176,156 @@
   }
 
   async function updateChroot(){
-    if(activeCommandId) {
-      appendConsole('⚠ Another command is already running. Please wait...', 'warn');
-      return;
-    }
+    await withCommandGuard('chroot-update', async () => {
+      if(!rootAccessConfirmed){
+        appendConsole('Cannot update chroot: root access not available', 'err');
+        return;
+      }
 
-    if(!rootAccessConfirmed){
-      appendConsole('Cannot update chroot: root access not available', 'err');
-      return;
-    }
+      // Custom confirmation dialog
+      const confirmed = await showConfirmDialog(
+        'Update Chroot Environment',
+        'This will apply any available updates to the chroot environment.\n\nThe chroot will be started if it\'s not running. Continue?',
+        'Update',
+        'Cancel'
+      );
 
-    // Custom confirmation dialog
-    const confirmed = await showConfirmDialog(
-      'Update Chroot Environment',
-      'This will apply any available updates to the chroot environment.\n\nThe chroot will be started if it\'s not running. Continue?',
-      'Update',
-      'Cancel'
-    );
+      if(!confirmed){
+        return;
+      }
 
-    if(!confirmed){
-      return;
-    }
+      closeSettingsPopup();
+      if(els.closePopup) els.closePopup.style.display = 'none';
+      // Update status immediately after closing popup for instant feedback
+      updateStatus('updating');
+      await new Promise(resolve => setTimeout(resolve, ANIMATION_DELAYS.POPUP_CLOSE));
 
-    closeSettingsPopup();
-    if(els.closePopup) els.closePopup.style.display = 'none';
-    await new Promise(resolve => setTimeout(resolve, ANIMATION_DELAYS.POPUP_CLOSE));
+      disableAllActions(true);
+      disableSettingsPopup(true);
 
-    // STEP 1: Scroll to bottom FIRST
-    await scrollConsoleToBottom();
+      // Check if chroot is running, start if not (uses centralized flow internally)
+      const isRunning = els.statusText && els.statusText.textContent.trim() === 'running';
+      if(!isRunning) {
+        // Update status to 'starting' IMMEDIATELY so it's visible
+        updateStatus('starting');
+        // Start chroot first (this uses prepareActionExecution internally)
+        const started = await ensureChrootStarted();
+        if(!started) {
+          appendConsole('✗ Failed to start chroot - update aborted', 'err');
+          activeCommandId = null;
+          disableAllActions(false);
+          disableSettingsPopup(false, true);
+          if(els.closePopup) els.closePopup.style.display = '';
+          return;
+        }
+        // Restore updating status after starting
+        updateStatus('updating');
+      }
+      
+      // Scroll to bottom BEFORE update header appears to ensure all previous logs are visible
+      // This prevents the update header from appearing halfway up the console
+      await scrollConsoleToBottom();
+      // Small delay to ensure scroll completes and DOM settles
+      await new Promise(resolve => setTimeout(resolve, 350));
+      
+      // Now use centralized flow for update action
+      const { progressLine, interval: progressInterval } = await prepareActionExecution(
+        'Starting Chroot Update',
+        'Updating chroot',
+        'dots'
+      );
 
-    // STEP 2: Print header
-    appendConsole('━━━ Starting Chroot Update ━━━', 'info');
-
-    // STEP 3: Show animated progress (keep visible during execution)
-    const { progressLine, interval: progressInterval } = ProgressIndicator.create('Updating chroot', 'dots');
-
-    // Update UI state
-    const isNotRunning = els.statusText && els.statusText.textContent.trim() !== 'running';
-    if(isNotRunning) {
-      updateStatus('starting');
-    }
-    updateStatus('updating');
-    disableAllActions(true);
-    disableSettingsPopup(true);
-    activeCommandId = 'chroot-update';
-
-    // STEP 4: Execute command (animation stays visible)
-    const cmd = `sh ${OTA_UPDATER}`;
-    
-    runCmdAsync(cmd, (result) => {
-      // STEP 5: Clear animation ONLY when command completes
-      ProgressIndicator.remove(progressLine, progressInterval);
-
-      if(result.success) {
-        appendConsole('✓ Chroot update completed successfully', 'success');
-        
-        // Restart chroot after update
-        setTimeout(async () => {
-          if(window.StopNetServices) {
-            await StopNetServices.stopNetworkServices();
-          }
-          
-          updateStatus('restarting');
-          const { progressLine: restartLine, interval: restartInterval } = ProgressIndicator.create('Restarting chroot', 'dots');
-
-          runCmdAsync(`sh ${PATH_CHROOT_SH} restart >/dev/null 2>&1`, (restartResult) => {
-            ProgressIndicator.remove(restartLine, restartInterval);
-            
-            if(restartResult.success) {
-              appendConsole('✓ Chroot restarted successfully', 'success');
-            } else {
-              appendConsole('⚠ Chroot restart failed, but update was successful', 'warn');
-            }
-            
-            appendConsole('━━━ Update Complete ━━━', 'success');
-            
-            activeCommandId = null;
-            disableAllActions(false);
-            disableSettingsPopup(false, true);
-            if(els.closePopup) els.closePopup.style.display = '';
-            setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH);
-          });
-        }, ANIMATION_DELAYS.POPUP_CLOSE_LONG);
-      } else {
-        appendConsole('✗ Chroot update failed', 'err');
-        
+      // STEP 4: Execute update command (animation stays visible)
+      const cmd = `sh ${OTA_UPDATER}`;
+      
+      if(!window.cmdExec || typeof cmdExec.executeAsync !== 'function'){
+        ProgressIndicator.remove(progressLine, progressInterval);
+        appendConsole('Backend not available', 'err');
         activeCommandId = null;
         disableAllActions(false);
         disableSettingsPopup(false, true);
         if(els.closePopup) els.closePopup.style.display = '';
-        setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH);
+        return;
       }
+
+      const finalCmd = debugModeActive ? `LOGGING_ENABLED=1 ${cmd}` : cmd;
+      let localCommandId = null;
+      
+      const commandId = runCmdAsync(finalCmd, (result) => {
+        // STEP 5: Clear animation ONLY when command completes
+        ProgressIndicator.remove(progressLine, progressInterval);
+        
+        if(activeCommandId === localCommandId) {
+          activeCommandId = null;
+        }
+
+        if(result.success) {
+          appendConsole('✓ Chroot update completed successfully', 'success');
+          
+          // Force scroll to bottom after update completion message
+          forceScrollAfterDOMUpdate();
+          
+          // Restart chroot after update (uses centralized flow)
+          setTimeout(async () => {
+            if(window.StopNetServices) {
+              await StopNetServices.stopNetworkServices();
+            }
+            
+            // Update status first, then use centralized flow
+            updateStatus('restarting');
+            
+            // Use centralized flow for restart action
+            const { progressLine: restartLine, interval: restartInterval } = await prepareActionExecution(
+              'Restarting Chroot',
+              'Restarting chroot',
+              'dots'
+            );
+
+            let localRestartCommandId = null;
+            const restartCommandId = runCmdAsync(`sh ${PATH_CHROOT_SH} restart --no-shell`, (restartResult) => {
+              ProgressIndicator.remove(restartLine, restartInterval);
+              
+              if(activeCommandId === localRestartCommandId) {
+                activeCommandId = null;
+              }
+              
+              if(restartResult.success) {
+                appendConsole('✓ Chroot restarted successfully', 'success');
+              } else {
+                appendConsole('⚠ Chroot restart failed, but update was successful', 'warn');
+              }
+              
+              appendConsole('━━━ Update Complete ━━━', 'success');
+              
+              // Force scroll to bottom after restart completion messages
+              forceScrollAfterDOMUpdate();
+              
+              activeCommandId = null;
+              disableAllActions(false);
+              disableSettingsPopup(false, true);
+              if(els.closePopup) els.closePopup.style.display = '';
+              setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH);
+            });
+            
+            localRestartCommandId = restartCommandId;
+            activeCommandId = restartCommandId;
+          }, ANIMATION_DELAYS.POPUP_CLOSE_LONG);
+        } else {
+          appendConsole('✗ Chroot update failed', 'err');
+          
+          // Force scroll to bottom after failure message
+          forceScrollAfterDOMUpdate();
+          
+          activeCommandId = null;
+          disableAllActions(false);
+          disableSettingsPopup(false, true);
+          if(els.closePopup) els.closePopup.style.display = '';
+          setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH);
+        }
+      });
+      
+      localCommandId = commandId;
+      activeCommandId = commandId;
     });
   }
 
@@ -2629,34 +3081,44 @@
     copyConsoleLogs();
   });
   els.refreshStatus.addEventListener('click', async (e) => {
-    // Start animation (don't await - let it run in background)
-    animateButton(e.target);
-    // Execute refresh immediately (don't wait for animation)
-    appendConsole('Refreshing...', 'info');
+    // Disable button during refresh to prevent double-clicks
+    const btn = e.target;
+    btn.disabled = true;
+    btn.style.opacity = '0.5';
     
-    // Do a comprehensive refresh: re-check root access, then refresh status
-    await checkRootAccess();
-    await refreshStatus();
-    await readBootFile(); // Also refresh boot toggle status
-    
-    // Pre-fetch interfaces in background (non-blocking) to update cache
-    // This prevents lag when opening popups later
-    // Use setTimeout to ensure it's truly non-blocking
-    if(rootAccessConfirmed) {
-      setTimeout(() => {
-        // Fetch hotspot interfaces in background (force refresh + background only)
-        if(window.HotspotFeature && HotspotFeature.fetchInterfaces) {
-          HotspotFeature.fetchInterfaces(true, true).catch(() => {
-            // Silently fail - cache will be used if fetch fails
-          });
-        }
-        // Fetch forward-nat interfaces in background (force refresh + background only)
-        if(window.ForwardNatFeature && ForwardNatFeature.fetchInterfaces) {
-          ForwardNatFeature.fetchInterfaces(true, true).catch(() => {
-            // Silently fail - cache will be used if fetch fails
-          });
-        }
-      }, ANIMATION_DELAYS.INPUT_FOCUS); // Small delay to ensure UI updates first
+    try {
+      // Do a comprehensive refresh: re-check root access, then refresh status
+      // No console messages, no scrolling - just quiet refresh
+      await checkRootAccess(true); // Silent mode - no console output
+      await refreshStatus();
+      await readBootFile(true); // Also refresh boot toggle status (silent mode)
+      
+      // Pre-fetch interfaces in background (non-blocking) to update cache
+      // This prevents lag when opening popups later
+      // Use setTimeout to ensure it's truly non-blocking
+      if(rootAccessConfirmed) {
+        setTimeout(() => {
+          // Fetch hotspot interfaces in background (force refresh + background only)
+          if(window.HotspotFeature && HotspotFeature.fetchInterfaces) {
+            HotspotFeature.fetchInterfaces(true, true).catch(() => {
+              // Silently fail - cache will be used if fetch fails
+            });
+          }
+          // Fetch forward-nat interfaces in background (force refresh + background only)
+          if(window.ForwardNatFeature && ForwardNatFeature.fetchInterfaces) {
+            ForwardNatFeature.fetchInterfaces(true, true).catch(() => {
+              // Silently fail - cache will be used if fetch fails
+            });
+          }
+        }, ANIMATION_DELAYS.INPUT_FOCUS); // Small delay to ensure UI updates first
+      }
+    } catch(error) {
+      // Silently handle errors - refresh should never fail loudly
+      console.error('Refresh error:', error);
+    } finally {
+      // Re-enable button
+      btn.disabled = false;
+      btn.style.opacity = '';
     }
   });
   els.bootToggle.addEventListener('change', () => writeBootFile(els.bootToggle.checked ? 1 : 0));
@@ -2952,6 +3414,13 @@
       updateStatus,
       checkForwardNatRunning,
       scrollConsoleToBottom,
+      ensureChrootStarted,
+      ensureChrootStopped,
+      prepareActionExecution,
+      forceScrollToBottom,
+      forceScrollAfterDOMUpdate,
+      validateCommandExecution,
+      executeCommandWithProgress,
       els
     };
 
