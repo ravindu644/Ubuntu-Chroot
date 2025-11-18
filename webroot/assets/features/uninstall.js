@@ -10,9 +10,9 @@
 
   async function uninstallChroot() {
     const {
-      activeCommandId, appendConsole, showConfirmDialog, closeSettingsPopup,
+      activeCommandId, rootAccessConfirmed, appendConsole, showConfirmDialog, closeSettingsPopup,
       ANIMATION_DELAYS, PATH_CHROOT_SH, ProgressIndicator, disableAllActions,
-      disableSettingsPopup, updateStatus, refreshStatus, runCmdAsync, scrollConsoleToBottom, els
+      disableSettingsPopup, updateStatus, refreshStatus, runCmdAsync, ensureChrootStopped, prepareActionExecution, executeCommandWithProgress, els
     } = dependencies;
 
     if(activeCommandId.value) {
@@ -34,52 +34,64 @@
     await new Promise(resolve => setTimeout(resolve, ANIMATION_DELAYS.INPUT_FOCUS));
 
     closeSettingsPopup();
-    await new Promise(resolve => setTimeout(resolve, ANIMATION_DELAYS.POPUP_CLOSE_VERY_LONG));
-
-    // STEP 1: Scroll to bottom FIRST
-    await scrollConsoleToBottom();
-
-    // STEP 2: Print header
-    appendConsole('━━━ Starting Uninstallation ━━━', 'warn');
-
-    // STEP 3: Show animated progress (keep visible during execution)
-    const { progressLine, interval: progressInterval } = ProgressIndicator.create('Uninstalling chroot', 'dots');
-
-    // Update UI state
-    const isRunning = els.statusText && els.statusText.textContent.trim() === 'running';
-    if(isRunning) {
-      updateStatus('stopping');
-      if(window.StopNetServices) {
-        await StopNetServices.stopNetworkServices();
-      }
-    }
+    // Update status immediately after closing popup for instant feedback
     updateStatus('uninstalling');
+    await new Promise(resolve => setTimeout(resolve, ANIMATION_DELAYS.POPUP_CLOSE_VERY_LONG));
 
     disableAllActions(true);
     disableSettingsPopup(true);
-    activeCommandId.value = 'chroot-uninstall';
 
-    // STEP 4: Execute command (animation stays visible)
-    runCmdAsync(`sh ${PATH_CHROOT_SH} uninstall --webui`, (result) => {
-      // STEP 5: Clear animation ONLY when command completes
-      ProgressIndicator.remove(progressLine, progressInterval);
+    // Stop chroot if running (uses centralized flow internally)
+    const isRunning = els.statusText && els.statusText.textContent.trim() === 'running';
+    if(isRunning) {
+      const stopped = await ensureChrootStopped();
+      if(!stopped) {
+        appendConsole('✗ Failed to stop chroot - uninstall aborted', 'err');
+        activeCommandId.value = null;
+        disableAllActions(false);
+        disableSettingsPopup(false, true);
+        return;
+      }
+    }
+    
+    // Now use centralized flow for uninstall action
+    const { progressLine, interval: progressInterval } = await prepareActionExecution(
+      'Starting Uninstallation',
+      'Uninstalling chroot',
+      'dots'
+    );
 
-      if(result.success) {
+    // Execute command using helper (handles validation, execution, cleanup, scrolling)
+    const cmd = `sh ${PATH_CHROOT_SH} uninstall --webui`;
+    
+    const commandId = executeCommandWithProgress({
+      cmd,
+      progress: { progressLine, progressInterval },
+      onSuccess: (result) => {
         appendConsole('✅ Chroot uninstalled successfully!', 'success');
         appendConsole('All chroot data has been removed.', 'info');
         appendConsole('━━━ Uninstallation Complete ━━━', 'success');
         updateStatus('stopped');
         disableAllActions(true);
-      } else {
+        disableSettingsPopup(false, false);
+        setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH * 2);
+      },
+      onError: (result) => {
         appendConsole('✗ Uninstallation failed', 'err');
         appendConsole('Check the logs above for details.', 'err');
         disableAllActions(false);
-      }
-      
-      activeCommandId.value = null;
-      disableSettingsPopup(false, false);
-      setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH * 2);
+        disableSettingsPopup(false, false);
+        setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH * 2);
+      },
+      useValue: true,
+      activeCommandIdRef: activeCommandId
     });
+    
+    if(!commandId) {
+      // Validation failed - cleanup already done by helper
+      disableAllActions(false);
+      disableSettingsPopup(false, true);
+    }
   }
 
   window.UninstallFeature = {

@@ -13,7 +13,7 @@
       activeCommandId, rootAccessConfirmed, sparseMigrated, appendConsole,
       showConfirmDialog, closeSettingsPopup, els, ANIMATION_DELAYS, PATH_CHROOT_SH,
       ProgressIndicator, disableAllActions, disableSettingsPopup, updateSparseInfo,
-      refreshStatus, runCmdAsync, scrollConsoleToBottom
+      refreshStatus, runCmdAsync, updateStatus, prepareActionExecution, executeCommandWithProgress
     } = dependencies;
 
     if(activeCommandId.value) {
@@ -50,40 +50,51 @@
 
     await new Promise(resolve => setTimeout(resolve, ANIMATION_DELAYS.POPUP_CLOSE_LONG));
 
-    // STEP 1: Scroll to bottom FIRST
-    await scrollConsoleToBottom();
-
-    // STEP 2: Print header
-    appendConsole('━━━ Trimming Sparse Image ━━━', 'info');
-
-    // STEP 3: Show animated progress (keep visible during execution)
-    const { progressLine, interval: progressInterval } = ProgressIndicator.create('Trimming sparse image', 'dots');
-
     disableAllActions(true);
     disableSettingsPopup(true);
-    activeCommandId.value = 'sparse-trim';
 
-    // STEP 4: Execute command (animation stays visible)
+    // Update status first, then use centralized flow
+    updateStatus('trimming');
+    
+    // Use centralized flow for trim action
+    const { progressLine, interval: progressInterval } = await prepareActionExecution(
+      'Trimming Sparse Image',
+      'Trimming sparse image',
+      'dots'
+    );
+
+    // Execute command using helper (handles validation, execution, cleanup, scrolling)
     const cmd = `sh ${PATH_CHROOT_SH} fstrim`;
-    runCmdAsync(cmd, (result) => {
-      // STEP 5: Clear animation ONLY when command completes
-      ProgressIndicator.remove(progressLine, progressInterval);
-
-      if(result.success) {
+    
+    const commandId = executeCommandWithProgress({
+      cmd,
+      progress: { progressLine, progressInterval },
+      onSuccess: (result) => {
         appendConsole('✓ Sparse image trimmed successfully', 'success');
         appendConsole('Space may be reclaimed after a few minutes', 'info');
         appendConsole('━━━ Trim Complete ━━━', 'success');
-      } else {
+        disableAllActions(false);
+        disableSettingsPopup(false, true);
+        updateSparseInfo();
+        refreshStatus();
+      },
+      onError: (result) => {
         appendConsole('✗ Sparse image trim failed', 'err');
         appendConsole('This may be expected on some Android kernels', 'warn');
-      }
-
-      activeCommandId.value = null;
+        disableAllActions(false);
+        disableSettingsPopup(false, true);
+        updateSparseInfo();
+        refreshStatus();
+      },
+      useValue: true,
+      activeCommandIdRef: activeCommandId
+    });
+    
+    if(!commandId) {
+      // Validation failed - cleanup already done by helper
       disableAllActions(false);
       disableSettingsPopup(false, true);
-      updateSparseInfo();
-      refreshStatus();
-    });
+    }
   }
 
   async function resizeSparseImage() {
@@ -91,7 +102,7 @@
       activeCommandId, rootAccessConfirmed, appendConsole, showSizeSelectionDialog,
       showConfirmDialog, closeSettingsPopup, els, ANIMATION_DELAYS, CHROOT_DIR,
       PATH_CHROOT_SH, runCmdSync, ProgressIndicator, disableAllActions,
-      disableSettingsPopup, updateSparseInfo, refreshStatus, runCmdAsync, scrollConsoleToBottom
+      disableSettingsPopup, updateSparseInfo, refreshStatus, runCmdAsync, updateStatus, prepareActionExecution, executeCommandWithProgress
     } = dependencies;
 
     if(activeCommandId.value) {
@@ -109,12 +120,12 @@
 
     let currentAllocatedGb = 'Unknown';
     try {
-      const usageBytesCmd = `du -b ${CHROOT_DIR}/rootfs.img | cut -f1`;
-      const actualUsageBytes = await runCmdSync(usageBytesCmd);
-      // Use base 1000 (GB) to match formatBytes function consistency
-      const bytes = parseInt(actualUsageBytes.trim());
-      const gb = bytes / 1000 / 1000 / 1000;
-      currentAllocatedGb = Math.ceil(gb) + 'GB';
+      // Use same method as updateSparseInfo - get visible size (what Android sees)
+      const apparentSizeCmd = `ls -lh ${CHROOT_DIR}/rootfs.img | tr -s ' ' | cut -d' ' -f5`;
+      const apparentSizeStr = await runCmdSync(apparentSizeCmd);
+      const apparentSize = apparentSizeStr.trim();
+      // Extract numeric value and unit, remove .0 if present (e.g., "8.0G" -> "8GB", "8G" -> "8GB")
+      currentAllocatedGb = apparentSize.replace(/\.0G$/, 'GB').replace(/G$/, 'GB');
     } catch(e) {
       // Keep as 'Unknown' if we can't determine
     }
@@ -138,41 +149,52 @@
 
     await new Promise(resolve => setTimeout(resolve, ANIMATION_DELAYS.POPUP_CLOSE_LONG));
 
-    // STEP 1: Scroll to bottom FIRST
-    await scrollConsoleToBottom();
-
-    // STEP 2: Print header
-    appendConsole(`━━━ Resizing Sparse Image to ${newSizeGb}GB ━━━`, 'warn');
-
-    // STEP 3: Show animated progress (keep visible during execution)
-    const { progressLine, interval: progressInterval } = ProgressIndicator.create('Preparing resize operation', 'dots');
-
     disableAllActions(true);
     disableSettingsPopup(true);
-    activeCommandId.value = 'sparse-resize';
 
-    // STEP 4: Execute command (animation stays visible)
+    // Update status first, then use centralized flow
+    updateStatus('resizing');
+    
+    // Use centralized flow for resize action
+    const { progressLine, interval: progressInterval } = await prepareActionExecution(
+      `Resizing Sparse Image to ${newSizeGb}GB`,
+      'Preparing resize operation',
+      'dots'
+    );
+
+    // Execute command using helper (handles validation, execution, cleanup, scrolling)
     const cmd = `sh ${PATH_CHROOT_SH} resize --webui ${newSizeGb}`;
-    runCmdAsync(cmd, (result) => {
-      // STEP 5: Clear animation ONLY when command completes
-      ProgressIndicator.remove(progressLine, progressInterval);
-
-      if(result.success) {
+    
+    const commandId = executeCommandWithProgress({
+      cmd,
+      progress: { progressLine, progressInterval },
+      onSuccess: (result) => {
         appendConsole('✅ Sparse image resized successfully', 'success');
         appendConsole(`New size: ${newSizeGb}GB`, 'info');
         appendConsole('━━━ Resize Complete ━━━', 'success');
-      } else {
+        disableAllActions(false);
+        disableSettingsPopup(false, true);
+        updateSparseInfo();
+        refreshStatus();
+      },
+      onError: (result) => {
         appendConsole('✗ Sparse image resize failed', 'err');
         appendConsole('Check the logs above for details', 'err');
         appendConsole('━━━ Resize Failed ━━━', 'err');
-      }
-
-      activeCommandId.value = null;
+        disableAllActions(false);
+        disableSettingsPopup(false, true);
+        updateSparseInfo();
+        refreshStatus();
+      },
+      useValue: true,
+      activeCommandIdRef: activeCommandId
+    });
+    
+    if(!commandId) {
+      // Validation failed - cleanup already done by helper
       disableAllActions(false);
       disableSettingsPopup(false, true);
-      updateSparseInfo();
-      refreshStatus();
-    });
+    }
   }
 
   window.ResizeFeature = {

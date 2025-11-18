@@ -342,7 +342,7 @@
       withCommandGuard, ANIMATION_DELAYS, HOTSPOT_SCRIPT,
       runCmdSync, ProgressIndicator, appendConsole, disableAllActions,
       disableSettingsPopup, activeCommandId, refreshStatus, hotspotActive,
-      saveHotspotStatus, ButtonState, els
+      saveHotspotStatus, ButtonState, prepareActionExecution, forceScrollAfterDOMUpdate, els
     } = dependencies;
 
     await withCommandGuard('hotspot-start', async () => {
@@ -368,13 +368,16 @@
       closeHotspotPopup();
       await new Promise(resolve => setTimeout(resolve, ANIMATION_DELAYS.POPUP_CLOSE));
 
-      const actionText = `Starting hotspot '${ssid}'`;
-      appendConsole(`━━━ ${actionText} ━━━`, 'info');
-      
-      const { progressLine, interval: progressInterval } = ProgressIndicator.create(actionText, 'spinner');
-      
       disableAllActions(true);
       disableSettingsPopup(true);
+
+      const actionText = `Starting hotspot '${ssid}'`;
+      const { progressLine, interval: progressInterval } = await prepareActionExecution(
+        actionText,
+        actionText,
+        'spinner'
+      );
+      
       activeCommandId.value = 'hotspot-start';
 
       const cmd = `sh ${HOTSPOT_SCRIPT} -o "${iface}" -s "${ssid}" -p "${password}" -b "${band}" -c "${channel}" 2>&1`;
@@ -401,6 +404,9 @@
           } else {
             appendConsole(`✗ Failed to start hotspot`, 'err');
           }
+          
+          // Force scroll to bottom after completion messages
+          forceScrollAfterDOMUpdate();
         } catch(error) {
           ProgressIndicator.remove(progressLine, progressInterval);
           
@@ -413,6 +419,9 @@
           });
           
           appendConsole(`✗ Hotspot failed to start`, 'err');
+          
+          // Force scroll to bottom after error messages
+          forceScrollAfterDOMUpdate();
         } finally {
           activeCommandId.value = null;
           disableAllActions(false);
@@ -428,20 +437,23 @@
       withCommandGuard, ANIMATION_DELAYS, HOTSPOT_SCRIPT,
       runCmdAsync, ProgressIndicator, appendConsole, disableAllActions,
       disableSettingsPopup, activeCommandId, refreshStatus, hotspotActive,
-      saveHotspotStatus, ButtonState, els
+      saveHotspotStatus, ButtonState, prepareActionExecution, forceScrollAfterDOMUpdate, els
     } = dependencies;
 
     await withCommandGuard('hotspot-stop', async () => {
       closeHotspotPopup();
       await new Promise(resolve => setTimeout(resolve, ANIMATION_DELAYS.POPUP_CLOSE));
 
-      const actionText = 'Stopping hotspot';
-      appendConsole(`━━━ ${actionText} ━━━`, 'info');
-
-      const { progressLine, interval: progressInterval } = ProgressIndicator.create(actionText, 'spinner');
-
       disableAllActions(true);
       disableSettingsPopup(true);
+
+      const actionText = 'Stopping hotspot';
+      const { progressLine, interval: progressInterval } = await prepareActionExecution(
+        actionText,
+        actionText,
+        'spinner'
+      );
+
       activeCommandId.value = 'hotspot-stop';
 
       const cmd = `sh ${HOTSPOT_SCRIPT} -k 2>&1`;
@@ -458,6 +470,9 @@
           } else {
             appendConsole(`✗ Failed to stop hotspot (exit code: ${result.exitCode || 'unknown'})`, 'err');
           }
+          
+          // Force scroll to bottom after completion messages
+          forceScrollAfterDOMUpdate();
           
           activeCommandId.value = null;
           disableAllActions(false);

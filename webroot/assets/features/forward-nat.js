@@ -139,7 +139,7 @@
       withCommandGuard, els, Storage, ANIMATION_DELAYS,
       FORWARD_NAT_SCRIPT, runCmdSync, ProgressIndicator, appendConsole,
       disableAllActions, disableSettingsPopup, activeCommandId, refreshStatus,
-      forwardingActive, saveForwardingStatus, ButtonState
+      forwardingActive, saveForwardingStatus, ButtonState, prepareActionExecution, forceScrollAfterDOMUpdate
     } = dependencies;
 
     await withCommandGuard('forwarding-start', async () => {
@@ -153,13 +153,16 @@
       closeForwardNatPopup();
       await new Promise(resolve => setTimeout(resolve, ANIMATION_DELAYS.POPUP_CLOSE));
 
-      const actionText = `Starting forwarding on ${iface}`;
-      appendConsole(`━━━ ${actionText} ━━━`, 'info');
-      
-      const { progressLine, interval: progressInterval } = ProgressIndicator.create(actionText, 'spinner');
-      
       disableAllActions(true);
       disableSettingsPopup(true);
+
+      const actionText = `Starting forwarding on ${iface}`;
+      const { progressLine, interval: progressInterval } = await prepareActionExecution(
+        actionText,
+        actionText,
+        'spinner'
+      );
+      
       activeCommandId.value = 'forwarding-start';
 
       const cmd = `sh ${FORWARD_NAT_SCRIPT} -i "${iface}" 2>&1`;
@@ -186,6 +189,9 @@
           } else {
             appendConsole(`✗ Failed to start forwarding`, 'err');
           }
+          
+          // Force scroll to bottom after completion messages
+          forceScrollAfterDOMUpdate();
         } catch(error) {
           ProgressIndicator.remove(progressLine, progressInterval);
           
@@ -198,6 +204,9 @@
           });
           
           appendConsole(`✗ Forwarding failed to start`, 'err');
+          
+          // Force scroll to bottom after error messages
+          forceScrollAfterDOMUpdate();
         } finally {
           activeCommandId.value = null;
           disableAllActions(false);
@@ -213,20 +222,23 @@
       withCommandGuard, ANIMATION_DELAYS, FORWARD_NAT_SCRIPT,
       runCmdAsync, ProgressIndicator, appendConsole, disableAllActions,
       disableSettingsPopup, activeCommandId, refreshStatus, forwardingActive,
-      saveForwardingStatus, ButtonState, els
+      saveForwardingStatus, ButtonState, prepareActionExecution, forceScrollAfterDOMUpdate, els
     } = dependencies;
 
     await withCommandGuard('forwarding-stop', async () => {
       closeForwardNatPopup();
       await new Promise(resolve => setTimeout(resolve, ANIMATION_DELAYS.POPUP_CLOSE));
 
-      const actionText = 'Stopping forwarding';
-      appendConsole(`━━━ ${actionText} ━━━`, 'info');
-
-      const { progressLine, interval: progressInterval } = ProgressIndicator.create(actionText, 'spinner');
-
       disableAllActions(true);
       disableSettingsPopup(true);
+
+      const actionText = 'Stopping forwarding';
+      const { progressLine, interval: progressInterval } = await prepareActionExecution(
+        actionText,
+        actionText,
+        'spinner'
+      );
+
       activeCommandId.value = 'forwarding-stop';
 
       const cmd = `sh ${FORWARD_NAT_SCRIPT} -k 2>&1`;
@@ -243,6 +255,9 @@
           } else {
             appendConsole(`✗ Failed to stop forwarding (exit code: ${result.exitCode || 'unknown'})`, 'err');
           }
+          
+          // Force scroll to bottom after completion messages
+          forceScrollAfterDOMUpdate();
           
           activeCommandId.value = null;
           disableAllActions(false);
