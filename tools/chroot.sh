@@ -751,22 +751,45 @@ backup_chroot() {
         local temp_mount_point="${CHROOT_PATH}_bkmnt"
         mkdir -p "$temp_mount_point"
 
-        # Mount the image read-only for safety.
-        if mount -t ext4 -o loop,ro "$ROOTFS_IMG" "$temp_mount_point"; then
-            log "Sparse image mounted cleanly for backup."
-            
-            # Run tar on the clean, temporary mount without any namespace.
-            busybox tar -czf "$backup_path" -C "$temp_mount_point" .
-            tar_exit_code=$?
-            
-            # Clean up immediately.
-            sync
-            umount "$temp_mount_point"
-            rmdir "$temp_mount_point"
-        else
-            error "Failed to create a clean mount of the sparse image for backup."
+        # Check and repair filesystem before mounting to prevent mount failures
+        log "Checking filesystem integrity before backup..."
+        local fsck_output=$(e2fsck -f -y "$ROOTFS_IMG" 2>&1)
+        local fsck_exit=$?
+        
+        # Exit codes: 0=no errors, 1=corrected, 2=corrected/reboot, 4+=failed
+        if [ $fsck_exit -ge 4 ]; then
+            error "Filesystem check failed (exit: $fsck_exit)"
+            error "Output: $fsck_output"
+            error "Filesystem corruption detected - cannot safely backup"
             rmdir "$temp_mount_point" >/dev/null 2>&1
             tar_exit_code=1
+        else
+            if [ $fsck_exit -ne 0 ]; then
+                log "Filesystem check corrected issues (exit: $fsck_exit)"
+            else
+                log "Filesystem integrity verified"
+            fi
+            
+            # Small delay to ensure filesystem operations complete
+            sleep 1
+            
+            # Mount the image read-only for safety.
+            if mount -t ext4 -o loop,ro "$ROOTFS_IMG" "$temp_mount_point"; then
+                log "Sparse image mounted cleanly for backup."
+                
+                # Run tar on the clean, temporary mount without any namespace.
+                busybox tar -czf "$backup_path" -C "$temp_mount_point" .
+                tar_exit_code=$?
+                
+                # Clean up immediately.
+                sync
+                umount "$temp_mount_point"
+                rmdir "$temp_mount_point"
+            else
+                error "Failed to create a clean mount of the sparse image for backup."
+                rmdir "$temp_mount_point" >/dev/null 2>&1
+                tar_exit_code=1
+            fi
         fi
     else
         # --- Directory Method (the simple, traditional case) ---
