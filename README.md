@@ -20,6 +20,7 @@ A comprehensive Android Linux environment featuring **Ubuntu 24.04** with a buil
 - [Usage](#usage)
 - [Experimental Features](#experimental-features)
 - [Kernel Requirements (Optional)](#kernel-requirements)
+- [To-Do](#to-do)
 - [Credits](#credits)
 
 <a id="requirements"></a>
@@ -195,6 +196,14 @@ A comprehensive Android Linux environment featuring **Ubuntu 24.04** with a buil
 **Converting to Sparse Image**
 
 - You can convert your existing directory-based installation to an isolated ext4 sparse image from the WebUI under **Experimental Features**.
+
+<a id="to-do"></a>
+## 📋 To-Do
+
+The following features are currently not planned for implementation by the maintainer, but **Pull Requests are always welcome** if you figure out a way to implement them:
+
+- Audio forwarding in RDP
+- Termux-independent GPU acceleration
 
 <a id="kernel-requirements"></a>
 ## 🛠 Kernel Requirements
