@@ -476,6 +476,34 @@ EOF
     echo "[UPDATER] ✓ Update v3400 completed: Aliases and functions configured!"
 }
 
+# Version 3600: Add firmware download script
+update_v3600() {
+    echo "[UPDATER] Starting update v3600: Adding firmware download script"
+
+    echo "[UPDATER] Downloading download-firmware script from GitHub..."
+    if curl -fsSL https://github.com/ravindu644/Ubuntu-Chroot/raw/refs/heads/main/Docker/scripts/download-firmware -o /usr/local/bin/download-firmware; then
+        echo "[UPDATER] Script downloaded successfully"
+    else
+        echo "[UPDATER] Warning: Failed to download script, trying with wget..."
+        if wget -q -O /usr/local/bin/download-firmware https://github.com/ravindu644/Ubuntu-Chroot/raw/refs/heads/main/Docker/scripts/download-firmware; then
+            echo "[UPDATER] Script downloaded successfully with wget"
+        else
+            echo "[UPDATER] Error: Failed to download script with both curl and wget"
+            return 1
+        fi
+    fi
+
+    echo "[UPDATER] Making download-firmware script executable..."
+    if chmod +x /usr/local/bin/download-firmware; then
+        echo "[UPDATER] Script made executable successfully"
+    else
+        echo "[UPDATER] Error: Failed to make script executable"
+        return 1
+    fi
+
+    echo "[UPDATER] ✓ Update v3600 completed: Firmware download script added!"
+}
+
 # Add your new updates below:
 # update_v{VERSION}() {
 #     echo "Your update description..."
