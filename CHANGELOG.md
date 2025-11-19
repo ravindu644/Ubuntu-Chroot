@@ -1,15 +1,15 @@
 # Changelog
 
-## v3.4 (2025-11-15)
+## v3.5 (2025-11-19)
 
-- readme: moved the Kernel Requirements to the bottom of the page
-- readme: fix ups and enhancements
-- readme: added webui screenshots
-- source: initial README drop
-- experimental-features: refined
-- chrootmgr; critical: use more safer mount flags in sparse image mode to avoid kernel panics
-- updates: refined
-- rootfs: added some cool aliases and functions to the bashrc
-- chrootmgr, module: micro-optimize the sparse image creating/mounting logic
-- chrootmgr: enable ipv4 forwarding when starting chroot
-- Update metadata for v3.3
+- webui: fixed critical bugs related to running actions
+- cli: remove any reference to vnc/rdp from the cli first user setup
+- webui: scrollback and misc improvements
+- chrootmgr: fix the filesystem before backing up the chroot in rootfs.img mode
+- webui: micro-optimized the UI elements and fixed minor bugs
+- webui: fixed issues related to hotspot channel loading from the localstorage
+- readme: updated credits
+- webui: completely re-wrote from scratch, centralized everything in seperated functions and files
+- webui: introduced a way to route the localhost traffic through a specific interface
+- readme: updated credits for the banner image
+- Update metadata for v3.4
