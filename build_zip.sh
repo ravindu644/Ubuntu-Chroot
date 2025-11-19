@@ -56,10 +56,11 @@ fi
 VERSION_CODE=$(echo "$TAG" | sed 's/v//' | awk '{print int($1 * 1000)}')
 cp "update${SUFFIX}.json" "$TMP_DIR/update.json"
 
-# Update module.prop
-sed -i "s|^version=.*|version=${TAG}|" "$TMP_DIR/module.prop"
-sed -i "s|^versionCode=.*|versionCode=${VERSION_CODE}|" "$TMP_DIR/module.prop"
-sed -i "s|^updateJson=.*|updateJson=https://raw.githubusercontent.com/ravindu644/Ubuntu-Chroot/main/update${SUFFIX}.json|" "$TMP_DIR/module.prop"
+printf '%s\n' \
+    "version=${TAG}" \
+    "versionCode=${VERSION_CODE}" \
+    "updateJson=https://raw.githubusercontent.com/ravindu644/Ubuntu-Chroot/main/update${SUFFIX}.json" \
+    >> "$TMP_DIR/module.prop"
 
 # Update update.json
 python3 -c "
