@@ -28,7 +28,8 @@ A comprehensive Android Linux environment featuring **Ubuntu 24.04** with a buil
 - Android device with arm64 architecture
 - Unlocked bootloader
 - Rooted with APatch/KernelSU
-  - Magisk is not supported due to **TTY issues below version 29**. If using Magisk, use a version below v29.
+  - Magisk is not supported due to **TTY issues starts with version 29**. If using Magisk, use a version below v29.
+- [Custom Kernel with these configs enabled (optional)](#kernel-requirements)
 
 <a id="why-this-is-different"></a>
 ## ❔ Why This Is Different
