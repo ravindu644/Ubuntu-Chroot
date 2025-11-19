@@ -1,0 +1,307 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# Marker file to indicate successful completion
+MARKER_FILE="/var/lib/.fw-setup-completed"
+FIRMWARE_DIR="/lib/firmware"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Error handler
+error_exit() {
+    echo -e "${RED}Error: $1${NC}" >&2
+    # Remove marker file if it exists (shouldn't, but be safe)
+    rm -f "$MARKER_FILE"
+    exit 1
+}
+
+# Check if running as root
+if [ "$EUID" -ne 0 ]; then
+    error_exit "This script must be run as root (use sudo)"
+fi
+
+echo -e "${GREEN}Starting firmware setup...${NC}"
+echo ""
+
+# Step 0: Check and install zstd if needed
+echo -e "${YELLOW}Step 0: Checking for zstd...${NC}"
+if ! command -v zstd >/dev/null 2>&1; then
+    echo -e "${YELLOW}  zstd not found, installing...${NC}"
+    echo ""
+    if ! apt-get update; then
+        error_exit "Failed to update package lists for zstd installation"
+    fi
+    echo ""
+    if ! apt-get install -y zstd; then
+        error_exit "Failed to install zstd package"
+    fi
+    echo ""
+    echo -e "${GREEN}✓ zstd installed${NC}"
+else
+    echo -e "${GREEN}✓ zstd already installed${NC}"
+fi
+echo ""
+
+# Step 1: Install linux-firmware package
+echo -e "${YELLOW}Step 1: Installing linux-firmware package...${NC}"
+echo ""
+if ! apt-get update; then
+    error_exit "Failed to update package lists"
+fi
+echo ""
+if ! apt-get install -y linux-firmware; then
+    error_exit "Failed to install linux-firmware package"
+fi
+echo ""
+
+# Verify firmware directory exists
+if [ ! -d "$FIRMWARE_DIR" ]; then
+    error_exit "Firmware directory $FIRMWARE_DIR does not exist"
+fi
+
+echo -e "${GREEN}✓ linux-firmware installed${NC}"
+echo ""
+
+# Step 2: Find and decompress all actual .zst archive files (not symlinks)
+echo -e "${YELLOW}Step 2: Decompressing .zst archive files...${NC}"
+echo ""
+decompressed_count=0
+
+# Use temporary file for find results (more compatible than process substitution)
+TEMP_FILE=$(mktemp)
+TEMP_FILE2=$(mktemp)
+trap "rm -f '$TEMP_FILE' '$TEMP_FILE2'" EXIT
+
+# Find all .zst files that are NOT symlinks
+find "$FIRMWARE_DIR" -type f -name "*.zst" -print0 2>/dev/null > "$TEMP_FILE" || true
+
+while IFS= read -r -d '' zst_file; do
+    # Skip if it's a symlink (double-check)
+    if [ -L "$zst_file" ]; then
+        continue
+    fi
+    
+    # Get the target filename without .zst extension
+    target_file="${zst_file%.zst}"
+    
+    # Skip if target already exists
+    if [ -e "$target_file" ]; then
+        echo -e "${YELLOW}  Skipping $zst_file (target already exists)${NC}"
+        continue
+    fi
+    
+    # Decompress the file
+    if zstd -d "$zst_file" -o "$target_file" 2>/dev/null; then
+        # Verify decompression was successful
+        if [ -f "$target_file" ]; then
+            # Delete the original archive
+            rm -f "$zst_file"
+            decompressed_count=$((decompressed_count + 1))
+        else
+            error_exit "Decompression failed for $zst_file: target file not created"
+        fi
+    else
+        error_exit "Failed to decompress $zst_file"
+    fi
+done < "$TEMP_FILE"
+
+echo ""
+echo -e "${GREEN}✓ Decompressed $decompressed_count archive file(s)${NC}"
+echo ""
+
+# Step 3: Process symlinks ending with .zst
+echo -e "${YELLOW}Step 3: Processing .zst symlinks...${NC}"
+echo ""
+symlink_count=0
+
+# Find all symlinks ending with .zst
+find "$FIRMWARE_DIR" -type l -name "*.zst" -print0 2>/dev/null > "$TEMP_FILE2" || true
+
+while IFS= read -r -d '' symlink_path; do
+    # Get the target of the symlink
+    target_path=$(readlink "$symlink_path")
+    
+    # Handle relative symlinks
+    if [[ "$target_path" != /* ]]; then
+        symlink_dir=$(dirname "$symlink_path")
+        target_path=$(realpath -m "$symlink_dir/$target_path")
+    fi
+    
+    # Try to find the actual file - check multiple locations
+    original_target="$target_path"
+    found_target=""
+    
+    # Check original path
+    if [ -e "$target_path" ]; then
+        found_target="$target_path"
+    fi
+    
+    # If pointing to /usr/lib/firmware/, try /lib/firmware/ version
+    if [ -z "$found_target" ] && [[ "$target_path" == /usr/lib/firmware/* ]]; then
+        alt_path="/lib/firmware/${target_path#/usr/lib/firmware/}"
+        if [ -e "$alt_path" ]; then
+            found_target="$alt_path"
+        fi
+    fi
+    
+    # If still not found and it's a .zst path, check if decompressed version exists
+    if [ -z "$found_target" ] && [[ "$target_path" == *.zst ]]; then
+        # Check decompressed version in original location
+        decompressed_path="${target_path%.zst}"
+        if [ -e "$decompressed_path" ]; then
+            found_target="$decompressed_path"
+        fi
+        
+        # Check decompressed version in /lib/firmware/
+        if [ -z "$found_target" ] && [[ "$target_path" == /usr/lib/firmware/* ]]; then
+            alt_decompressed="/lib/firmware/${decompressed_path#/usr/lib/firmware/}"
+            if [ -e "$alt_decompressed" ]; then
+                found_target="$alt_decompressed"
+            fi
+        fi
+    fi
+    
+    # If still not found, try /lib/firmware/ version even if original wasn't /usr/lib/firmware/
+    if [ -z "$found_target" ] && [[ "$target_path" != /lib/firmware/* ]]; then
+        # Extract relative path and try /lib/firmware/
+        if [[ "$target_path" == /* ]]; then
+            rel_path="${target_path#/}"
+            alt_path="/lib/firmware/$rel_path"
+            if [ -e "$alt_path" ]; then
+                found_target="$alt_path"
+            fi
+        fi
+    fi
+    
+    # If still not found, give up
+    if [ -z "$found_target" ]; then
+        echo -e "${YELLOW}  Warning: Symlink $symlink_path points to non-existent target $original_target${NC}"
+        continue
+    fi
+    
+    target_path="$found_target"
+    
+    # If target is a symlink itself, resolve it
+    while [ -L "$target_path" ]; do
+        link_target=$(readlink "$target_path")
+        if [[ "$link_target" != /* ]]; then
+            link_dir=$(dirname "$target_path")
+            link_target=$(realpath -m "$link_dir/$link_target")
+        fi
+        
+        # Try to find the actual file - check multiple locations
+        original_link="$link_target"
+        found_link=""
+        
+        # Check original path
+        if [ -e "$link_target" ]; then
+            found_link="$link_target"
+        fi
+        
+        # If pointing to /usr/lib/firmware/, try /lib/firmware/ version
+        if [ -z "$found_link" ] && [[ "$link_target" == /usr/lib/firmware/* ]]; then
+            alt_path="/lib/firmware/${link_target#/usr/lib/firmware/}"
+            if [ -e "$alt_path" ]; then
+                found_link="$alt_path"
+            fi
+        fi
+        
+        # If still not found and it's a .zst path, check if decompressed version exists
+        if [ -z "$found_link" ] && [[ "$link_target" == *.zst ]]; then
+            decompressed_path="${link_target%.zst}"
+            if [ -e "$decompressed_path" ]; then
+                found_link="$decompressed_path"
+            fi
+            
+            if [ -z "$found_link" ] && [[ "$link_target" == /usr/lib/firmware/* ]]; then
+                alt_decompressed="/lib/firmware/${decompressed_path#/usr/lib/firmware/}"
+                if [ -e "$alt_decompressed" ]; then
+                    found_link="$alt_decompressed"
+                fi
+            fi
+        fi
+        
+        if [ -z "$found_link" ]; then
+            # If we can't resolve it, break and use what we have
+            break
+        fi
+        
+        target_path="$found_link"
+    done
+    
+    # Check if target is a .zst file that needs decompression
+    # Ensure it's not a symlink (should already be resolved, but double-check)
+    if [[ "$target_path" == *.zst ]] && [ -f "$target_path" ] && [ ! -L "$target_path" ]; then
+        # Decompress the target file
+        decompressed_target="${target_path%.zst}"
+        
+        if [ -e "$decompressed_target" ]; then
+            echo -e "${YELLOW}  Target already decompressed: $decompressed_target${NC}"
+            target_path="$decompressed_target"
+        else
+            if zstd -d "$target_path" -o "$decompressed_target" 2>/dev/null; then
+                if [ -f "$decompressed_target" ]; then
+                    rm -f "$target_path"
+                    target_path="$decompressed_target"
+                else
+                    error_exit "Failed to decompress target $target_path"
+                fi
+            else
+                error_exit "Failed to decompress target $target_path"
+            fi
+        fi
+    fi
+    
+    # Calculate the new symlink path (remove .zst extension)
+    new_symlink_path="${symlink_path%.zst}"
+    
+    # Skip if new symlink path already exists and is not a symlink
+    if [ -e "$new_symlink_path" ] && [ ! -L "$new_symlink_path" ]; then
+        echo -e "${YELLOW}  Skipping $symlink_path (target file already exists)${NC}"
+        continue
+    fi
+    
+    # Calculate the relative path from new symlink location to target
+    new_symlink_dir=$(dirname "$new_symlink_path")
+    relative_target=$(realpath --relative-to="$new_symlink_dir" "$target_path" 2>/dev/null || echo "$target_path")
+    
+    # Remove old symlink
+    rm -f "$symlink_path"
+    
+    # Create new symlink without .zst extension pointing to decompressed file
+    if ln -sf "$relative_target" "$new_symlink_path"; then
+        symlink_count=$((symlink_count + 1))
+    else
+        error_exit "Failed to create symlink $new_symlink_path -> $relative_target"
+    fi
+    
+done < "$TEMP_FILE2"
+
+echo ""
+echo -e "${GREEN}✓ Processed $symlink_count symlink(s)${NC}"
+echo ""
+
+# Step 4: Create marker file to indicate successful completion
+echo -e "${YELLOW}Step 4: Creating completion marker...${NC}"
+echo ""
+if mkdir -p "$(dirname "$MARKER_FILE")" && touch "$MARKER_FILE"; then
+    echo -e "${GREEN}✓ Marker file created: $MARKER_FILE${NC}"
+else
+    error_exit "Failed to create marker file"
+fi
+echo ""
+
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}Firmware setup completed successfully!${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "  Decompressed archives: $decompressed_count"
+echo -e "  Processed symlinks: $symlink_count"
+echo -e "  Marker file: $MARKER_FILE"
+echo ""
+
+exit 0

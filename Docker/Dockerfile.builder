@@ -39,12 +39,13 @@ EOF
 # Copy custom scripts first
 COPY scripts/systemctl3.py /usr/local/bin/systemctl
 COPY scripts/first-run-setup.sh /usr/local/bin/
+COPY scripts/download-firmware /usr/local/bin/
 
 # Copy our bashrc script to the rootfs
 COPY scripts/bashrc.sh /etc/profile.d/chroot-webui-aliases.sh
 
 # Make scripts executable
-RUN chmod +x /usr/local/bin/systemctl /usr/local/bin/first-run-setup.sh /etc/profile.d/chroot-webui-aliases.sh
+RUN chmod +x /usr/local/bin/systemctl /usr/local/bin/first-run-setup.sh /usr/local/bin/download-firmware /etc/profile.d/chroot-webui-aliases.sh
 
 # This is the main installation layer. All package installations, PPA additions,
 # and setup are done here to minimize layers and maximize build speed.

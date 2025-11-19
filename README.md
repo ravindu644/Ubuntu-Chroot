@@ -197,6 +197,16 @@ A comprehensive Android Linux environment featuring **Ubuntu 24.04** with a buil
 
 - You can convert your existing directory-based installation to an isolated ext4 sparse image from the WebUI under **Experimental Features**.
 
+**Downloading Firmware**
+
+- If you want to download and decompress firmware files (useful for hardware compatibility), run the following command inside the chroot:
+  ```bash
+  sudo download-firmware
+  ```
+  This script will install the `linux-firmware` package, decompress all `.zst` firmware archives, and update symlinks to point to the decompressed files. The script creates a marker file to prevent re-running, so it's safe to execute multiple times.
+
+- After downloading the firmware, restart the chroot from the WebUI to apply the changes.
+
 <a id="to-do"></a>
 ## 📋 To-Do
 
