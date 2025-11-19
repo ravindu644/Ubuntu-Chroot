@@ -107,8 +107,9 @@ A comprehensive Android Linux environment featuring **Ubuntu 24.04** with a buil
 
 - A complete Linux desktop experience on Android, capable of running GUI applications smoothly.<sup>[<a href="#04-gui-applications-support">4</a>]</sup>
 
-**Integrated Dual-Band Hotspot**  
+**Forward Chroot Traffic to Any Network Interface**  
 - Native WiFi hotspot functionality supporting both 2.4GHz and 5GHz bands. Automatically configures `hostapd` and DHCP services within the chroot environment for instant `localhost` sharing.
+- If the Native WiFi hotspot didn't work for you, you still have a separated menu to forward all the chroot traffic to any desired network interface. (e.g., USB Tethering/WiFi Hotspot created using Android userspace)
 
 > **💡 Example**:
 > 
@@ -136,13 +137,24 @@ A comprehensive Android Linux environment featuring **Ubuntu 24.04** with a buil
 <table>
 <tr>
   <td align="left" valign="top">
-    <img src="Screenshots/Main.jpg" alt="WebUI main screen" width="270" /><br><em>Main screen</em>
+    <img src="Screenshots/v3.5.5/1.jpg" alt="WebUI screenshot 1" width="270" />
   </td>
   <td align="left" valign="top">
-    <img src="Screenshots/Hotspot.jpg" alt="WebUI hotspot" width="270" /><br><em>Hotspot settings</em>
+    <img src="Screenshots/v3.5.5/2.jpg" alt="WebUI screenshot 2" width="270" />
   </td>
   <td align="left" valign="top">
-    <img src="Screenshots/Options.jpg" alt="WebUI options" width="270" /><br><em>Options panel</em>
+    <img src="Screenshots/v3.5.5/3.jpg" alt="WebUI screenshot 3" width="270" />
+  </td>
+</tr>
+<tr>
+  <td align="left" valign="top">
+    <img src="Screenshots/v3.5.5/4.jpg" alt="WebUI screenshot 4" width="270" />
+  </td>
+  <td align="left" valign="top">
+    <img src="Screenshots/v3.5.5/5.jpg" alt="WebUI screenshot 5" width="270" />
+  </td>
+  <td align="left" valign="top">
+    <img src="Screenshots/v3.5.5/6.jpg" alt="WebUI screenshot 6" width="270" />
   </td>
 </tr>
 </table>
