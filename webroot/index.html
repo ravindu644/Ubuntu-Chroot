@@ -4,9 +4,33 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Ubuntu Chroot Manager</title>
+  <script>
+    // Set theme immediately before CSS loads to prevent flash
+    try {
+      const stored = localStorage.getItem('chroot_theme');
+      const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
+      document.documentElement.setAttribute('data-theme', (stored === 'dark' || (!stored && prefersDark)) ? 'dark' : '');
+    } catch(e) {}
+  </script>
+  <style>
+    /* Prevent black screen flash - set background immediately */
+    html,body{background:#E95420}
+    html[data-theme="dark"],html[data-theme="dark"] body{background:#0f0f0f}
+  </style>
   <link rel="stylesheet" href="assets/styles.css">
 </head>
 <body>
+  <!-- Loading Screen -->
+  <div id="loading-screen" class="loading-screen">
+    <div class="loading-dots">
+      <div class="loading-dot"></div>
+      <div class="loading-dot"></div>
+      <div class="loading-dot"></div>
+      <div class="loading-dot"></div>
+      <div class="loading-dot"></div>
+    </div>
+  </div>
+
   <div class="app">
     <header class="top">
       <div class="brand">
