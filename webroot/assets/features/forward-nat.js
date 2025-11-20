@@ -246,23 +246,47 @@
       setTimeout(() => {
         runCmdAsync(cmd, (result) => {
           ProgressIndicator.remove(progressLine, progressInterval);
-          
+
+          // Always clear the state marker, even if there were errors
+          forwardingActive.value = false;
+          saveForwardingStatus();
+          ButtonState.setButtonPair(els.startForwardingBtn, els.stopForwardingBtn, false);
+
           if(result.success) {
             appendConsole(`✓ Forwarding stopped successfully`, 'success');
-            forwardingActive.value = false;
-            saveForwardingStatus();
-            ButtonState.setButtonPair(els.startForwardingBtn, els.stopForwardingBtn, false);
           } else {
-            appendConsole(`✗ Failed to stop forwarding (exit code: ${result.exitCode || 'unknown'})`, 'err');
+            // Check output for warnings - script now warns instead of exiting
+            const output = result.output || '';
+            if(output.includes('warn') || output.includes('WARN') || output.includes('warning')) {
+              appendConsole(`⚠ Forwarding cleanup completed with warnings`, 'warn');
+              if(output.trim()) {
+                const lines = output.split('\n');
+                lines.forEach(line => {
+                  if(line.trim() && !line.trim().startsWith('[Executing:')) {
+                    appendConsole(line.trim(), 'warn');
+                  }
+                });
+              }
+            } else {
+              appendConsole(`⚠ Forwarding stop completed (some rules may not have existed)`, 'warn');
+              if(output.trim()) {
+                const lines = output.split('\n');
+                lines.forEach(line => {
+                  if(line.trim() && !line.trim().startsWith('[Executing:')) {
+                    appendConsole(line.trim());
+                  }
+                });
+              }
+            }
           }
-          
+
           // Force scroll to bottom after completion messages
           forceScrollAfterDOMUpdate();
-          
+
           activeCommandId.value = null;
           disableAllActions(false);
           disableSettingsPopup(false, true);
-          
+
           setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH);
         });
       }, ANIMATION_DELAYS.UI_UPDATE);
@@ -282,4 +306,3 @@
     refreshInterfaces
   };
 })(window);
-

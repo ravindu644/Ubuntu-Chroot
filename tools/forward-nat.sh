@@ -194,25 +194,66 @@ setup_routing() {
     log "  SSH:  $GATEWAY_IP"
 }
 
+check_routing_active() {
+    # Check if forwarding is active by examining iptables rules (universal method)
+    # Must have ALL 4 rules to be considered active
+    local iface=""
+    [ -f "$STATE_FILE" ] && . "$STATE_FILE" 2>/dev/null && iface="$TARGET_IFACE"
+    
+    # Check state file interface first - require ALL rules
+    [ -n "$iface" ] && {
+        iptables -C INPUT -i "$iface" -j ACCEPT 2>/dev/null && \
+        iptables -C OUTPUT -o "$iface" -j ACCEPT 2>/dev/null && \
+        iptables -C FORWARD -i "$iface" -j ACCEPT 2>/dev/null && \
+        iptables -C FORWARD -o "$iface" -j ACCEPT 2>/dev/null && {
+            echo "active"
+            return 0
+        }
+    }
+    
+    # Fallback: check all interfaces - require ALL rules
+    for check_iface in $(ip link show | grep -E '^[0-9]+:' | awk -F': ' '{print $2}' | sed 's/@.*//' | grep -vE '^(lo|tunl|gre|erspan|ip_vti|ip6|sit|ifb|dummy|epdg|p2p)'); do
+        iptables -C INPUT -i "$check_iface" -j ACCEPT 2>/dev/null && \
+        iptables -C OUTPUT -o "$check_iface" -j ACCEPT 2>/dev/null && \
+        iptables -C FORWARD -i "$check_iface" -j ACCEPT 2>/dev/null && \
+        iptables -C FORWARD -o "$check_iface" -j ACCEPT 2>/dev/null && {
+            echo "active"
+            return 0
+        }
+    done
+    
+    echo "inactive"
+    return 1
+}
+
 cleanup_routing() {
     log "Cleaning up routing..."
 
-    if [ -z "$TARGET_IFACE" ]; then
-        if ! load_state; then
-            error "No config found. Use: -i <interface> -k"
-            exit 1
-        fi
+    # Try to get interface from state file
+    [ -z "$TARGET_IFACE" ] && load_state 2>/dev/null
+
+    # Remove rules if interface found
+    if [ -n "$TARGET_IFACE" ]; then
+        log "Removing rules from $TARGET_IFACE..."
+        iptables -D FORWARD -o "$TARGET_IFACE" -j ACCEPT 2>/dev/null
+        iptables -D FORWARD -i "$TARGET_IFACE" -j ACCEPT 2>/dev/null
+        iptables -D OUTPUT -o "$TARGET_IFACE" -j ACCEPT 2>/dev/null
+        iptables -D INPUT -i "$TARGET_IFACE" -j ACCEPT 2>/dev/null
+    else
+        # No state file - search and remove from any interface
+        warn "No state file found, searching for active forwarding rules..."
+        for check_iface in $(ip link show | grep -E '^[0-9]+:' | awk -F': ' '{print $2}' | sed 's/@.*//' | grep -vE '^(lo|tunl|gre|erspan|ip_vti|ip6|sit|ifb|dummy|epdg|p2p)'); do
+            iptables -D FORWARD -o "$check_iface" -j ACCEPT 2>/dev/null
+            iptables -D FORWARD -i "$check_iface" -j ACCEPT 2>/dev/null
+            iptables -D OUTPUT -o "$check_iface" -j ACCEPT 2>/dev/null
+            iptables -D INPUT -i "$check_iface" -j ACCEPT 2>/dev/null
+        done
     fi
 
-    log "Removing rules from $TARGET_IFACE..."
-
-    iptables -D FORWARD -o "$TARGET_IFACE" -j ACCEPT 2>/dev/null
-    iptables -D FORWARD -i "$TARGET_IFACE" -j ACCEPT 2>/dev/null
-    iptables -D OUTPUT -o "$TARGET_IFACE" -j ACCEPT 2>/dev/null
-    iptables -D INPUT -i "$TARGET_IFACE" -j ACCEPT 2>/dev/null
-
-    rm -f "$STATE_FILE"
-    log "Cleanup done"
+    # Always clear state file
+    rm -f "$STATE_FILE" 2>/dev/null
+    log "Cleanup completed"
+    return 0
 }
 
 print_usage() {
@@ -222,6 +263,7 @@ Android Localhost Router
 Usage:
   sh localhost_router.sh list-iface          List interfaces (excludes mobile data)
   sh localhost_router.sh list-all-iface      List all interfaces (includes mobile data)
+  sh localhost_router.sh check-status        Check if forwarding is active
   sh localhost_router.sh -i <interface>      Setup routing
   sh localhost_router.sh -k                  Cleanup
   sh localhost_router.sh -h                  Help
@@ -229,6 +271,7 @@ Usage:
 Examples:
   sh localhost_router.sh list-iface
   sh localhost_router.sh list-all-iface
+  sh localhost_router.sh check-status
   sh localhost_router.sh -i rndis0
   sh localhost_router.sh -k
 EOF
@@ -247,6 +290,10 @@ case "$1" in
         ;;
     list-all-iface)
         list_all_interfaces
+        exit 0
+        ;;
+    check-status)
+        check_routing_active
         exit 0
         ;;
     -h|--help|"")

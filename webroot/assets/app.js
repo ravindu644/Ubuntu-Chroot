@@ -1260,17 +1260,25 @@
   }
 
   /**
-   * Check if forward-nat is running (checks for state file)
+   * Check if forward-nat is running (universal method - checks iptables rules)
    */
   async function checkForwardNatRunning(){
     if(!rootAccessConfirmed){
       return false;
     }
     try{
-      const out = await runCmdSync(`test -f /data/local/tmp/localhost_router.state && echo "exists" || echo "not_exists"`);
-      return String(out||'').trim() === 'exists';
+      // Use the new check-status command that checks actual iptables rules
+      const out = await runCmdSync(`sh ${FORWARD_NAT_SCRIPT} check-status 2>&1`);
+      const status = String(out||'').trim();
+      return status === 'active';
     }catch(e){
-      return false;
+      // Fallback to state file check if command fails
+      try{
+        const out = await runCmdSync(`test -f /data/local/tmp/localhost_router.state && echo "exists" || echo "not_exists"`);
+        return String(out||'').trim() === 'exists';
+      }catch(e2){
+        return false;
+      }
     }
   }
   /**
@@ -1336,7 +1344,7 @@
         if(activeCommandId === localCommandId) {
           activeCommandId = null;
         }
-        
+
         // Print result
         if(result.success) {
           appendConsole(`✓ ${action} completed successfully`, 'success');
@@ -1582,6 +1590,19 @@
             hotspotActive = currentHotspotActive;
             StateManager.set('hotspot', currentHotspotActive);
             if(hotspotActiveRef) hotspotActiveRef.value = currentHotspotActive;
+            // Don't log during refresh - keep it quiet
+          }
+        }
+
+        // Check forward-nat state - sync with actual system state (check even if chroot stopped)
+        let currentForwardingActive = false;
+        if(rootAccessConfirmed){
+          currentForwardingActive = await checkForwardNatRunning();
+          if(currentForwardingActive !== forwardingActive){
+            // State mismatch - update our saved state to match reality
+            forwardingActive = currentForwardingActive;
+            StateManager.set('forwarding', currentForwardingActive);
+            if(forwardingActiveRef) forwardingActiveRef.value = currentForwardingActive;
             // Don't log during refresh - keep it quiet
           }
         }
@@ -3502,8 +3523,8 @@
   initTheme();
   loadConsoleLogs(); // Restore previous console logs
   // Don't load hotspot settings here - will be loaded when popup opens (after interfaces are populated)
-  loadHotspotStatus(); // Load hotspot status
-  loadForwardingStatus(); // Load forwarding status
+  loadHotspotStatus(); // Load hotspot status (will be synced with actual state in refreshStatus)
+  loadForwardingStatus(); // Load forwarding status (will be synced with actual state in refreshStatus)
   loadDebugMode(); // Load debug mode status
   
   // Initialize channel options on page load based on saved settings
