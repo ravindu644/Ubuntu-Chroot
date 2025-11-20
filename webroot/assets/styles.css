@@ -173,7 +173,7 @@ textarea {
   box-shadow: none !important;
   transform: none !important;
 }
-.console{flex:1 1 0;background:var(--console-bg);border-radius:10px;padding:12px;min-height:0;max-height:100%;overflow:auto;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;border:1px solid rgba(0,0,0,0.06);font-size:13px;line-height:1.5;white-space:pre;box-sizing:border-box;min-width:0;width:100%}
+.console{flex:1 1 0;background:var(--console-bg);border-radius:10px;padding:12px;min-height:0;max-height:100%;overflow:auto;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;border:1px solid rgba(0,0,0,0.06);font-size:13px;line-height:1.5;white-space:pre;box-sizing:border-box;min-width:0;width:100%;transform:translateZ(0);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 .console-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
 .foot{margin-top:auto;padding-top:14px;padding-bottom:calc(12px + var(--bottom-inset));color:var(--muted);font-size:14px;text-align:center;display:flex;align-items:center;justify-content:center;gap:12px;font-weight:500;flex-shrink:0}
 .foot a{color:var(--muted);text-decoration:none;transition:color 0.2s ease;font-weight:500;-webkit-tap-highlight-color:transparent}
@@ -313,6 +313,36 @@ textarea {
 @keyframes pulse{
   0%, 100%{opacity:1}
   50%{opacity:0.6}
+}
+
+@keyframes fadeInUp{
+  from{
+    opacity:0;
+    transform:translate3d(0, 8px, 0);
+  }
+  to{
+    opacity:1;
+    transform:translate3d(0, 0, 0);
+  }
+}
+
+.console > div.log-fade-in{
+  animation:fadeInUp 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  opacity:0;
+  will-change: opacity, transform;
+  backface-visibility: hidden;
+  transform:translateZ(0);
+}
+
+.console > div.log-immediate{
+  animation:none;
+  opacity:1;
+}
+
+/* Progress indicators should always pulse, even with log-immediate class */
+.console > div.progress-indicator.log-immediate{
+  animation:pulse 1.5s ease-in-out infinite !important;
+  opacity:1;
 }
 
 /* ============================================================================
