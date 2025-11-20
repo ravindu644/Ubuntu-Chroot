@@ -1347,20 +1347,22 @@
       const statusState = action === 'start' ? 'starting' : action === 'stop' ? 'stopping' : 'restarting';
       updateStatus(statusState);
       
-      // Use centralized flow: scroll, header, animation
+      // Stop network services on stop/restart BEFORE creating progress indicator
+      // This way the chroot action animation shows properly
+      if(action === 'stop' || action === 'restart'){
+        if(window.StopNetServices) {
+          // Stop network services silently (no progress indicator interference)
+          await StopNetServices.stopNetworkServices({ silent: false });
+        }
+      }
+
+      // Use centralized flow: scroll, header, animation (after network services stopped)
       const actionText = action.charAt(0).toUpperCase() + action.slice(1) + 'ing chroot';
       const { progressLine, interval: progressInterval } = await prepareActionExecution(
         actionText,
         actionText,
         'dots'
       );
-
-      // Stop network services on stop/restart
-      if(action === 'stop' || action === 'restart'){
-        if(window.StopNetServices) {
-          await StopNetServices.stopNetworkServices({ progressLine });
-        }
-      }
 
       // STEP 4: Execute command (animation stays visible during execution)
       const cmd = `sh ${PATH_CHROOT_SH} ${action} --no-shell`;
@@ -1449,19 +1451,20 @@
       // Status check failed, try to stop anyway
     }
     
-    // Chroot is running, stop it properly using centralized flow
+    // Stop network services first BEFORE creating progress indicator
+    // This way the chroot action animation shows properly
+    updateStatus('stopping');
+    
+    if(window.StopNetServices) {
+      await StopNetServices.stopNetworkServices({ silent: false });
+    }
+    
+    // Chroot is running, stop it properly using centralized flow (after network services stopped)
     const { progressLine, progressInterval } = await prepareActionExecution(
       'Stopping Chroot',
       'Stopping chroot',
       'dots'
     );
-    
-    updateStatus('stopping');
-    
-    // Stop network services first (like the Stop button does)
-    if(window.StopNetServices) {
-      await StopNetServices.stopNetworkServices({ progressLine });
-    }
     
     return new Promise((resolve) => {
       const stopCmd = `sh ${PATH_CHROOT_SH} stop --no-shell`;
