@@ -1357,7 +1357,10 @@
       }
 
       // Use centralized flow: scroll, header, animation (after network services stopped)
-      const actionText = action.charAt(0).toUpperCase() + action.slice(1) + 'ing chroot';
+      // Fix typo: "stop" -> "stopping" (not "stoping")
+      const actionText = action === 'stop' ? 'Stopping chroot' : 
+                        action === 'start' ? 'Starting chroot' : 
+                        'Restarting chroot';
       const { progressLine, interval: progressInterval } = await prepareActionExecution(
         actionText,
         actionText,
