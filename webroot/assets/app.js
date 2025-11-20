@@ -37,6 +37,7 @@
     stopHotspotBtn: document.getElementById('stop-hotspot-btn'),
     hotspotForm: document.getElementById('hotspot-form'),
     hotspotWarning: document.getElementById('hotspot-warning'),
+    loadingScreen: document.getElementById('loading-screen'),
     dismissHotspotWarning: document.getElementById('dismiss-hotspot-warning'),
     sparseSettingsBtn: document.getElementById('sparse-settings-btn'),
     sparseSettingsPopup: document.getElementById('sparse-settings-popup'),
@@ -428,7 +429,7 @@
     BUTTON_ANIMATION: 120, // Reduced for snappier feel
     BUTTON_RELEASE: 120, // Delay for button release animation
     INPUT_FOCUS: 100, // Delay for focusing inputs after DOM manipulation
-    INIT_DELAY: 160, // Initial page load delay
+    INIT_DELAY: 0, // Initial page load delay (removed to speed up loading)
     PRE_FETCH_DELAY: 500, // Delay before pre-fetching interfaces
     SETTINGS_LOAD: 100, // Delay for loading settings after popup opens
     CHANNEL_VERIFY: 100, // Delay for verifying channel value after load
@@ -3643,18 +3644,40 @@
   initExperimentalFeatures(); // Initialize experimental features
   initFeatureModules(); // Initialize feature modules
   
-  // small delay to let command-executor attach if present
+  /**
+   * Hide loading screen with fade-out animation
+   */
+  function hideLoadingScreen() {
+    const screen = els.loadingScreen;
+    if(screen && !screen.classList.contains('hidden')) {
+      screen.classList.add('hidden');
+      setTimeout(() => screen && (screen.style.display = 'none'), 300);
+    }
+  }
+
+  // Check if first load and hide loading screen if not
+  const isFirstLoad = !sessionStorage.getItem('chroot_ui_loaded');
+  if(!isFirstLoad && els.loadingScreen) {
+    els.loadingScreen.style.display = 'none';
+  }
+
+  // Initialize app
   setTimeout(async ()=>{
     try {
-    await checkRootAccess(); // Master root detection
-    // Update status immediately - don't wait for informational messages
-    // fetchUsers() runs in background and will print message when ready (non-blocking)
-    await refreshStatus(); // Status updates immediately
-    
-    // Read boot file in parallel - message will print when ready (non-blocking)
-    readBootFile(false).catch(() => {}); // Don't await - let it run in background
+      await checkRootAccess();
+      await refreshStatus();
+      readBootFile(false).catch(() => {});
+      
+      if(isFirstLoad) {
+        hideLoadingScreen();
+        sessionStorage.setItem('chroot_ui_loaded', 'true');
+      }
     } catch(e) {
       appendConsole(`Initialization error: ${e.message}`, 'err');
+      if(isFirstLoad) {
+        hideLoadingScreen();
+        sessionStorage.setItem('chroot_ui_loaded', 'true');
+      }
     }
   }, ANIMATION_DELAYS.INIT_DELAY);
 
