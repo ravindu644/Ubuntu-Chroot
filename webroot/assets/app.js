@@ -213,7 +213,7 @@
   /**
    * Fetch available users from chroot using list-users command
    */
-  async function fetchUsers(){
+  async function fetchUsers(silent = false){
     if(!rootAccessConfirmed){
       return; // Don't attempt command - root check already printed error
     }
@@ -244,9 +244,13 @@
         select.value = savedUser;
       }
 
-      appendConsole(`Found ${users.length} regular user(s) in chroot`, 'info');
+      if(!silent) {
+        appendConsole(`Found ${users.length} regular user(s) in chroot`, 'info');
+      }
     }catch(e){
-      appendConsole(`Could not fetch users from chroot: ${e.message}`, 'warn');
+      if(!silent) {
+        appendConsole(`Could not fetch users from chroot: ${e.message}`, 'warn');
+      }
       // Keep only root option
       els.userSelect.innerHTML = '<option value="root">root</option>';
     }
@@ -1629,9 +1633,11 @@
         // Check for "Status: RUNNING" from the status output
         running = /Status:\s*RUNNING/i.test(s);
 
-        // Fetch users if running (do this before UI updates to avoid flicker)
+        // Fetch users if running - run in background to avoid blocking status update
+        // Messages will appear asynchronously after status is updated
         if(running){
-          await fetchUsers();
+          // Don't await - let it run in background, messages will print when ready
+          fetchUsers(false).catch(() => {}); // Non-blocking, will print message async
         }
 
         // Check hotspot state if running - sync with actual system state
@@ -3641,8 +3647,12 @@
   setTimeout(async ()=>{
     try {
     await checkRootAccess(); // Master root detection
-    await refreshStatus(); // Wait for status check
-    await readBootFile(); // Wait for boot file read
+    // Update status immediately - don't wait for informational messages
+    // fetchUsers() runs in background and will print message when ready (non-blocking)
+    await refreshStatus(); // Status updates immediately
+    
+    // Read boot file in parallel - message will print when ready (non-blocking)
+    readBootFile(false).catch(() => {}); // Don't await - let it run in background
     } catch(e) {
       appendConsole(`Initialization error: ${e.message}`, 'err');
     }
