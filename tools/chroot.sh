@@ -243,6 +243,41 @@ run_fstrim() {
     fi
 }
 
+android_optimizations() {
+    local mode="$1"
+
+    if [ "$mode" = "--enable" ]; then
+        # Disable Android Doze to prevent background slowdowns
+        su -c 'dumpsys deviceidle disable' >/dev/null 2>&1
+
+        # Disable device config sync to prevent system from overriding our settings
+        su -c "/system/bin/device_config set_sync_disabled_for_tests persistent" >/dev/null 2>&1
+
+        # Disable phantom process monitoring
+        su -c "/system/bin/settings put global settings_enable_monitor_phantom_procs false" >/dev/null 2>&1
+
+        # Set max phantom processes to maximum value to prevent killing
+        su -c "/system/bin/device_config put activity_manager max_phantom_processes 2147483647" >/dev/null 2>&1
+        
+        log "Optimized Android to keep chroot alive"
+
+    elif [ "$mode" = "--disable" ]; then
+        # Re-enable Android Doze
+        su -c 'dumpsys deviceidle enable' >/dev/null 2>&1
+
+        # Re-enable device config sync
+        su -c "/system/bin/device_config set_sync_disabled_for_tests none" >/dev/null 2>&1
+
+        # Re-enable phantom process monitoring
+        su -c "/system/bin/settings put global settings_enable_monitor_phantom_procs true" >/dev/null 2>&1
+
+        # Reset max phantom processes to default (32 is typical default)
+        su -c "/system/bin/device_config put activity_manager max_phantom_processes 32" >/dev/null 2>&1
+
+        log "Reverted Android optimizations"
+    fi
+}
+
 apply_internet_fix() {
     log "Applying networking fixes..."
 
@@ -568,7 +603,7 @@ start_chroot() {
         run_in_chroot "echo '$SCRIPT_B64' | base64 -d | bash"
     fi
 
-    su -c 'dumpsys deviceidle disable' >/dev/null 2>&1 && log "Disabled Android Doze to prevent background slowdowns"
+    android_optimizations --enable
 
     # Clear flag after setup is complete
     CHROOT_SETUP_IN_PROGRESS=0
@@ -602,7 +637,7 @@ stop_chroot() {
         rm -f "$HOLDER_PID_FILE" "$HOLDER_PID_FILE.flags"
     fi
     
-    su -c 'dumpsys deviceidle enable' >/dev/null 2>&1 && log "Re-enabled Android Doze"
+    android_optimizations --disable
 
     log "Chroot stopped successfully."
 }
