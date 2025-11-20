@@ -166,6 +166,26 @@
       saveConsoleLogs();
     }
     
+    // Apply fade-in animation if console has < 15 lines and no scrollbar
+    const finalLines = pre.querySelectorAll('div');
+    const hasScrollbar = pre.scrollHeight > pre.clientHeight;
+    const shouldAnimate = finalLines.length < 15 && !hasScrollbar;
+    
+    if(shouldAnimate) {
+      // Use requestAnimationFrame for smoother initial render
+      requestAnimationFrame(() => {
+        finalLines.forEach((line, index) => {
+          // Skip progress indicators - they appear immediately
+          if(!line.classList.contains('progress-indicator')) {
+            line.classList.add('log-fade-in');
+            line.style.animationDelay = `${index * 45}ms`; // 45ms stagger per line (slightly faster)
+          } else {
+            line.classList.add('log-immediate');
+          }
+        });
+      });
+    }
+    
     // Aggressive scroll-to-bottom: try multiple times to ensure it sticks
     // The browser might reset scroll position, so we force it multiple times
     function forceScrollToBottom() {
@@ -236,6 +256,7 @@
    * Append text to console with optional styling
    * Enforces max line limit to prevent memory issues
    * Excludes progress indicators from line count to prevent removing them
+   * Adds smooth fade-in animation when console has < 15 lines
    */
   function appendConsole(text, cls){
     const pre = els.console;
@@ -254,6 +275,32 @@
     const line = document.createElement('div');
     if(cls) line.className = cls;
     line.textContent = text + '\n';
+    
+    // Check if we should animate (when console has < 15 lines and no scrollbar)
+    const isProgressIndicator = cls === 'progress-indicator' || text.includes('⏳');
+    const totalLines = pre.querySelectorAll('div').length;
+    const hasScrollbar = pre.scrollHeight > pre.clientHeight;
+    const shouldAnimate = totalLines < 15 && !hasScrollbar && !isProgressIndicator;
+    
+    if(shouldAnimate) {
+      // Apply fade-in animation with staggered delay (smooth cascade effect)
+      line.classList.add('log-fade-in');
+      // Use requestAnimationFrame for smoother timing
+      requestAnimationFrame(() => {
+        const delay = (totalLines * 45); // 45ms delay per line (slightly faster for snappier feel)
+        line.style.animationDelay = `${delay}ms`;
+        // Cleanup will-change after animation completes (performance optimization)
+        setTimeout(() => {
+          if(line.classList.contains('log-fade-in')) {
+            line.style.willChange = 'auto';
+          }
+        }, delay + 350); // animation duration + delay
+      });
+    } else if(isProgressIndicator) {
+      // Progress indicators appear immediately
+      line.classList.add('log-immediate');
+    }
+    
     pre.appendChild(line);
     
     // Auto-scroll to bottom smoothly, but only if user is already near bottom
@@ -660,7 +707,7 @@
   const ProgressIndicator = {
     create(text, type = 'spinner') {
       const progressLine = document.createElement('div');
-      progressLine.className = 'progress-indicator';
+      progressLine.className = 'progress-indicator log-immediate';
       const baseText = '⏳ ' + text;
       progressLine.textContent = baseText;
       els.console.appendChild(progressLine);
