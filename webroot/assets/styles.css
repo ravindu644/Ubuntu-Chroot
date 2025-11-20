@@ -24,7 +24,7 @@
 *{box-sizing:border-box}
 html,body{height:100%;min-height:100vh}
 /* Prevent horizontal page scrolling; allow vertical scroll when content exceeds viewport */
-body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial; background:var(--bg); color:var(--text);overflow-x:hidden;padding-top:var(--top-inset);padding-bottom:var(--bottom-inset)}
+body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial; background:var(--bg); color:var(--text);overflow-x:hidden;padding-top:var(--top-inset);padding-bottom:var(--bottom-inset);box-sizing:border-box}
 
 /* Disable text selection globally */
 * {
@@ -46,10 +46,10 @@ textarea {
   user-select: text;
 }
 
-.app{max-width:1200px;width:100%;box-sizing:border-box;margin:0 auto;padding:12px}
+.app{max-width:1200px;width:100%;box-sizing:border-box;margin:0 auto;padding:12px;display:flex;flex-direction:column;min-height:calc(100vh - var(--top-inset) - var(--bottom-inset))}
  
 .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;position:fixed;top:0;left:50%;transform:translateX(-50%);padding:calc(var(--top-inset) + 8px) 12px 8px;background:var(--bg);z-index:10;width:100%;max-width:1200px;box-sizing:border-box;border-bottom:1px solid rgba(0,0,0,0.05)}
-.panel{display:grid;grid-template-columns:1fr;gap:14px;min-width:0;margin-top:calc(60px + var(--top-inset))}
+.panel{display:flex;flex-direction:column;gap:14px;min-width:0;margin-top:calc(60px + var(--top-inset));flex:1 1 auto}
 .card{background:var(--card);border-radius:var(--surface-radius);padding:16px;box-shadow:0 6px 20px rgba(6,8,14,0.06);box-sizing:border-box;min-width:0;border:1px solid rgba(0,0,0,0.12)}
 .title{margin:0 0 10px 0;display:flex;align-items:center}
 .row{display:flex;align-items:center;justify-content:space-between;margin-top:8px}
@@ -99,7 +99,7 @@ textarea {
 .row-label{color:var(--muted);font-size:14px;font-weight:500}
 .toggle-inline{display:inline-flex;gap:8px;align-items:center;font-size:14px}
 .note{color:var(--muted);font-size:14px}
-.console-card{display:flex;flex-direction:column;min-height:200px;max-height:400px;min-width:0}
+.console-card{display:flex;flex-direction:column;min-height:200px;min-width:0;flex:1 1 auto;overflow:hidden;max-height:100%}
 .console-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 .console-title{font-weight:600;font-size:16px;color:var(--muted)}
 .console-copy-btn {
@@ -173,9 +173,9 @@ textarea {
   box-shadow: none !important;
   transform: none !important;
 }
-.console{flex:1;background:var(--console-bg);border-radius:10px;padding:12px;min-height:200px;max-height:300px;overflow:auto;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;border:1px solid rgba(0,0,0,0.06);font-size:13px;line-height:1.5;white-space:pre;box-sizing:border-box;min-width:0;width:100%}
+.console{flex:1 1 0;background:var(--console-bg);border-radius:10px;padding:12px;min-height:0;max-height:100%;overflow:auto;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;border:1px solid rgba(0,0,0,0.06);font-size:13px;line-height:1.5;white-space:pre;box-sizing:border-box;min-width:0;width:100%}
 .console-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
-.foot{margin-top:12px;color:var(--muted);font-size:14px;text-align:center;display:flex;align-items:center;justify-content:center;gap:12px;font-weight:500}
+.foot{margin-top:auto;padding-top:14px;padding-bottom:calc(12px + var(--bottom-inset));color:var(--muted);font-size:14px;text-align:center;display:flex;align-items:center;justify-content:center;gap:12px;font-weight:500;flex-shrink:0}
 .foot a{color:var(--muted);text-decoration:none;transition:color 0.2s ease;font-weight:500;-webkit-tap-highlight-color:transparent}
 .foot a:hover{color:var(--accent);text-decoration:underline}
 .foot .separator{color:var(--muted);font-weight:400}
@@ -195,8 +195,8 @@ textarea {
 .small{font-size:12px}
 /* responsive behavior */
 @media (min-width:720px){
-  .panel{grid-template-columns:1fr 1fr}
-  .console-card{min-height:300px}
+  .panel{display:grid;grid-template-columns:1fr 1fr;flex:1 1 auto}
+  .console-card{min-height:300px;flex:1 1 auto;overflow:hidden}
 }
 
 @media (max-width:719px){
@@ -207,9 +207,11 @@ textarea {
   .btn-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
   .btn-row .btn{width:100%;min-width:0;padding:8px 6px;font-size:14px}
   .btn-box{padding:8px}
-  /* Reduce console height on small screens */
-  .console{min-height:150px;max-height:200px}
-  .console-card{max-height:300px}
+  /* Console fills available space on mobile with proper scrolling */
+  .console{min-height:0;overflow:auto}
+  .console-card{flex:1 1 auto;overflow:hidden}
+  /* Extra footer spacing on mobile */
+  .foot{padding-top:16px;padding-bottom:calc(16px + var(--bottom-inset))}
 }
 
 /* Console scrollbar styling */
