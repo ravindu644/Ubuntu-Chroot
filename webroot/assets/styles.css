@@ -9,7 +9,8 @@
   --surface-radius: 12px;
   --console-bg: rgba(0,0,0,0.04);
   /* Safe area insets like Tricky Addon */
-  --top-inset: env(safe-area-inset-top, 0px);
+  /* Use max() to ensure minimum status bar height on Android devices where safe-area-inset-top may not work */
+  --top-inset: max(env(safe-area-inset-top, 0px), 29px);
   --bottom-inset: env(safe-area-inset-bottom, 0px);
 }
 [data-theme="dark"]{
@@ -22,7 +23,7 @@
   --console-bg: rgba(255,255,255,0.03);
 }
 *{box-sizing:border-box}
-html,body{height:100%;min-height:100vh}
+html,body{height:100%;min-height:100vh;background:var(--bg)}
 /* Prevent horizontal page scrolling; allow vertical scroll when content exceeds viewport */
 body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial; background:var(--bg); color:var(--text);overflow-x:hidden;padding-top:var(--top-inset);padding-bottom:var(--bottom-inset);box-sizing:border-box}
 
@@ -48,8 +49,8 @@ textarea {
 
 .app{max-width:1200px;width:100%;box-sizing:border-box;margin:0 auto;padding:12px;display:flex;flex-direction:column;min-height:calc(100vh - var(--top-inset) - var(--bottom-inset))}
  
-.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;position:fixed;top:0;left:50%;transform:translateX(-50%);padding:calc(var(--top-inset) + 8px) 12px 8px;background:var(--bg);z-index:10;width:100%;max-width:1200px;box-sizing:border-box;border-bottom:1px solid rgba(0,0,0,0.05)}
-.panel{display:flex;flex-direction:column;gap:14px;min-width:0;margin-top:calc(60px + var(--top-inset));flex:1 1 auto}
+.top{display:flex;justify-content:space-between;align-items:center;position:fixed;top:0;left:50%;transform:translateX(-50%);padding:calc(var(--top-inset) + 8px) 12px 8px;background:var(--bg);z-index:10;width:100%;max-width:1200px;box-sizing:border-box;border-bottom:1px solid rgba(0,0,0,0.05)}
+.panel{display:flex;flex-direction:column;gap:14px;min-width:0;margin-top:calc(44px + var(--top-inset));flex:1 1 auto}
 .card{background:var(--card);border-radius:var(--surface-radius);padding:16px;box-shadow:0 6px 20px rgba(6,8,14,0.06);box-sizing:border-box;min-width:0;border:1px solid rgba(0,0,0,0.12)}
 .title{margin:0 0 10px 0;display:flex;align-items:center}
 .row{display:flex;align-items:center;justify-content:space-between;margin-top:8px}
@@ -1192,6 +1193,7 @@ textarea {
 .loading-screen.hidden {
   opacity: 0;
   pointer-events: none;
+  display: none;
 }
 
 [data-theme="dark"] .loading-screen {
