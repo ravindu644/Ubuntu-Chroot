@@ -22,6 +22,79 @@ permissions:
   contents: write
 
 jobs:
+  prepare-changelog:
+    if: ${{ !inputs.update_jsons_only }}
+    runs-on: ubuntu-latest
+    outputs:
+      changelog_body: ${{ steps.extract.outputs.body }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install dependencies
+        run: sudo apt update && sudo apt install -y jq
+
+      - name: Synchronize tags with remote
+        run: git fetch origin --prune --prune-tags --tags
+
+      - name: Generate Changelog
+        run: ./update_meta.sh
+        env:
+          VERSION: ${{ github.event.inputs.version || github.ref_name }}
+          GITHUB_REF_NAME: ${{ github.event.inputs.version || github.ref_name }}
+
+      - name: Extract Changelog Body
+        id: extract
+        run: |
+          TAG="${{ github.event.inputs.version || github.ref_name }}"
+          
+          # Extract changelog content for this version
+          CHANGELOG_CONTENT=$(awk '
+            /^## '"$TAG"' / { found=1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md)
+          
+          # Fallback extraction
+          if [ -z "$CHANGELOG_CONTENT" ]; then
+            CHANGELOG_CONTENT=$(sed -n '/^## '"$TAG"' /,/^## /{ /^## '"$TAG"' /d; /^## /d; p; }' CHANGELOG.md)
+          fi
+          
+          # Clean content
+          CHANGELOG_CONTENT=$(echo "$CHANGELOG_CONTENT" | sed '/^$/d' | head -n 200)
+          
+          if [ -z "$CHANGELOG_CONTENT" ]; then
+            CHANGELOG_CONTENT="No changelog entries for this version."
+          fi
+          
+          # Build release body with header and version info
+          RELEASE_BODY="## Changelog
+          
+          $CHANGELOG_CONTENT
+
+          ---
+
+          **Version Information:**
+          - **GUI**: Have XFCE Desktop environment pre-installed
+          - **CLI**: Command line only - no desktop environment"
+          
+          # Output raw body (GitHub Actions handles multiline strings)
+          {
+            echo 'body<<EOF'
+            echo "$RELEASE_BODY"
+            echo EOF
+          } >> $GITHUB_OUTPUT
+
+      - name: Upload Changelog
+        uses: actions/upload-artifact@v4
+        with:
+          name: changelog
+          path: CHANGELOG.md
+
   build:
     if: ${{ !inputs.update_jsons_only }}
     runs-on: ubuntu-latest
@@ -73,7 +146,7 @@ jobs:
   release:
     if: ${{ !inputs.update_jsons_only }}
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build, prepare-changelog]
     steps:
       - name: Download Artifacts
         uses: actions/download-artifact@v4
@@ -87,18 +160,20 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ github.event.inputs.version || github.ref_name }}
           name: "Ubuntu Chroot ${{ github.event.inputs.version || github.ref_name }}"
+          body: ${{ needs.prepare-changelog.outputs.changelog_body }}
           draft: false
           prerelease: false
+          makeLatest: true
 
   update-json:
     runs-on: ubuntu-latest
-    needs: release
+    needs: [release, prepare-changelog]
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           ref: main
-          fetch-depth: 0  # Critical: fetch all history and tags
+          fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configure Git
@@ -106,15 +181,54 @@ jobs:
           git config user.name 'GitHub Actions'
           git config user.email 'actions@github.com'
 
-      - name: Synchronize tags with remote
-        run: |
-          git fetch origin --prune --prune-tags --tags
+      - name: Download Changelog
+        uses: actions/download-artifact@v4
+        with:
+          name: changelog
+          path: .
 
-      - name: Update JSONs and Changelog
-        run: ./update_meta.sh
-        env:
-          VERSION: ${{ github.event.inputs.version || github.ref_name }}
-          GITHUB_REF_NAME: ${{ github.event.inputs.version || github.ref_name }}
+      - name: Update JSONs
+        run: |
+          VERSION="${{ github.event.inputs.version || github.ref_name }}"
+          
+          # Validate version format
+          if [[ "$VERSION" == "dev" ]]; then
+            VERSION_CODE=0
+          elif [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+ ]]; then
+            NUM=$(echo "$VERSION" | sed 's/v//')
+            VERSION_CODE=$(echo "$NUM" | awk '{print int($1 * 1000)}')
+          else
+            echo "ERROR: Invalid version format: $VERSION"
+            exit 1
+          fi
+          
+          # Update JSON files only (changelog already generated)
+          python3 -c "
+          import json
+          import sys
+          import re
+          
+          for suffix in ['-GUI', '-CLI']:
+              filename = f'update{suffix}.json'
+              try:
+                  with open(filename) as f:
+                      data = json.load(f)
+                  
+                  data['version'] = '$VERSION'
+                  data['versionCode'] = $VERSION_CODE
+                  data['zipUrl'] = re.sub(r'/download/[^/]+/', f'/download/$VERSION/', data['zipUrl'])
+                  
+                  with open(filename, 'w') as f:
+                      json.dump(data, f, indent=2)
+                      f.write('\n')
+                  
+                  print(f'Updated {filename}')
+              except FileNotFoundError:
+                  print(f'Warning: {filename} not found', file=sys.stderr)
+              except Exception as e:
+                  print(f'Error updating {filename}: {e}', file=sys.stderr)
+                  sys.exit(1)
+          "
 
       - name: Commit and push changes
         run: |

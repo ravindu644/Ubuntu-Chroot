@@ -85,15 +85,16 @@ else
     RANGE_SPEC="$PREV_TAG.."
 fi
 
-# Get commits from main branch only (between the two tags)
+# Get commits from main branch only (from previous tag to HEAD, since current tag doesn't exist yet)
 echo ""
 echo "Getting commits from main branch..."
 if [ -z "$RANGE_SPEC" ]; then
     # First release - get all commits
     ALL_COMMITS=$(git log origin/main --oneline --pretty=format:"- %s" 2>/dev/null || git log --oneline --pretty=format:"- %s")
 else
-    # Get commits between previous tag and current tag on main branch
-    ALL_COMMITS=$(git log --oneline --pretty=format:"- %s" ${PREV_TAG}..${CURRENT_TAG} 2>/dev/null || echo "")
+    # Get commits between previous tag and HEAD (current tag will be created during release)
+    # Use HEAD instead of CURRENT_TAG since the tag doesn't exist yet
+    ALL_COMMITS=$(git log --oneline --pretty=format:"- %s" ${PREV_TAG}..HEAD 2>/dev/null || echo "")
 fi
 
 # Count commits
