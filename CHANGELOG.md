@@ -1,15 +1,21 @@
 # Changelog
 
-## v3.5 (2025-11-19)
+## v4.0 (2025-11-21)
 
-- webui: fixed critical bugs related to running actions
-- cli: remove any reference to vnc/rdp from the cli first user setup
-- webui: scrollback and misc improvements
-- chrootmgr: fix the filesystem before backing up the chroot in rootfs.img mode
-- webui: micro-optimized the UI elements and fixed minor bugs
-- webui: fixed issues related to hotspot channel loading from the localstorage
-- readme: updated credits
-- webui: completely re-wrote from scratch, centralized everything in seperated functions and files
-- webui: introduced a way to route the localhost traffic through a specific interface
-- readme: updated credits for the banner image
-- Update metadata for v3.4
+- module: show a notice to users if they are using the in-built module updater in root managers
+- workflow: auto update the release description with the changelog
+- webui: added ubuntu loading dots to the webui loading screen
+- webui: fixed initial load takes too much time
+- webui: fixed typo related to stopping the chroot
+- webui: show stopping animations related to network utilities when stopping/restarting the chroot
+- webui: use a smooth animation when displaying console logs
+- webui: fix forward nat status checking issues
+- chrootmgr: disable phantom process killing to prevent chroot from killing in newer versions of Android
+- webui: auto-adjust the console box height based on screen height
+- Remove `version`, `updateJson` and `versionCode` from module.prop
+- Use `printf` instead of `sed`
+- rootfs: added a script to download and decompress the linux-firmware
+- readme: added notes about to-do
+- readme: refined requirements
+- readme: added the new NAT share feature, added new screenshots
+- Update metadata for v3.5

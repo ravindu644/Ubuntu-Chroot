@@ -1,6 +1,6 @@
 {
-  "version": "v3.5",
-  "versionCode": 3500,
-  "zipUrl": "https://github.com/ravindu644/Ubuntu-Chroot/releases/download/v3.5/update-GUI.zip",
+  "version": "v4.0",
+  "versionCode": 4000,
+  "zipUrl": "https://github.com/ravindu644/Ubuntu-Chroot/releases/download/v4.0/update-GUI.zip",
   "changelog": "https://raw.githubusercontent.com/ravindu644/Ubuntu-Chroot/main/CHANGELOG.md"
 }
