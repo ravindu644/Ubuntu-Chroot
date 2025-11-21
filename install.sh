@@ -38,6 +38,11 @@ on_install() {
     extract_rootfs
     create_symlink
 
+    # Show update message if this is an update ZIP (check for marker file)
+    if unzip -l "$ZIPFILE" 2>/dev/null | grep -q "\.is_update"; then
+        echo -e "\n[UPDATER] Update the Chroot from the WebUI once rebooted the device\n"
+    fi
+
     # Clear package cache to avoid conflicts
     rm -rf /data/system/package_cache/*
 }
