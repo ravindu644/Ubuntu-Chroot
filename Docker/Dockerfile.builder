@@ -49,6 +49,20 @@ COPY scripts/bashrc.sh /etc/profile.d/chroot-webui-aliases.sh
 # Make scripts executable
 RUN chmod +x /usr/local/bin/systemctl /usr/local/bin/first-run-setup.sh /usr/local/bin/start_vnc /usr/local/bin/start_xrdp /usr/local/bin/download-firmware /etc/profile.d/chroot-webui-aliases.sh
 
+# Add loading of all profile.d scripts to global bash.bashrc for all users
+RUN cat >> /etc/bash.bashrc << 'EOF'
+
+# Load all scripts in /etc/profile.d/ for interactive shells
+if [ -d /etc/profile.d ]; then
+  for i in /etc/profile.d/*.sh; do
+    if [ -r "$i" ]; then
+      . "$i"
+    fi
+  done
+  unset i
+fi
+EOF
+
 # This is the main installation layer. All package installations, PPA additions,
 # and setup are done here to minimize layers and maximize build speed.
 RUN apt-get update && \
