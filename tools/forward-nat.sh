@@ -232,11 +232,11 @@ cleanup_routing() {
 
     # Remove rules if interface found
     if [ -n "$TARGET_IFACE" ]; then
-        log "Removing rules from $TARGET_IFACE..."
-        iptables -D FORWARD -o "$TARGET_IFACE" -j ACCEPT 2>/dev/null
-        iptables -D FORWARD -i "$TARGET_IFACE" -j ACCEPT 2>/dev/null
-        iptables -D OUTPUT -o "$TARGET_IFACE" -j ACCEPT 2>/dev/null
-        iptables -D INPUT -i "$TARGET_IFACE" -j ACCEPT 2>/dev/null
+    log "Removing rules from $TARGET_IFACE..."
+    iptables -D FORWARD -o "$TARGET_IFACE" -j ACCEPT 2>/dev/null
+    iptables -D FORWARD -i "$TARGET_IFACE" -j ACCEPT 2>/dev/null
+    iptables -D OUTPUT -o "$TARGET_IFACE" -j ACCEPT 2>/dev/null
+    iptables -D INPUT -i "$TARGET_IFACE" -j ACCEPT 2>/dev/null
     else
         # No state file - search and remove from any interface
         warn "No state file found, searching for active forwarding rules..."
