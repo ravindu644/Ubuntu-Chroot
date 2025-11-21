@@ -47,9 +47,10 @@ TMP_DIR=$(mktemp -d)
 # Copy all files except excluded
 rsync -a --exclude='.git*' --exclude='Docker' --exclude='CHANGELOG.md' --exclude='out' --exclude='update-*.json' --exclude='update_meta.sh' --exclude='build_zip.sh' "$PWD/" "$TMP_DIR/"
 
-# For update builds, remove tar.gz files
+# For update builds, remove tar.gz files and add update marker
 if [ "$UPDATE_FLAG" = "--update" ]; then
     rm -f "$TMP_DIR"/*.tar.gz
+    touch "$TMP_DIR/.is_update"
 fi
 
 # Update update JSON
