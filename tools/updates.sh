@@ -371,6 +371,40 @@ update_v3600() {
     echo "[UPDATER] ✓ Update v3600 completed: Firmware download script added!"
 }
 
+# Version 4100: Add global bashrc loading for all profile.d scripts
+update_v4100() {
+    echo "[UPDATER] Starting update v4100: Adding global bashrc loading for all profile.d scripts"
+
+    # Check if already added to avoid duplicates
+    if grep -q "/etc/profile.d/\*\.sh" /etc/bash.bashrc 2>/dev/null; then
+        echo "[UPDATER] Global bashrc already configured for profile.d scripts, skipping"
+        return 0
+    fi
+
+    echo "[UPDATER] Adding profile.d scripts loading to /etc/bash.bashrc..."
+    cat >> /etc/bash.bashrc << 'EOF'
+
+# Load all scripts in /etc/profile.d/ for interactive shells
+if [ -d /etc/profile.d ]; then
+  for i in /etc/profile.d/*.sh; do
+    if [ -r "$i" ]; then
+      . "$i"
+    fi
+  done
+  unset i
+fi
+EOF
+
+    if [ $? -eq 0 ]; then
+        echo "[UPDATER] Global bashrc updated successfully"
+    else
+        echo "[UPDATER] Error: Failed to update /etc/bash.bashrc"
+        return 1
+    fi
+
+    echo "[UPDATER] ✓ Update v4100 completed: Global bashrc loading for profile.d scripts configured!"
+}
+
 # Add your new updates below:
 # update_v{VERSION}() {
 #     echo "Your update description..."
