@@ -64,8 +64,8 @@ jobs:
             CHANGELOG_CONTENT=$(sed -n '/^## '"$TAG"' /,/^## /{ /^## '"$TAG"' /d; /^## /d; p; }' CHANGELOG.md)
           fi
           
-          # Clean content
-          CHANGELOG_CONTENT=$(echo "$CHANGELOG_CONTENT" | sed '/^$/d' | head -n 200)
+          # Clean content - remove empty lines and filter out metadata update commits
+          CHANGELOG_CONTENT=$(echo "$CHANGELOG_CONTENT" | sed '/^$/d' | grep -v "Update metadata for" | head -n 200)
           
           if [ -z "$CHANGELOG_CONTENT" ]; then
             CHANGELOG_CONTENT="No changelog entries for this version."
