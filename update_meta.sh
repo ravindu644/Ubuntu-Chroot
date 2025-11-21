@@ -97,6 +97,9 @@ else
     ALL_COMMITS=$(git log --oneline --pretty=format:"- %s" ${PREV_TAG}..HEAD 2>/dev/null || echo "")
 fi
 
+# Filter out metadata update commits
+ALL_COMMITS=$(echo "$ALL_COMMITS" | grep -v "Update metadata for" || echo "$ALL_COMMITS")
+
 # Count commits
 COMMIT_COUNT=$(echo "$ALL_COMMITS" | grep -c '^' || echo "0")
 echo "Total unique commits: $COMMIT_COUNT"
