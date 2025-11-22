@@ -405,6 +405,21 @@ EOF
     echo "[UPDATER] ✓ Update v4100 completed: Global bashrc loading for profile.d scripts configured!"
 }
 
+# Version 4200: Add USB authorization udev rule
+update_v4200() {
+    echo "[UPDATER] Starting update v4200: Adding USB authorization udev rule"
+
+    # Create udev rule for USB authorization
+    if mkdir -p /etc/udev/rules.d && echo 'ACTION=="add", SUBSYSTEM=="usb", ATTR{authorized}=="0", ATTR{authorized}="1"' > /etc/udev/rules.d/70-usb-authorize.rules; then
+        echo "[UPDATER] USB authorization udev rule created successfully"
+    else
+        echo "[UPDATER] Failed to create USB authorization udev rule"
+        return 1
+    fi
+
+    echo "[UPDATER] ✓ Update v4200 completed: USB authorization udev rule configured!"
+}
+
 # Add your new updates below:
 # update_v{VERSION}() {
 #     echo "Your update description..."
