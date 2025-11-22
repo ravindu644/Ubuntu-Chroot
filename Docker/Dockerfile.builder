@@ -269,9 +269,10 @@ RUN locale-gen en_US.UTF-8 && \
     # Configure xrdp to use XFCE and set color depth
     echo "xfce4-session" > /etc/skel/.xsession && \
     chmod +x /etc/skel/.xsession && \
-    # Create udev rule for traditional wireless interface names
+    # Create udev rules for traditional wireless interface names and USB authorization
     mkdir -p /etc/udev/rules.d && \
     echo 'SUBSYSTEM=="net", ACTION=="add", ATTR{type}=="1", NAME="wlan%n"' > /etc/udev/rules.d/70-wlan.rules && \
+    echo 'ACTION=="add", SUBSYSTEM=="usb", ATTR{authorized}=="0", ATTR{authorized}="1"' > /etc/udev/rules.d/70-usb-authorize.rules && \
     # Create default user directories
     xdg-user-dirs-update && \
     # Remove default ubuntu user if it exists
