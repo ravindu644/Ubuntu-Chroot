@@ -388,6 +388,7 @@ CONFIG_SYSVIPC_SYSCTL=y
 <a id="credits"></a>
 ## 🙏 Credits
 
+- [Ubuntu](https://ubuntu.com/) - The core
 - [Kali NetHunter project](https://gitlab.com/kalilinux/nethunter) for my own understanding of chroot and sysctl commands
 - [Chroot-distro](https://github.com/Magisk-Modules-Alt-Repo/chroot-distro) for the internet connectivity fix in initial versions
 - [docker-systemctl-replacement](https://github.com/gdraheim/docker-systemctl-replacement) for [systemctl](./Docker/scripts/systemctl3.py) implementation in chroot
