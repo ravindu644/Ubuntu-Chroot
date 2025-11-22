@@ -189,9 +189,7 @@ A comprehensive Android Linux environment featuring **Ubuntu 24.04** with a buil
 <a id="gui"></a>
 ## 💻 Access the GUI
 
-Once you've set up your user account following the [Get Started](#usage) section, the XFCE Desktop Environment will automatically start when you start the chroot from the WebUI.
-
-### Local Access (Same Device)
+Once you've set up your user account following the [Get Started](#usage) section, **the XFCE Desktop Environment will automatically start when you start the chroot from the WebUI - no need to type anything in the terminal !**
 
 The default method to access the GUI is using the VNC protocol with a VNC viewer application.
 
@@ -200,6 +198,8 @@ The default method to access the GUI is using the VNC protocol with a VNC viewer
 - **Android**: [AVNC](https://github.com/gujjwal00/avnc)
 - **Windows**: [TigerVNC](https://github.com/TigerVNC/tigervnc)
 - **Linux**: [TigerVNC](https://github.com/TigerVNC/tigervnc)
+
+### Local Access (Same Device)
 
 **Connection Settings for AVNC (Android):**
 
