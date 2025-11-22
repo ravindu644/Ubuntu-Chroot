@@ -17,7 +17,8 @@ A comprehensive Android Linux environment featuring **Ubuntu 24.04** with a buil
 - [Requirements](#requirements)
 - [Why This Is Different](#why-this-is-different)
 - [Installation](#installation)
-- [Usage](#usage)
+- [Get Started](#usage)
+- [Access the GUI](#gui)
 - [Experimental Features](#experimental-features)
 - [Kernel Requirements (Optional)](#kernel-requirements)
 - [To-Do](#to-do)
@@ -170,7 +171,7 @@ A comprehensive Android Linux environment featuring **Ubuntu 24.04** with a buil
 3. Reboot your device
 
 <a id="usage"></a>
-## 🧑‍💻 Usage
+## 🧑‍💻 Get Started
 
 1. Access the chroot control panel using APatch/KernelSU's built-in WebUI
 2. On the first installation, you have to set up your user account to access GUI functionality (VNC/RDP):
@@ -184,6 +185,73 @@ A comprehensive Android Linux environment featuring **Ubuntu 24.04** with a buil
    - **GUI (RDP)**: Uncomment the `# start_xrdp` line in the Post-exec Script from the WebUI and restart the chroot
 
 > **Note**: There is currently no perfect RDP app for Android. Please create an issue if you find a better option.
+
+<a id="gui"></a>
+## 💻 Access the GUI
+
+Once you've set up your user account following the [Get Started](#usage) section, the XFCE Desktop Environment will automatically start when you start the chroot from the WebUI.
+
+### Local Access (Same Device)
+
+The default method to access the GUI is using the VNC protocol with a VNC viewer application.
+
+**Recommended VNC Clients:**
+
+- **Android**: [AVNC](https://github.com/gujjwal00/avnc)
+- **Windows**: [TigerVNC](https://github.com/TigerVNC/tigervnc)
+- **Linux**: [TigerVNC](https://github.com/TigerVNC/tigervnc)
+
+**Connection Settings for AVNC (Android):**
+
+- **Host**: `localhost`
+- **Port**: `5901`
+- **Username**: Your chroot user account username
+- **Password**: Your chroot user account password
+
+### Remote Access (External Device)
+
+To access the GUI from a different device (e.g., a computer or tablet), **you need to forward the chroot traffic to a network interface**. There are two methods available:
+
+#### Method 1: Built-in Hotspot
+
+This method creates a WiFi hotspot directly from the chroot environment:
+
+1. Open the WebUI and navigate to the **Hotspot Configuration** option
+2. Configure your hotspot settings (Upstream, SSID, password, band, channel)
+3. Click **Start Hotspot**
+4. Connect your external device to the created hotspot
+5. Install a VNC client on the external device
+6. Use the IP address and port displayed in the console log along with your login credentials to connect
+
+#### Method 2: USB Tethering (Fastest)
+
+If the built-in hotspot doesn't work, or you need the **lowest latency experience**, you can use Android's USB Tethering feature:
+
+1. Open the WebUI and click the **Refresh** button
+2. Navigate to **Forward Chroot Traffic** and note the currently available network interfaces
+3. Connect your phone to the target device using a USB cable
+4. Enable **USB Tethering** on your Android device
+5. Return to the WebUI, click **Refresh** again, and navigate to **Forward Chroot Traffic**
+6. You should now see a new network interface that wasn't present before
+7. Select the new network interface and click **Start Forwarding**
+8. Use the IP address and port displayed in the console log along with your login credentials to connect
+
+> [!TIP]
+> 
+> The IP address will be displayed in the WebUI console after starting the hotspot or forwarding.
+> 
+> Look for messages like `Gateway IP` to determine the value for `Host` required for the VNC client. For VNC, the port is always `5901`.
+
+### Advanced: RDP Access
+
+For advanced users who prefer RDP over VNC:
+
+1. Open the WebUI and navigate to **Options** → **Post-exec Script**
+2. Remove the comment (`#`) from the `start_xrdp` line
+3. Restart the chroot from the WebUI
+4. Use an RDP client to connect using the same connection method as VNC (hotspot or USB tethering)
+
+> **Note**: There is currently no perfect RDP app for Android. VNC is recommended for the best experience.
 
 <a id="experimental-features"></a>
 ## 🧪 Experimental Features
@@ -199,7 +267,7 @@ A comprehensive Android Linux environment featuring **Ubuntu 24.04** with a buil
 
 **Downloading Firmware**
 
-- If you want to download and decompress firmware files (useful for hardware compatibility), run the following command inside the chroot:
+- If you want to download and decompress firmware files (useful for installing WIFI firmware without installing random Magisk modules from the internet), run the following command inside the chroot:
   ```bash
   sudo download-firmware
   ```

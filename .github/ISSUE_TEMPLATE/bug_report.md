@@ -47,7 +47,7 @@ If applicable, add screenshots to help explain your problem.
 
 **To provide logs:**
 
-1. Open the WebUI and go to **Optiins** → **Optional** section
+1. Open the WebUI and go to **Settings** → **Optional** section
 2. Enable **Debug Mode**
 3. Reproduce the issue
 4. Zip the `/data/local/ubuntu-chroot/logs` folder
