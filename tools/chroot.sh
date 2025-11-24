@@ -507,8 +507,20 @@ start_chroot() {
             error "Failed to mount sparse image"
             CHROOT_SETUP_IN_PROGRESS=0
             exit 1
+        else
+            log "Sparse image mounted successfully"
         fi
-        log "Sparse image mounted successfully"
+
+        # CRITICAL FIX: Proper mount propagation for bwrap/flatpak
+        log "Configuring mount propagation for bwrap/flatpak compatibility..."
+
+        # THIS IS THE KEY FIX: Make the entire mount tree private within our namespace.
+        # This prevents "peer group" conflicts that cause pivot_root to fail.
+        if run_in_ns busybox mount --make-rprivate / 2>/dev/null; then
+            log "Set entire namespace to recursive private propagation"
+        else
+            warn "Failed to set root to rprivate propagation"
+        fi
 
         # Configure firmware path to include chroot firmware if conditions are met
         if [ -f "/sys/module/firmware_class/parameters/path" ] && [ -d "$CHROOT_PATH/lib/firmware" ]; then
@@ -547,7 +559,6 @@ start_chroot() {
     fi
 
     advanced_mount "devpts" "$CHROOT_PATH/dev/pts" "devpts" "-o rw,nosuid,noexec,relatime,gid=5,mode=620,ptmxmode=000"
-    advanced_mount "tmpfs" "$CHROOT_PATH/tmp" "tmpfs" "-o rw,nosuid,nodev,relatime,size=512M"
     advanced_mount "tmpfs" "$CHROOT_PATH/run" "tmpfs" "-o rw,nosuid,nodev,relatime,size=100M"
     advanced_mount "tmpfs" "$CHROOT_PATH/dev/shm" "tmpfs" "-o mode=1777"
 
@@ -582,11 +593,31 @@ start_chroot() {
     setup_storage
     apply_internet_fix
 
+    # Mount /tmp from INSIDE chroot with private propagation for bwrap
+    if [ -f "$ROOTFS_IMG" ]; then
+        log "Mounting /tmp from inside chroot for bwrap compatibility..."
+        # Unmount any existing /tmp mount from host side
+        run_in_chroot "umount /tmp 2>/dev/null" 2>/dev/null || true
+        # Mount /tmp from inside chroot
+        if run_in_chroot "mount -t tmpfs -o rw,nosuid,nodev,relatime,size=512M tmpfs /tmp 2>/dev/null" 2>/dev/null; then
+            log "/tmp mounted from inside chroot"
+            # Set /tmp to private propagation for bwrap (use --make-private, not remount)
+            if run_in_chroot "mount --make-private /tmp 2>/dev/null" 2>/dev/null; then
+                log "/tmp set to private propagation"
+            elif run_in_chroot "mount -o private /tmp 2>/dev/null" 2>/dev/null; then
+                log "/tmp set to private propagation (alternative method)"
+            else
+                warn "Failed to set /tmp to private propagation"
+            fi
+        else
+            warn "Failed to mount /tmp from inside chroot"
+        fi
+    fi
+
     if [ -w /sys/module/usbcore/parameters/authorized_default ]; then
         echo 1 > /sys/module/usbcore/parameters/authorized_default
         log "Enabled USB device authorization"
     fi
-
 
     # Safe kernel tuning for better I/O
     log "Applying I/O performance tuning..."
