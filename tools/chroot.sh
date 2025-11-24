@@ -513,8 +513,18 @@ start_chroot() {
             error "Failed to mount sparse image"
             CHROOT_SETUP_IN_PROGRESS=0
             exit 1
+        else
+            log "Sparse image mounted successfully"
         fi
-        log "Sparse image mounted successfully"
+
+        # Proper mount propagation for containerization tools
+        # Make the entire mount tree private within our namespace.
+        # This prevents "peer group" conflicts that cause pivot_root to fail.
+        if run_in_ns busybox mount --make-rprivate / 2>/dev/null; then
+            log "Set entire namespace to recursive private propagation"
+        else
+            warn "Failed to set root to rprivate propagation"
+        fi
 
         # Configure firmware path to include chroot firmware if conditions are met
         if [ -f "/sys/module/firmware_class/parameters/path" ] && [ -d "$CHROOT_PATH/lib/firmware" ]; then
@@ -592,7 +602,6 @@ start_chroot() {
         echo 1 > /sys/module/usbcore/parameters/authorized_default
         log "Enabled USB device authorization"
     fi
-
 
     # Safe kernel tuning for better I/O
     log "Applying I/O performance tuning..."
