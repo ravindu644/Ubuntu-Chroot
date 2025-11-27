@@ -3,6 +3,7 @@
   // Use hardcoded paths provided by install.sh
   const CHROOT_DIR = '/data/local/ubuntu-chroot';
   const PATH_CHROOT_SH = `${CHROOT_DIR}/chroot.sh`;
+  const UPDATE_STATUS_SCRIPT = `${CHROOT_DIR}/update-status.sh`;
   const CHROOT_PATH_UI = `${CHROOT_DIR}/rootfs`;
   const BOOT_FILE = `${CHROOT_DIR}/boot-service`;
   const DOZE_OFF_FILE = `${CHROOT_DIR}/.doze_off`;
@@ -1408,9 +1409,13 @@
         if(result.success) {
           appendConsole(`✓ ${action} completed successfully`, 'success');
           setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH);
+          // Update module status after successful action
+          updateModuleStatus();
         } else {
           appendConsole(`✗ ${action} failed`, 'err');
           setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH);
+          // Update module status even on failure (to reflect current state)
+          updateModuleStatus();
         }
         
         // Force scroll to bottom after completion messages are added
@@ -1962,6 +1967,21 @@
     }
   }
 
+  // Update module status in module.prop
+  async function updateModuleStatus(){
+    if(!rootAccessConfirmed || !window.cmdExec || typeof window.cmdExec.execute !== 'function'){
+      return; // Silently fail if root/backend not available
+    }
+    
+    try{
+      // Run update-status.sh silently in background
+      await cmdExec.execute(`sh ${UPDATE_STATUS_SCRIPT} 2>/dev/null`, true);
+    }catch(e){
+      // Silently fail - status update is not critical
+      console.debug('Failed to update module status:', e);
+    }
+  }
+
   // copy login command
   async function copyLoginCommand(){
     const selectedUser = els.userSelect.value;
@@ -2438,8 +2458,10 @@
               
               if(restartResult.success) {
                 appendConsole('✓ Chroot restarted successfully', 'success');
+                updateModuleStatus();
               } else {
                 appendConsole('⚠ Chroot restart failed, but update was successful', 'warn');
+                updateModuleStatus();
               }
               
               appendConsole('━━━ Update Complete ━━━', 'success');
@@ -3240,6 +3262,7 @@
       await refreshStatus();
       await readBootFile(true); // Also refresh boot toggle status (silent mode)
       await readDozeOffFile(true); // Also refresh Android optimizations toggle status (silent mode)
+      updateModuleStatus(); // Update module status in module.prop
       
       // Pre-fetch interfaces in background (non-blocking) to update cache
       // This prevents lag when opening popups later
@@ -3561,6 +3584,7 @@
       disableSettingsPopup,
       refreshStatus,
       updateStatus,
+      updateModuleStatus,
       checkForwardNatRunning,
       scrollConsoleToBottom,
       ensureChrootStarted,
@@ -3737,6 +3761,7 @@
       await refreshStatus();
       readBootFile(false).catch(() => {});
       readDozeOffFile(false).catch(() => {});
+      updateModuleStatus(); // Update module status in module.prop on initial load
       
       if(isFirstLoad) {
         hideLoadingScreen();

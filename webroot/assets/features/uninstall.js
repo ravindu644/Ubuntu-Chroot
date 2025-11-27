@@ -72,6 +72,7 @@
         appendConsole('All chroot data has been removed.', 'info');
         appendConsole('━━━ Uninstallation Complete ━━━', 'success');
         updateStatus('stopped');
+        if(updateModuleStatus) updateModuleStatus();
         disableAllActions(true);
         disableSettingsPopup(false, false);
         setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH * 2);
@@ -79,6 +80,7 @@
       onError: (result) => {
         appendConsole('✗ Uninstallation failed', 'err');
         appendConsole('Check the logs above for details.', 'err');
+        if(updateModuleStatus) updateModuleStatus();
         disableAllActions(false);
         disableSettingsPopup(false, false);
         setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH * 2);

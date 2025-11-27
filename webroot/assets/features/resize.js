@@ -13,7 +13,7 @@
       activeCommandId, rootAccessConfirmed, sparseMigrated, appendConsole,
       showConfirmDialog, closeSettingsPopup, els, ANIMATION_DELAYS, PATH_CHROOT_SH,
       ProgressIndicator, disableAllActions, disableSettingsPopup, updateSparseInfo,
-      refreshStatus, runCmdAsync, updateStatus, prepareActionExecution, executeCommandWithProgress
+      refreshStatus, runCmdAsync, updateStatus, updateModuleStatus, prepareActionExecution, executeCommandWithProgress
     } = dependencies;
 
     if(activeCommandId.value) {
@@ -73,6 +73,7 @@
         appendConsole('✓ Sparse image trimmed successfully', 'success');
         appendConsole('Space may be reclaimed after a few minutes', 'info');
         appendConsole('━━━ Trim Complete ━━━', 'success');
+        if(updateModuleStatus) updateModuleStatus();
         disableAllActions(false);
         disableSettingsPopup(false, true);
         updateSparseInfo();
@@ -81,6 +82,7 @@
       onError: (result) => {
         appendConsole('✗ Sparse image trim failed', 'err');
         appendConsole('This may be expected on some Android kernels', 'warn');
+        if(updateModuleStatus) updateModuleStatus();
         disableAllActions(false);
         disableSettingsPopup(false, true);
         updateSparseInfo();
@@ -172,6 +174,7 @@
         appendConsole('✅ Sparse image resized successfully', 'success');
         appendConsole(`New size: ${newSizeGb}GB`, 'info');
         appendConsole('━━━ Resize Complete ━━━', 'success');
+        if(updateModuleStatus) updateModuleStatus();
         disableAllActions(false);
         disableSettingsPopup(false, true);
         updateSparseInfo();
@@ -181,6 +184,7 @@
         appendConsole('✗ Sparse image resize failed', 'err');
         appendConsole('Check the logs above for details', 'err');
         appendConsole('━━━ Resize Failed ━━━', 'err');
+        if(updateModuleStatus) updateModuleStatus();
         disableAllActions(false);
         disableSettingsPopup(false, true);
         updateSparseInfo();
