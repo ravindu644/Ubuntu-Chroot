@@ -1109,6 +1109,9 @@ uninstall_chroot() {
         rm -rf "$CHROOT_PATH" || { error "Failed to remove chroot directory."; exit 1; }
     fi
     
+    # Remove configuration and state files silently
+    rm -f "$SCRIPT_DIR/boot-service" "$SCRIPT_DIR/.doze_off" "$HOLDER_PID_FILE" "${HOLDER_PID_FILE}.flags" "$MOUNTED_FILE" 2>/dev/null
+    
     log "Chroot environment uninstalled successfully."
 }
 
