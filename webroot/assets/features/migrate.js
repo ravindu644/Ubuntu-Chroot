@@ -13,7 +13,7 @@
       showSizeSelectionDialog, showConfirmDialog, closeSettingsPopup,
       ANIMATION_DELAYS, els, PATH_CHROOT_SH, CHROOT_DIR, appendConsole,
       ProgressIndicator, disableAllActions, disableSettingsPopup, activeCommandId,
-      rootAccessConfirmed, refreshStatus, sparseMigrated, runCmdAsync, updateStatus, ensureChrootStopped, prepareActionExecution, executeCommandWithProgress
+      rootAccessConfirmed, refreshStatus, sparseMigrated, runCmdAsync, updateStatus, updateModuleStatus, ensureChrootStopped, prepareActionExecution, executeCommandWithProgress
     } = dependencies;
 
     const sizeGb = await showSizeSelectionDialog();
@@ -74,6 +74,7 @@
           appendConsole('Your rootfs has been converted to a sparse image.', 'info');
           appendConsole('━━━ Migration Complete ━━━', 'success');
           sparseMigrated.value = true;
+          if(updateModuleStatus) updateModuleStatus();
           disableAllActions(false);
           disableSettingsPopup(false, true);
           setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH * 2);
@@ -82,6 +83,7 @@
           appendConsole('✗ Sparse image migration failed!', 'err');
           appendConsole('Check the logs above for details.', 'err');
           appendConsole('━━━ Migration Failed ━━━', 'err');
+          if(updateModuleStatus) updateModuleStatus();
           disableAllActions(false);
           disableSettingsPopup(false, true);
         },

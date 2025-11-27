@@ -13,7 +13,7 @@
       activeCommandId, rootAccessConfirmed, appendConsole, showFilePickerDialog, showConfirmDialog,
       closeSettingsPopup, ANIMATION_DELAYS, PATH_CHROOT_SH, ProgressIndicator,
       disableAllActions, disableSettingsPopup, refreshStatus, runCmdAsync,
-      updateStatus, ensureChrootStopped, prepareActionExecution, executeCommandWithProgress, els
+      updateStatus, updateModuleStatus, ensureChrootStopped, prepareActionExecution, executeCommandWithProgress, els
     } = dependencies;
 
     if(activeCommandId.value) {
@@ -78,12 +78,14 @@
         appendConsole('✓ Backup completed successfully', 'success');
         appendConsole(`Saved to: ${backupPath}`, 'info');
         appendConsole('━━━ Backup Complete ━━━', 'success');
+        if(updateModuleStatus) updateModuleStatus();
         disableAllActions(false);
         disableSettingsPopup(false, true);
         setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH);
       },
       onError: (result) => {
         appendConsole('✗ Backup failed', 'err');
+        if(updateModuleStatus) updateModuleStatus();
         disableAllActions(false);
         disableSettingsPopup(false, true);
         setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH);
@@ -103,7 +105,7 @@
     const {
       activeCommandId, rootAccessConfirmed, appendConsole, showFilePickerDialog,
       showConfirmDialog, closeSettingsPopup, ANIMATION_DELAYS, PATH_CHROOT_SH,
-      ProgressIndicator, disableAllActions, disableSettingsPopup, updateStatus,
+      ProgressIndicator, disableAllActions, disableSettingsPopup, updateStatus, updateModuleStatus,
       refreshStatus, runCmdAsync, ensureChrootStopped, prepareActionExecution, executeCommandWithProgress, els
     } = dependencies;
 
@@ -176,12 +178,14 @@
         appendConsole('The chroot environment has been restored', 'info');
         appendConsole('━━━ Restore Complete ━━━', 'success');
         updateStatus('stopped');
+        if(updateModuleStatus) updateModuleStatus();
         disableAllActions(true);
         disableSettingsPopup(false, true);
         setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH * 2);
       },
       onError: (result) => {
         appendConsole('✗ Restore failed', 'err');
+        if(updateModuleStatus) updateModuleStatus();
         disableAllActions(false);
         disableSettingsPopup(false, true);
         setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH * 2);

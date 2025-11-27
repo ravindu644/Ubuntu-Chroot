@@ -55,6 +55,7 @@ set_permissions() {
     set_perm "/data/local/ubuntu-chroot/chroot.sh" 0 0 0755
     set_perm "/data/local/ubuntu-chroot/post_exec.sh" 0 0 0755
     set_perm "/data/local/ubuntu-chroot/start-hotspot" 0 0 0755
+    set_perm "/data/local/ubuntu-chroot/update-status.sh" 0 0 0755
     set_perm "/data/local/ubuntu-chroot/ota" 0 0 0755
     set_perm "/data/local/ubuntu-chroot/ota/updater.sh" 0 0 0755
     set_perm "/data/local/ubuntu-chroot/ota/updates.sh" 0 0 0755
