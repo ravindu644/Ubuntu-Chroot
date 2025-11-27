@@ -1914,13 +1914,30 @@
   }
 
   // copy login command
-  function copyLoginCommand(){
+  async function copyLoginCommand(){
     const selectedUser = els.userSelect.value;
     // Save selected user
     Storage.set('chroot_selected_user', selectedUser);
 
-    // Use short command - symlink should exist when module is installed
-    const loginCommand = `su -c "ubuntu-chroot start ${selectedUser} -s"`;
+    // Check if ubuntu-chroot command is available, otherwise fallback to full script path
+    let chrootCmd = 'ubuntu-chroot';
+    try {
+      if(rootAccessConfirmed && window.cmdExec && typeof window.cmdExec.execute === 'function') {
+        const checkCmd = await runCmdSync('command -v ubuntu-chroot 2>/dev/null || echo ""');
+        if(!checkCmd || !checkCmd.trim()) {
+          // Command not found, use full script path
+          chrootCmd = `sh ${PATH_CHROOT_SH}`;
+        }
+      } else {
+        // If we can't check, default to full path for safety
+        chrootCmd = `sh ${PATH_CHROOT_SH}`;
+      }
+    } catch(e) {
+      // On error, fallback to full script path
+      chrootCmd = `sh ${PATH_CHROOT_SH}`;
+    }
+
+    const loginCommand = `su -c "${chrootCmd} start ${selectedUser} -s"`;
 
     if(navigator.clipboard && navigator.clipboard.writeText){
       navigator.clipboard.writeText(loginCommand).then(()=> appendConsole(`Login command for user '${selectedUser}' copied to clipboard`))
