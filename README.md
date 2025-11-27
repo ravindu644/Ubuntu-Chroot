@@ -288,8 +288,6 @@ The following features are currently not planned for implementation by the maint
 
 ## 🐛 Known issues
 
-These types of issues won't be fixed as they are not practical inside an Android environment with a stripped-down Linux kernel. If you have a GKI kernel, these are 99% impossible:
-
 1. **Snap and Flatpak support**
 
     - Snap and Flatpak are not native applications like those we install from `.deb`, `.AppImage`, or APT. They are containerized applications running in an isolated environment without any privileged access.
@@ -300,14 +298,14 @@ These types of issues won't be fixed as they are not practical inside an Android
 
     - Related issue: [#1](https://github.com/ravindu644/Ubuntu-Chroot/issues/4)
 
-These issues may be fixable, and we'll work on them:
+2. **`Error: sh: <stdin>[5]: /system/bin/su: No such file or directory` in KernelSU LKM mode/Kernels with KernelSU KProbe Hooks**
 
-1. **`Error: sh: <stdin>[5]: /system/bin/su: No such file or directory` in KernelSU LKM mode**
-
-    - This is either a bug on KernelSU's side or on our side.
-    - This error does not originate from this project; it's coming from KernelSU's API.
-    - More info: [telegram](https://t.me/Samsung_Tweaks/89289)
-    
+    - This is a **known limitation in KernelSU** when using **LKM mode** or **GKI kernels with KProbe hooks** or **non-GKI Kernels without proper 32-bit support hooks**.
+    - This occurs because official **KernelSU dropped support for 32-bit applications** starting from versions above v0.9.2, and all KernelSU forks have inherited this limitation.
+    - **This causes all 32-bit applications to lose their ability to detect root**, including ADB shell on devices with dual ABI support, Nethunter terminal, Root explorer, etc.
+    - **The only fix for this issue is to use a proper kernel with KernelSU manual hooks that support 32-bit applications**, instead of using LKM mode or GKI kernels with KProbe hooks.
+    - This error does not originate from this project; it's coming from KernelSU's side.
+    - More info: [telegram](https://t.me/Samsung_Tweaks/89289), [Github issue created by me in 2024](https://github.com/tiann/KernelSU/issues/2095), [Another similar issue](https://github.com/KernelSU-Next/KernelSU-Next/issues/250)
 
 <a id="kernel-requirements"></a>
 ## 🛠 Kernel Requirements
