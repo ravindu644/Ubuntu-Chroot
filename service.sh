@@ -40,7 +40,13 @@ if [ -f "$BOOT_FLAG" ] && [ "$(cat "$BOOT_FLAG" 2>/dev/null)" = "1" ]; then
         
         # Update module status after successful start
         update_module_status
+        
+        # Show notification that chroot started successfully
+        su -lp 2000 -c "cmd notification post -S bigtext -t 'Chroot Started' 'chroot' 'Chroot started successfully..!'" 2>/dev/null
     else
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] Chroot startup failed" >> "$LOG_FILE"
+        
+        # Show notification that chroot startup failed
+        su -lp 2000 -c "cmd notification post -S bigtext -t 'Chroot Failed' 'chroot' 'Chroot startup failed. Check logs for details.'" 2>/dev/null
     fi
 fi
