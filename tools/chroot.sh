@@ -245,6 +245,12 @@ run_fstrim() {
 
 android_optimizations() {
     local mode="$1"
+    local doze_off_file="${SCRIPT_DIR}/.doze_off"
+
+    # Check if .doze_off file exists and contains "1", otherwise skip
+    if [ ! -f "$doze_off_file" ] || [ "$(cat "$doze_off_file" 2>/dev/null | tr -d '\n\r ')" != "1" ]; then
+        return 0
+    fi
 
     if [ "$mode" = "--enable" ]; then
         # Disable Android Doze to prevent background slowdowns

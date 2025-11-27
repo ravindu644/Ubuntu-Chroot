@@ -5,6 +5,7 @@
   const PATH_CHROOT_SH = `${CHROOT_DIR}/chroot.sh`;
   const CHROOT_PATH_UI = `${CHROOT_DIR}/rootfs`;
   const BOOT_FILE = `${CHROOT_DIR}/boot-service`;
+  const DOZE_OFF_FILE = `${CHROOT_DIR}/.doze_off`;
   const POST_EXEC_SCRIPT = `${CHROOT_DIR}/post_exec.sh`;
   const HOTSPOT_SCRIPT = `${CHROOT_DIR}/start-hotspot`;
   const FORWARD_NAT_SCRIPT = `${CHROOT_DIR}/forward-nat.sh`;
@@ -33,6 +34,7 @@
     updateBtn: document.getElementById('update-btn'),
     backupBtn: document.getElementById('backup-btn'),
     debugToggle: document.getElementById('debug-toggle'),
+    androidOptimizeToggle: document.getElementById('android-optimize-toggle'),
     startHotspotBtn: document.getElementById('start-hotspot-btn'),
     stopHotspotBtn: document.getElementById('stop-hotspot-btn'),
     hotspotForm: document.getElementById('hotspot-form'),
@@ -1913,6 +1915,53 @@
     }
   }
 
+  async function writeDozeOffFile(val){
+    if(!rootAccessConfirmed){
+      return; // Silently fail - root check already printed error
+    }
+    
+    try{
+      // Ensure directory exists and write file
+      const cmd = `mkdir -p ${CHROOT_DIR} && echo ${val} > ${DOZE_OFF_FILE}`;
+      await cmdExec.execute(cmd, true);
+      appendConsole(`Android optimizations ${val === 1 ? 'enabled' : 'disabled'}`, 'success');
+    }catch(e){
+      console.error(e);
+      appendConsole(`✗ Failed to set Android optimizations: ${e.message}`, 'err');
+      // Reset toggle on error
+      await readDozeOffFile();
+    }
+  }
+
+  async function readDozeOffFile(silent = false){
+    if(!rootAccessConfirmed){
+      els.androidOptimizeToggle.checked = true; // Default to enabled
+      return; // Don't attempt command - root check already printed error
+    }
+    
+    try{
+      if(window.cmdExec && typeof cmdExec.execute === 'function'){
+        const out = await cmdExec.execute(`cat ${DOZE_OFF_FILE} 2>/dev/null || echo 1`, true);
+        const v = String(out||'').trim();
+        els.androidOptimizeToggle.checked = v === '1';
+        if(!silent) {
+          appendConsole('Android optimizations: '+ (v==='1' ? 'enabled' : 'disabled'));
+        }
+      } else {
+        if(!silent) {
+          appendConsole('Backend not available', 'err');
+        }
+        els.androidOptimizeToggle.checked = true; // Default to enabled
+      }
+    }catch(e){
+      console.error(e);
+      if(!silent) {
+        appendConsole(`Failed to read Android optimizations setting: ${e.message}`, 'err');
+      }
+      els.androidOptimizeToggle.checked = true; // Default to enabled
+    }
+  }
+
   // copy login command
   async function copyLoginCommand(){
     const selectedUser = els.userSelect.value;
@@ -3190,6 +3239,7 @@
       await checkRootAccess(true); // Silent mode - no console output
       await refreshStatus();
       await readBootFile(true); // Also refresh boot toggle status (silent mode)
+      await readDozeOffFile(true); // Also refresh Android optimizations toggle status (silent mode)
       
       // Pre-fetch interfaces in background (non-blocking) to update cache
       // This prevents lag when opening popups later
@@ -3230,6 +3280,7 @@
       appendConsole('Debug mode disabled', 'info');
     }
   });
+  els.androidOptimizeToggle.addEventListener('change', () => writeDozeOffFile(els.androidOptimizeToggle.checked ? 1 : 0));
 
   // Settings popup event handlers
   els.settingsBtn.addEventListener('click', () => openSettingsPopup());
@@ -3603,6 +3654,7 @@
   loadHotspotStatus(); // Load hotspot status (will be synced with actual state in refreshStatus)
   loadForwardingStatus(); // Load forwarding status (will be synced with actual state in refreshStatus)
   loadDebugMode(); // Load debug mode status
+  readDozeOffFile(true).catch(() => {}); // Load Android optimizations setting (silent mode)
   
   // Initialize channel options on page load based on saved settings
   function initializeChannelOptions() {
@@ -3684,6 +3736,7 @@
       await checkRootAccess();
       await refreshStatus();
       readBootFile(false).catch(() => {});
+      readDozeOffFile(false).catch(() => {});
       
       if(isFirstLoad) {
         hideLoadingScreen();
