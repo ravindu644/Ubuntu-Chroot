@@ -22,6 +22,7 @@ A comprehensive Android Linux environment featuring **Ubuntu 24.04** with a buil
 - [Experimental Features](#experimental-features)
 - [Kernel Requirements (Optional)](#kernel-requirements)
 - [To-Do](#to-do)
+- [Known issues](#known-issues)
 - [Credits](#credits)
 
 <a id="requirements"></a>
@@ -282,6 +283,31 @@ The following features are currently not planned for implementation by the maint
 
 - Audio forwarding in RDP
 - Termux-independent GPU acceleration
+
+<a id="known-issues"></a>
+
+## 🐛 Known issues
+
+These types of issues won't be fixed as they are not practical inside an Android environment with a stripped-down Linux kernel. If you have a GKI kernel, these are 99% impossible:
+
+1. **Snap and Flatpak support**
+
+    - Snap and Flatpak are not native applications like those we install from `.deb`, `.AppImage`, or APT. They are containerized applications running in an isolated environment without any privileged access.
+
+    - To create those isolated, containerized applications, your Android kernel must have support for various filesystems and drivers, as well as kernel patches to enable unprivileged user namespaces.
+
+    - Even if you somehow compiled a custom kernel with all the required features enabled, the functionality is not guaranteed because we are creating an isolated environment within an already isolated environment.
+
+    - Related issue: [#1](https://github.com/ravindu644/Ubuntu-Chroot/issues/4)
+
+These issues may be fixable, and we'll work on them:
+
+1. **`Error: sh: <stdin>[5]: /system/bin/su: No such file or directory` in KernelSU LKM mode**
+
+    - This is either a bug on KernelSU's side or on our side.
+    - This error does not originate from this project; it's coming from KernelSU's API.
+    - More info: [telegram](https://t.me/Samsung_Tweaks/89289)
+    
 
 <a id="kernel-requirements"></a>
 ## 🛠 Kernel Requirements
