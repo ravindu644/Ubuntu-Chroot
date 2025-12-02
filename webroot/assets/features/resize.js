@@ -13,7 +13,8 @@
       activeCommandId, rootAccessConfirmed, sparseMigrated, appendConsole,
       showConfirmDialog, closeSettingsPopup, els, ANIMATION_DELAYS, PATH_CHROOT_SH,
       ProgressIndicator, disableAllActions, disableSettingsPopup, updateSparseInfo,
-      refreshStatus, runCmdAsync, updateStatus, updateModuleStatus, prepareActionExecution, executeCommandWithProgress
+      refreshStatus, runCmdAsync, updateStatus, updateModuleStatus, prepareActionExecution,
+      executeCommandWithProgress
     } = dependencies;
 
     if(activeCommandId.value) {
@@ -38,9 +39,7 @@
       'Cancel'
     );
 
-    if(!confirmed) {
-      return;
-    }
+    if(!confirmed) return;
 
     closeSettingsPopup();
     const sparsePopup = els.sparseSettingsPopup;
@@ -77,7 +76,7 @@
         disableAllActions(false);
         disableSettingsPopup(false, true);
         updateSparseInfo();
-        refreshStatus();
+        setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH);
       },
       onError: (result) => {
         appendConsole('✗ Sparse image trim failed', 'err');
@@ -86,7 +85,7 @@
         disableAllActions(false);
         disableSettingsPopup(false, true);
         updateSparseInfo();
-        refreshStatus();
+        setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH);
       },
       useValue: true,
       activeCommandIdRef: activeCommandId
@@ -104,7 +103,8 @@
       activeCommandId, rootAccessConfirmed, appendConsole, showSizeSelectionDialog,
       showConfirmDialog, closeSettingsPopup, els, ANIMATION_DELAYS, CHROOT_DIR,
       PATH_CHROOT_SH, runCmdSync, ProgressIndicator, disableAllActions,
-      disableSettingsPopup, updateSparseInfo, refreshStatus, runCmdAsync, updateStatus, prepareActionExecution, executeCommandWithProgress
+      disableSettingsPopup, updateSparseInfo, refreshStatus, runCmdAsync, updateStatus,
+      updateModuleStatus, prepareActionExecution, executeCommandWithProgress
     } = dependencies;
 
     if(activeCommandId.value) {
@@ -139,9 +139,7 @@
       'Cancel'
     );
 
-    if(!confirmed) {
-      return;
-    }
+    if(!confirmed) return;
 
     closeSettingsPopup();
     const sparsePopup = els.sparseSettingsPopup;
@@ -178,7 +176,7 @@
         disableAllActions(false);
         disableSettingsPopup(false, true);
         updateSparseInfo();
-        refreshStatus();
+        setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH);
       },
       onError: (result) => {
         appendConsole('✗ Sparse image resize failed', 'err');
@@ -188,7 +186,7 @@
         disableAllActions(false);
         disableSettingsPopup(false, true);
         updateSparseInfo();
-        refreshStatus();
+        setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH);
       },
       useValue: true,
       activeCommandIdRef: activeCommandId

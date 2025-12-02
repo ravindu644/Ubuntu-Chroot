@@ -83,6 +83,226 @@
   // Track sparse image migration status
   let sparseMigrated = false;
 
+  // ============================================================================
+  // MODERN LOG BUFFER - Batched rendering with smooth animations
+  // ============================================================================
+  const LogBuffer = {
+    buffer: [],
+    flushTimer: null,
+    isFlushing: false,
+    scrollScheduled: false,
+    isUserScrolledUp: false,
+    lastScrollTop: 0,
+    
+    // Constants
+    BATCH_SIZE: 50, // Max logs per batch
+    FLUSH_INTERVAL: 16, // Flush every 16ms (60fps)
+    SCROLL_THRESHOLD: 10, // Pixels from bottom to consider "at bottom"
+    USER_SCROLL_DEBOUNCE_MS: 150, // Debounce for detecting user scroll
+    
+    /**
+     * Check if console is at bottom
+     */
+    isAtBottom() {
+      if(!els.console) return true;
+      const pre = els.console;
+      const maxScroll = pre.scrollHeight - pre.clientHeight;
+      const currentScroll = pre.scrollTop;
+      return Math.abs(currentScroll - maxScroll) <= this.SCROLL_THRESHOLD;
+    },
+    
+    /**
+     * Add log to buffer (will be flushed in batches)
+     */
+    add(text, cls) {
+      if(!text) return;
+      this.buffer.push({ text, cls });
+      this.scheduleFlush();
+    },
+    
+    /**
+     * Schedule flush (batches multiple logs)
+     */
+    scheduleFlush() {
+      if(this.flushTimer || this.isFlushing) return;
+      
+      this.flushTimer = requestAnimationFrame(() => {
+        this.flush();
+      });
+    },
+    
+    /**
+     * Flush buffered logs to DOM in a single batch
+     */
+    flush() {
+      if(this.isFlushing || this.buffer.length === 0) {
+        this.flushTimer = null;
+        return;
+      }
+      
+      this.isFlushing = true;
+      const pre = els.console;
+      if(!pre) {
+        this.buffer = [];
+        this.isFlushing = false;
+        this.flushTimer = null;
+        return;
+      }
+      
+      const maxLines = APP_CONSTANTS.CONSOLE.MAX_LINES;
+      const batch = this.buffer.splice(0, this.BATCH_SIZE);
+      
+      // Create document fragment for batch DOM update
+      const fragment = document.createDocumentFragment();
+      const wasAtBottom = this.isAtBottom();
+      
+      // Count existing lines for trimming
+      const allLines = pre.querySelectorAll('div');
+      const regularLines = Array.from(allLines).filter(
+        line => !line.classList.contains('progress-indicator')
+      );
+      
+      // Trim old lines if needed (before adding new ones)
+      const totalAfterAdd = regularLines.length + batch.length;
+      if(totalAfterAdd > maxLines) {
+        const toRemove = totalAfterAdd - maxLines;
+        for(let i = 0; i < toRemove && i < regularLines.length; i++) {
+          if(regularLines[i].parentNode) {
+            regularLines[i].remove();
+          }
+        }
+      }
+      
+      // Create all log elements in fragment with fade-in animation
+      batch.forEach(({ text, cls }, index) => {
+        const line = document.createElement('div');
+        if(cls) line.className = cls;
+        line.textContent = text + '\n';
+        
+        // Determine if this is a progress indicator
+        const isProgressIndicator = cls === 'progress-indicator' || text.includes('⏳');
+        
+        // Apply animation classes
+        if(isProgressIndicator) {
+          line.classList.add('log-immediate');
+        } else {
+          line.classList.add('log-chunk-fade');
+          // Stagger animation for smooth chunk appearance
+          line.style.animationDelay = `${index * 20}ms`;
+        }
+        
+        fragment.appendChild(line);
+      });
+      
+      // Single DOM append for entire batch
+      pre.appendChild(fragment);
+      
+      // Single scroll operation per batch (only if user was at bottom or active command)
+      if((wasAtBottom || activeCommandId) && !this.isUserScrolledUp) {
+        this.scheduleScroll();
+      }
+      
+      // Save logs (debounced)
+      saveConsoleLogs();
+      
+      // Continue flushing if more logs in buffer
+      this.isFlushing = false;
+      this.flushTimer = null;
+      
+      if(this.buffer.length > 0) {
+        this.scheduleFlush();
+      }
+    },
+    
+    /**
+     * Schedule scroll (throttled to once per frame)
+     */
+    scheduleScroll() {
+      if(this.scrollScheduled) return;
+      
+      this.scrollScheduled = true;
+      requestAnimationFrame(() => {
+        this.scrollScheduled = false;
+        if(!els.console) return;
+        
+        // Smooth scroll to bottom
+        els.console.scrollTo({
+          top: els.console.scrollHeight,
+          behavior: 'smooth'
+        });
+      });
+    },
+    
+    /**
+     * Handle user scroll event
+     */
+    handleUserScroll() {
+      if(!els.console) return;
+      
+      // Debounce user scroll detection
+      setTimeout(() => {
+        if(!this.isAtBottom()) {
+          this.isUserScrolledUp = true;
+        } else {
+          this.isUserScrolledUp = false;
+        }
+        this.lastScrollTop = els.console.scrollTop;
+      }, this.USER_SCROLL_DEBOUNCE_MS);
+    },
+    
+    /**
+     * Force scroll to bottom (for action buttons)
+     */
+    scrollToBottom() {
+      if(!els.console) return Promise.resolve();
+      this.isUserScrolledUp = false;
+      
+      return new Promise(resolve => {
+        els.console.scrollTo({
+          top: els.console.scrollHeight,
+          behavior: 'smooth'
+        });
+        // Wait for a reasonable amount of time for the scroll to finish.
+        setTimeout(resolve, 400);
+      });
+    },
+    
+    /**
+     * Instant scroll (for initial load)
+     */
+    scrollInstant() {
+      if(!els.console) return;
+      els.console.scrollTop = els.console.scrollHeight;
+    },
+    
+    /**
+     * Wait for all pending logs to be flushed
+     * Returns a promise that resolves when buffer is empty and flush is complete
+     */
+    async waitForFlush() {
+      // Poll until the buffer is empty and the flush cycle is complete.
+      while (this.buffer.length > 0 || this.isFlushing) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      // One extra frame for safety, to allow final DOM paint.
+      await new Promise(resolve => requestAnimationFrame(resolve));
+    }
+  };
+ 
+  /**
+   * Helper: fade console scrollbar out/in via CSS class.
+   * We hide it while long-running actions are executing, then show it again
+   * after status/console refresh has fully completed.
+   */
+  function setConsoleScrollbarHidden(hidden) {
+    if(!els.console) return;
+    if(hidden) {
+      els.console.classList.add('console-scrollbar-hidden');
+    } else {
+      els.console.classList.remove('console-scrollbar-hidden');
+    }
+  }
+ 
   // Hotspot status loading/saving is now handled by HotspotFeature module
   // These functions are kept for backward compatibility during initialization
   function loadHotspotStatus(){
@@ -126,27 +346,48 @@
   disableAllActions(true);
 
   /**
-   * Save console logs to localStorage
+   * Save console logs to localStorage (debounced for performance)
    * Limits to max lines to prevent localStorage overflow
    */
+  let saveConsoleLogsTimer = null;
   function saveConsoleLogs(){
-    const lines = els.console.querySelectorAll('div');
-    const maxLines = APP_CONSTANTS.CONSOLE.MAX_LINES;
-    if(lines.length > maxLines) {
-      // Remove oldest lines
-      const toRemove = lines.length - maxLines;
-      Array.from(lines).slice(0, toRemove).forEach(line => line.remove());
+    // Debounce saves to avoid excessive localStorage writes
+    if(saveConsoleLogsTimer) {
+      clearTimeout(saveConsoleLogsTimer);
     }
-    // Save current state
-    const logs = els.console.innerHTML;
-    Storage.set('chroot_console_logs', logs);
+    
+    saveConsoleLogsTimer = setTimeout(() => {
+      if(!els.console) return;
+      
+      const lines = els.console.querySelectorAll('div');
+      const maxLines = APP_CONSTANTS.CONSOLE.MAX_LINES;
+      
+      // Trim if exceeding limit
+      if(lines.length > maxLines) {
+        const toRemove = lines.length - maxLines;
+        for(let i = 0; i < toRemove; i++) {
+          if(lines[i].parentNode) {
+            lines[i].remove();
+          }
+        }
+      }
+      
+      // Save current state
+      try {
+        Storage.set('chroot_console_logs', els.console.innerHTML);
+      } catch(e) {
+        // Silently fail if storage quota exceeded
+        console.warn('Failed to save console logs:', e);
+      }
+      
+      saveConsoleLogsTimer = null;
+    }, 500); // Debounce: save 500ms after last log addition
   }
 
   /**
    * Load console logs from localStorage
    * Enforces max line limit when loading
-   * Always scrolls to bottom instantly on page load (no animation)
-   * Completely rewritten from scratch - aggressive scroll-to-bottom approach
+   * Optimized loading with efficient DOM operations
    */
   function loadConsoleLogs(){
     const logs = Storage.get('chroot_console_logs');
@@ -154,35 +395,39 @@
     
     const pre = els.console;
     
-    // CRITICAL: Disable smooth scrolling BEFORE any operations
-    // Use setProperty to ensure it overrides CSS
+    // Disable smooth scrolling for instant initial load
     pre.style.setProperty('scroll-behavior', 'auto', 'important');
     
-    // Set content
+    // Set content efficiently
     pre.innerHTML = logs;
     
-    // Enforce max line limit
+    // Enforce max line limit efficiently
     const lines = pre.querySelectorAll('div');
     const maxLines = APP_CONSTANTS.CONSOLE.MAX_LINES;
     if(lines.length > maxLines) {
       const toRemove = lines.length - maxLines;
-      Array.from(lines).slice(0, toRemove).forEach(line => line.remove());
+      for(let i = 0; i < toRemove; i++) {
+        if(lines[i].parentNode) {
+          lines[i].remove();
+        }
+      }
       saveConsoleLogs();
     }
     
-    // Apply fade-in animation if console has < 15 lines and no scrollbar
+    // Apply fade-in animation only for small console (< 15 lines, no scrollbar)
     const finalLines = pre.querySelectorAll('div');
     const hasScrollbar = pre.scrollHeight > pre.clientHeight;
     const shouldAnimate = finalLines.length < 15 && !hasScrollbar;
     
     if(shouldAnimate) {
-      // Use requestAnimationFrame for smoother initial render
       requestAnimationFrame(() => {
         finalLines.forEach((line, index) => {
-          // Skip progress indicators - they appear immediately
           if(!line.classList.contains('progress-indicator')) {
-            line.classList.add('log-fade-in');
-            line.style.animationDelay = `${index * 45}ms`; // 45ms stagger per line (slightly faster)
+            // Ensure fade-in class exists (might already be in HTML)
+            if(!line.classList.contains('log-fade-in')) {
+              line.classList.add('log-fade-in');
+            }
+            line.style.animationDelay = `${index * 40}ms`; // Slightly faster (40ms)
           } else {
             line.classList.add('log-immediate');
           }
@@ -190,27 +435,13 @@
       });
     }
     
-    // Aggressive scroll-to-bottom: try multiple times to ensure it sticks
-    // The browser might reset scroll position, so we force it multiple times
-    function forceScrollToBottom() {
-      // Force layout recalculation
-      void pre.offsetHeight;
-      // Set scroll position directly
-      pre.scrollTop = pre.scrollHeight;
-    }
-    
-    // Try immediately
-    forceScrollToBottom();
-    
-    // Try after one frame (browser has calculated layout)
+    // Scroll to bottom instantly on load (no animation)
     requestAnimationFrame(() => {
-      forceScrollToBottom();
-      // Try one more time after a microtask (ensures all rendering is done)
-      Promise.resolve().then(() => {
-        forceScrollToBottom();
-        // Restore smooth scrolling for future interactions
-        pre.style.removeProperty('scroll-behavior');
-      });
+      LogBuffer.scrollInstant();
+      // Restore smooth scrolling for future interactions
+      pre.style.removeProperty('scroll-behavior');
+      // Reset scroll state
+      LogBuffer.isUserScrolledUp = false;
     });
   }
 
@@ -261,74 +492,27 @@
   }
 
   /**
-   * Append text to console with optional styling
-   * Enforces max line limit to prevent memory issues
-   * Excludes progress indicators from line count to prevent removing them
-   * Adds smooth fade-in animation when console has < 15 lines
+   * Append text to console (batched for performance)
+   * Logs are buffered and flushed in chunks for smooth streaming effect
    */
-  function appendConsole(text, cls){
-    const pre = els.console;
-    const maxLines = APP_CONSTANTS.CONSOLE.MAX_LINES;
-    // Exclude progress indicators from line count
-    const lines = Array.from(pre.querySelectorAll('div')).filter(
-      line => !line.classList.contains('progress-indicator')
-    );
-    
-    // Remove oldest lines if we exceed the limit (excluding progress indicators)
-    if(lines.length >= maxLines) {
-      const toRemove = lines.length - maxLines + 1;
-      Array.from(lines).slice(0, toRemove).forEach(line => line.remove());
+  function appendConsole(text, cls) {
+    LogBuffer.add(text, cls);
+  }
+  
+  /**
+   * Append multiple lines at once (for command output batching)
+   */
+  function appendConsoleBatch(lines, cls = null) {
+    if(!Array.isArray(lines)) {
+      LogBuffer.add(lines, cls);
+      return;
     }
     
-    const line = document.createElement('div');
-    if(cls) line.className = cls;
-    line.textContent = text + '\n';
-    
-    // Check if we should animate (when console has < 15 lines and no scrollbar)
-    const isProgressIndicator = cls === 'progress-indicator' || text.includes('⏳');
-    const totalLines = pre.querySelectorAll('div').length;
-    const hasScrollbar = pre.scrollHeight > pre.clientHeight;
-    const shouldAnimate = totalLines < 15 && !hasScrollbar && !isProgressIndicator;
-    
-    if(shouldAnimate) {
-      // Apply fade-in animation with staggered delay (smooth cascade effect)
-      line.classList.add('log-fade-in');
-      // Use requestAnimationFrame for smoother timing
-      requestAnimationFrame(() => {
-        const delay = (totalLines * 45); // 45ms delay per line (slightly faster for snappier feel)
-        line.style.animationDelay = `${delay}ms`;
-        // Cleanup will-change after animation completes (performance optimization)
-        setTimeout(() => {
-          if(line.classList.contains('log-fade-in')) {
-            line.style.willChange = 'auto';
-          }
-        }, delay + 350); // animation duration + delay
-      });
-    } else if(isProgressIndicator) {
-      // Progress indicators appear immediately
-      line.classList.add('log-immediate');
-    }
-    
-    pre.appendChild(line);
-    
-    // Auto-scroll to bottom smoothly, but only if user is already near bottom
-    // This prevents jarring scroll jumps when user is reading logs at the top
-    const maxScroll = Math.max(0, pre.scrollHeight - pre.clientHeight);
-    const currentScrollTop = pre.scrollTop;
-    const distanceFromBottom = maxScroll - currentScrollTop;
-    const isNearBottom = distanceFromBottom <= 100; // Within 100px of bottom
-    
-    if(isNearBottom || maxScroll === 0) {
-      // User is near bottom or console is empty - scroll to keep them at bottom
-      pre.scrollTo({
-        top: pre.scrollHeight,
-        behavior: 'smooth'
-      });
-    }
-    // If user is reading logs at the top, don't scroll - let them read in peace
-    
-    // Save logs after each append
-    saveConsoleLogs();
+    lines.forEach(line => {
+      if(line && line.trim()) {
+        LogBuffer.add(line.trim(), cls);
+      }
+    });
   }
 
   /**
@@ -873,14 +1057,12 @@
 
           ProgressIndicator.remove(progressLine, interval);
 
-          // Display output line by line
+          // Display output in batch (better performance)
           if(output) {
-            const lines = String(output).split('\n');
-            lines.forEach(line => {
-              if(line.trim()) {
-                appendConsole(line);
-              }
-            });
+            const lines = String(output).split('\n').filter(line => line.trim());
+            if(lines.length > 0) {
+              appendConsoleBatch(lines);
+            }
           }
 
           // Handle success
@@ -901,14 +1083,12 @@
         } catch(error) {
           ProgressIndicator.remove(progressLine, interval);
 
-          // Display error line by line
+          // Display error in batch (better performance)
           const errorMsg = String(error.message || error);
-          const lines = errorMsg.split('\n');
-          lines.forEach(line => {
-            if(line.trim()) {
-              appendConsole(line, 'err');
-            }
-          });
+          const lines = errorMsg.split('\n').filter(line => line.trim());
+          if(lines.length > 0) {
+            appendConsoleBatch(lines, 'err');
+          }
 
           // Handle error
           if(onError) {
@@ -958,29 +1138,20 @@
   };
 
   /**
-   * Force scroll console to absolute bottom (instant, no smooth scroll)
-   * Used after command completion to ensure we stay at bottom
+   * Force scroll console to absolute bottom
+   * Kept for backward compatibility
    */
   function forceScrollToBottom() {
-    if(!els.console) return;
-    const pre = els.console;
-    // Force layout recalculation
-    void pre.offsetHeight;
-    // Set scroll position to absolute bottom
-    pre.scrollTop = pre.scrollHeight;
-    // Force another layout recalculation to sync scrollbar
-    void pre.offsetHeight;
+    LogBuffer.scrollToBottom();
   }
-
+ 
   /**
-   * Helper: Force scroll after DOM updates complete (double RAF pattern)
-   * Replaces repeated requestAnimationFrame(() => requestAnimationFrame(() => forceScrollToBottom()))
+   * Helper: Force scroll after DOM updates complete
+   * Kept for backward compatibility
    */
   function forceScrollAfterDOMUpdate() {
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        forceScrollToBottom();
-      });
+      LogBuffer.scrollToBottom();
     });
   }
 
@@ -1105,11 +1276,19 @@
    * @returns {Object} Object with { progressLine, progressInterval } for cleanup
    */
   async function prepareActionExecution(headerText, progressText, progressType = 'dots') {
-    // STEP 1: Scroll to bottom - must complete before anything else
-    await scrollConsoleToBottom();
-    
-    // STEP 2: Print header message
+    // Hide scrollbar with a smooth fade while a long-running action is active.
+    // This avoids distraction from the thumb jumping during continuous auto-scroll.
+    setConsoleScrollbarHidden(true);
+
+    // STEP 1: Print header message via LogBuffer.
+    // We intentionally do this BEFORE scrolling so the header is part of the
+    // flushed batch, then we scroll to the true bottom of the updated content.
     appendConsole(`━━━ ${headerText} ━━━`, 'info');
+
+    // STEP 2: Ensure header is flushed to the DOM, then scroll to bottom so it
+    // is guaranteed to be visible even when a lot of old logs exist.
+    await LogBuffer.waitForFlush();
+    await scrollConsoleToBottom({ smooth: true });
     
     // STEP 3: Show animated progress indicator (keep visible during execution)
     const { progressLine, interval: progressInterval } = ProgressIndicator.create(progressText, progressType);
@@ -1128,51 +1307,11 @@
   }
 
   /**
-   * Scroll console to bottom smoothly and wait for completion
-   * Simplified version - removes redundant checks while maintaining reliability
+   * Unified console scroll function
+   * Smoothly scrolls to bottom; can be forced to ignore user scroll position
    */
-  async function scrollConsoleToBottom() {
-    if(!els.console) return;
-    
-    const pre = els.console;
-    void pre.offsetHeight; // Force layout recalculation
-    
-    const maxScroll = Math.max(0, pre.scrollHeight - pre.clientHeight);
-    const isAtBottom = Math.abs(pre.scrollTop - maxScroll) <= 1;
-    
-    if(isAtBottom) {
-      // Already at bottom, just ensure sync
-      pre.scrollTop = pre.scrollHeight;
-      void pre.offsetHeight;
-      return;
-    }
-    
-    // Smooth scroll to bottom
-    pre.scrollTo({ top: pre.scrollHeight, behavior: 'smooth' });
-    
-    // Wait for scroll completion with timeout
-    return new Promise((resolve) => {
-      const startTime = Date.now();
-      const maxWaitTime = 1500;
-      
-      function checkScroll() {
-        void pre.offsetHeight; // Force layout recalculation
-        
-        const currentMaxScroll = Math.max(0, pre.scrollHeight - pre.clientHeight);
-        const isAtBottom = Math.abs(pre.scrollTop - currentMaxScroll) <= 1;
-        
-        if(isAtBottom || Date.now() - startTime > maxWaitTime) {
-          // Final sync to exact bottom
-          pre.scrollTop = pre.scrollHeight;
-          void pre.offsetHeight;
-          resolve();
-        } else {
-          requestAnimationFrame(checkScroll);
-        }
-      }
-      
-      requestAnimationFrame(() => requestAnimationFrame(checkScroll));
-    });
+  async function scrollConsoleToBottom(options = {}) {
+    await LogBuffer.scrollToBottom(options);
   }
 
   /**
@@ -1203,14 +1342,15 @@
     
     const commandId = cmdExec.executeAsync(finalCmd, true, {
       onOutput: (output) => {
-        // Display output, but filter out executing messages
+        // Batch output processing - collect all lines and append in one go
         if(output) {
-          const lines = output.split('\n');
-          lines.forEach(line => {
-            if(line.trim() && !line.trim().startsWith('[Executing:')) {
-              appendConsole(line);
-            }
-          });
+          const lines = output.split('\n')
+            .filter(line => line.trim() && !line.trim().startsWith('[Executing:'));
+          
+          if(lines.length > 0) {
+            // Use batch append for better performance
+            appendConsoleBatch(lines);
+          }
         }
       },
       onError: (error) => {
@@ -1408,11 +1548,13 @@
         // Print result
         if(result.success) {
           appendConsole(`✓ ${action} completed successfully`, 'success');
+          // refreshStatus will handle scrollbar show with proper delay
           setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH);
           // Update module status after successful action
           updateModuleStatus();
         } else {
           appendConsole(`✗ ${action} failed`, 'err');
+          // refreshStatus will handle scrollbar show with proper delay
           setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH);
           // Update module status even on failure (to reflect current state)
           updateModuleStatus();
@@ -1627,6 +1769,7 @@
       let running = false;
 
       // COLLECT ALL STATUS INFO WITHOUT TOUCHING UI
+      let fetchUsersPromise = Promise.resolve();
 
       if(chrootExists){
         _chrootMissingLogged = false;
@@ -1641,11 +1784,9 @@
         // Check for "Status: RUNNING" from the status output
         running = /Status:\s*RUNNING/i.test(s);
 
-        // Fetch users if running - run in background to avoid blocking status update
-        // Messages will appear asynchronously after status is updated
+        // Fetch users if running - we'll await this to ensure logs are generated before showing scrollbar
         if(running){
-          // Don't await - let it run in background, messages will print when ready
-          fetchUsers(false).catch(() => {}); // Non-blocking, will print message async
+          fetchUsersPromise = fetchUsers(false).catch(() => {}); // Will print message when ready
         }
 
         // Check hotspot state if running - sync with actual system state
@@ -1766,10 +1907,28 @@
       }
       els.settingsBtn.disabled = false;
       els.settingsBtn.style.opacity = '';
+      
+      // Wait for async operations to complete (fetchUsers generates logs)
+      await fetchUsersPromise;
+      
+      // Wait for log buffer to flush all pending logs
+      await LogBuffer.waitForFlush();
+      
+      // Scroll to bottom to show all logs
+      await LogBuffer.scrollToBottom();
+
+      // Reveal console scrollbar again now that refresh + log flush are complete.
+      // This gives a smooth fade-in after it was hidden for the action.
+      setConsoleScrollbarHidden(false);
 
     }catch(e){
       updateStatus('unknown');
       disableAllActions(true);
+      // Wait for any pending logs
+      await LogBuffer.waitForFlush();
+      await LogBuffer.scrollToBottom();
+      // Even on error, ensure scrollbar becomes visible again.
+      setConsoleScrollbarHidden(false);
     }
   }
 
@@ -1846,6 +2005,24 @@
         els.startBtn.disabled = true;
         els.userSelect.disabled = true;
         // Visual feedback - all buttons appear pressed/disabled
+        els.stopBtn.style.opacity = '0.5';
+        els.restartBtn.style.opacity = '0.5';
+        els.startBtn.style.opacity = '0.5';
+      } else if(
+        state === 'backing up' ||
+        state === 'restoring'  ||
+        state === 'migrating'  ||
+        state === 'uninstalling' ||
+        state === 'updating'   ||
+        state === 'trimming'   ||
+        state === 'resizing'
+      ){
+        // Long-running maintenance operations in progress:
+        // keep all main action buttons disabled so user can't start/stop/restart mid-task
+        els.stopBtn.disabled = true;
+        els.restartBtn.disabled = true;
+        els.startBtn.disabled = true;
+        els.userSelect.disabled = true;
         els.stopBtn.style.opacity = '0.5';
         els.restartBtn.style.opacity = '0.5';
         els.startBtn.style.opacity = '0.5';
@@ -2433,6 +2610,7 @@
           forceScrollAfterDOMUpdate();
           
           // Restart chroot after update (uses centralized flow)
+          // Note: scrollbar will be hidden again by prepareActionExecution for restart
           setTimeout(async () => {
             if(window.StopNetServices) {
               await StopNetServices.stopNetworkServices();
@@ -2466,31 +2644,43 @@
               
               appendConsole('━━━ Update Complete ━━━', 'success');
               
-              // Force scroll to bottom after restart completion messages
+              // Ensure restart completion messages are visible immediately
               forceScrollAfterDOMUpdate();
               
               activeCommandId = null;
               disableAllActions(false);
               disableSettingsPopup(false, true);
               if(els.closePopup) els.closePopup.style.display = '';
-              setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH);
+              
+              // After "Update Complete" and a status refresh, smoothly scroll console once
+              // refreshStatus will handle scrollbar show with proper delay
+              setTimeout(async () => {
+                try {
+                  await refreshStatus();
+                } catch(e) {
+                  console.error('refreshStatus error after update restart:', e);
+                } finally {
+                  scrollConsoleToBottom({ force: true });
+                }
+              }, ANIMATION_DELAYS.STATUS_REFRESH);
             });
             
             localRestartCommandId = restartCommandId;
             activeCommandId = restartCommandId;
           }, ANIMATION_DELAYS.POPUP_CLOSE_LONG);
-        } else {
-          appendConsole('✗ Chroot update failed', 'err');
-          
-          // Force scroll to bottom after failure message
-          forceScrollAfterDOMUpdate();
-          
-          activeCommandId = null;
-          disableAllActions(false);
-          disableSettingsPopup(false, true);
-          if(els.closePopup) els.closePopup.style.display = '';
-          setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH);
-        }
+          } else {
+            appendConsole('✗ Chroot update failed', 'err');
+            
+            // Force scroll to bottom after failure message
+            forceScrollAfterDOMUpdate();
+            
+            activeCommandId = null;
+            disableAllActions(false);
+            disableSettingsPopup(false, true);
+            if(els.closePopup) els.closePopup.style.display = '';
+            // refreshStatus will handle scrollbar show with proper delay
+            setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH);
+          }
       });
       
       localCommandId = commandId;
@@ -3728,6 +3918,13 @@
     }
   };
   document.addEventListener('touchend', touchEndHandler, { passive: true });
+  
+  // Initialize console scroll listener
+  if(els.console) {
+    els.console.addEventListener('scroll', () => {
+      LogBuffer.handleUserScroll();
+    }, { passive: true });
+  }
   
   // Store cleanup function for potential future use (e.g., page unload)
   window._chrootUICleanup = () => {
