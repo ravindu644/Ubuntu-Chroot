@@ -215,8 +215,6 @@ textarea {
   .foot{padding-top:16px;padding-bottom:calc(16px + var(--bottom-inset))}
 }
 
-/* Console scrollbar styling */
-.console::-webkit-scrollbar{width:8px;height:8px}
 
 /* header controls alignment tweaks */
 .top .controls{display:flex;align-items:center;gap:12px}
@@ -335,6 +333,23 @@ textarea {
   transform:translateZ(0);
 }
 
+/* Chunk fade-in animation for batched logs */
+.console > div.log-chunk-fade{
+  animation:chunkFadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  opacity:0;
+  will-change: opacity;
+  backface-visibility: hidden;
+}
+
+@keyframes chunkFadeIn{
+  from{
+    opacity:0;
+  }
+  to{
+    opacity:1;
+  }
+}
+
 .console > div.log-immediate{
   animation:none;
   opacity:1;
@@ -421,16 +436,29 @@ textarea {
   transform: none !important;
 }
 
-/* Smooth console scrolling */
-.console{scroll-behavior:smooth}
-.console::-webkit-scrollbar{width:8px}
+/* Smooth console scrolling
+ * NOTE: We let JavaScript control smooth auto-scroll via scrollTo({ behavior: 'smooth' })
+ * to avoid animation stacking. Here we only style visible scrollbars.
+ */
+.console::-webkit-scrollbar{width:8px;height:8px}
 .console::-webkit-scrollbar-track{background:transparent}
-.console::-webkit-scrollbar-thumb{background:rgba(0,0,0,0.2);border-radius:4px}
+.console::-webkit-scrollbar-thumb{background:rgba(0,0,0,0.2);border-radius:4px;transition:opacity 0.3s ease, background 0.2s ease}
 .console::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,0.3)}
 
-[data-theme="dark"] .console::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.2)}
+[data-theme="dark"] .console::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.2);transition:opacity 0.3s ease, background 0.2s ease}
 [data-theme="dark"] .console::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.3)}
 [data-theme="dark"] .console::-webkit-scrollbar-corner{background:transparent}
+
+/* Fade-out / fade-in helper class for console scrollbar.
+ * JS toggles .console-scrollbar-hidden while long actions are running.
+ */
+.console-scrollbar-hidden{
+  scrollbar-color: transparent transparent; /* Firefox */
+}
+.console-scrollbar-hidden::-webkit-scrollbar-thumb{
+  background:transparent !important;
+  opacity:0;
+}
 
 /* header controls alignment tweaks */
 .top{border-bottom-color: rgba(0,0,0,0.05)}

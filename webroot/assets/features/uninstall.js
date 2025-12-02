@@ -12,7 +12,8 @@
     const {
       activeCommandId, rootAccessConfirmed, appendConsole, showConfirmDialog, closeSettingsPopup,
       ANIMATION_DELAYS, PATH_CHROOT_SH, ProgressIndicator, disableAllActions,
-      disableSettingsPopup, updateStatus, refreshStatus, runCmdAsync, ensureChrootStopped, prepareActionExecution, executeCommandWithProgress, els
+      disableSettingsPopup, updateStatus, refreshStatus, runCmdAsync, ensureChrootStopped,
+      prepareActionExecution, executeCommandWithProgress, scrollConsoleToBottom, updateModuleStatus, els
     } = dependencies;
 
     if(activeCommandId.value) {
@@ -67,23 +68,27 @@
     const commandId = executeCommandWithProgress({
       cmd,
       progress: { progressLine, progressInterval },
-      onSuccess: (result) => {
+      onSuccess: async (result) => {
         appendConsole('✅ Chroot uninstalled successfully!', 'success');
         appendConsole('All chroot data has been removed.', 'info');
         appendConsole('━━━ Uninstallation Complete ━━━', 'success');
-        updateStatus('stopped');
+        updateStatus('stopped'); // temporary; refreshStatus will switch to "chroot not found"
         if(updateModuleStatus) updateModuleStatus();
         disableAllActions(true);
         disableSettingsPopup(false, false);
-        setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH * 2);
+        // After logs and status update, smoothly scroll and then refresh UI state
+        await scrollConsoleToBottom({ force: true });
+        await refreshStatus();
       },
-      onError: (result) => {
+      onError: async (result) => {
         appendConsole('✗ Uninstallation failed', 'err');
         appendConsole('Check the logs above for details.', 'err');
         if(updateModuleStatus) updateModuleStatus();
         disableAllActions(false);
         disableSettingsPopup(false, false);
-        setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH * 2);
+        // Ensure user sees error logs and UI is refreshed
+        await scrollConsoleToBottom({ force: true });
+        await refreshStatus();
       },
       useValue: true,
       activeCommandIdRef: activeCommandId
