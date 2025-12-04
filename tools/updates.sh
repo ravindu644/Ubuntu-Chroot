@@ -553,6 +553,32 @@ update_v4200() {
     echo "[UPDATER] ✓ Update v4200 completed: USB authorization udev rule configured!"
 }
 
+update_v4400() {
+    echo "[UPDATER] Starting update v4400: Use host network for docker containers"
+
+    local aliases_file="/etc/profile.d/chroot-webui-aliases.sh"
+
+    # Check if the docker function is already present
+    if [ -f "$aliases_file" ] && grep -q "docker() {" "$aliases_file"; then
+        echo "[UPDATER] Function already exists, skipping append"
+    else
+        # Append the docker function to the aliases file
+        cat >> "$aliases_file" <<'EOF'
+docker() {
+    if [ "$1" = "run" ]; then
+        shift
+        command docker run --net=host "$@"
+    else
+        command docker "$@"
+    fi
+}
+EOF
+    fi
+
+    echo "[UPDATER] ✓ Update v4400 completed: Add docker function to use host network for docker containers"
+}
+
+
 # Add your new updates below:
 # update_v{VERSION}() {
 #     echo "Your update description..."

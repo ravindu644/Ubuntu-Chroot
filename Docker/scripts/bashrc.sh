@@ -98,3 +98,12 @@ transfer() {
         echo "Transfer failed!"
     fi
 }
+
+docker() {
+    if [ "$1" = "run" ]; then
+        shift
+        command docker run --net=host "$@"
+    else
+        command docker "$@"
+    fi
+}
