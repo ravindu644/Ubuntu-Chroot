@@ -1,3 +1,5 @@
+<!-- This entire crap is AI generated, don't blame me for the mess -->
+
 <!doctype html>
 <html lang="en">
 <head>
@@ -248,20 +250,20 @@
           <div class="setting-section">
             <h4>Storage Optimization</h4>
             <p class="setting-desc">Optimize your sparse image storage usage</p>
-            
+
             <div class="setting-subsection">
               <h5>Trim Sparse Image</h5>
               <p class="setting-desc">Reclaim unused space in the sparse image by running fstrim. This will shrink the image file by removing unused blocks.</p>
               <button id="trim-sparse-btn" class="btn">Trim Sparse Image</button>
             </div>
-            
+
             <div class="setting-subsection">
               <h5>Resize Sparse Image</h5>
               <p class="setting-desc">Change the maximum size of your sparse image (4-512GB). Make a backup first - this operation can corrupt your filesystem if interrupted.</p>
               <button id="resize-sparse-btn" class="btn outline">Resize Sparse Image</button>
             </div>
           </div>
-          
+
           <div class="setting-section danger-zone-section" tabindex="0">
             <h4>Storage Information</h4>
             <div id="sparse-info" class="setting-desc">
@@ -293,7 +295,7 @@
             </div>
             <button id="dismiss-hotspot-warning" class="warning-close" title="Dismiss warning">×</button>
           </div>
-          
+
           <div class="setting-section">
             <form id="hotspot-form">
               <div class="form-group">
@@ -354,14 +356,14 @@
         <div class="popup-body">
           <div class="setting-section">
             <p class="setting-desc">Forward localhost services (VNC, XRDP, SSH) from the chroot to a network interface.<br><br>This allows you to access chroot services from other devices on your network.</p>
-            
+
                 <div class="form-group">
                   <label for="forward-nat-iface">Network Interface:</label>
                   <select id="forward-nat-iface" required>
                     <option value="">Loading interfaces...</option>
                   </select>
                 </div>
-            
+
             <div class="script-actions">
               <button id="start-forwarding-btn" class="btn">Start Forwarding</button>
               <button id="stop-forwarding-btn" class="btn danger">Stop Forwarding</button>

@@ -1,4 +1,6 @@
 // Forward NAT Feature Module
+// This entire crap is AI generated, don't blame me for the mess
+
 (function(window) {
   'use strict';
 
@@ -37,7 +39,7 @@
       const trimmed = ifaceRaw.trim();
       if(trimmed.length > 0) {
         const option = document.createElement('option');
-        
+
         if(trimmed.includes(':')) {
           const [iface, ip] = trimmed.split(':');
           option.value = iface.trim();
@@ -46,7 +48,7 @@
           option.value = trimmed;
           option.textContent = trimmed;
         }
-        
+
         select.appendChild(option);
       }
     });
@@ -70,17 +72,17 @@
 
   async function fetchInterfaces(forceRefresh = false, backgroundOnly = false) {
     const { rootAccessConfirmed, runCmdSync, FORWARD_NAT_SCRIPT, Storage, appendConsole, els } = dependencies;
-    
+
     if(!rootAccessConfirmed.value) {
       return;
     }
 
     const cached = Storage.getJSON('chroot_forward_nat_interfaces_cache');
-    
+
     // Strategy: Show cached data immediately if available, only fetch if cache is empty or forced
     // When opening popup: show cache only, NO background refresh (that causes lag!)
     // Background refresh only happens on refresh button or pre-fetch
-    
+
     // If we have cache and not forcing refresh, show it immediately and return
     // NO background refresh when opening popup - that's what causes the lag!
     if(cached && Array.isArray(cached) && cached.length > 0 && !forceRefresh) {
@@ -90,7 +92,7 @@
       // Return immediately - don't fetch in background when opening popup
       return;
     }
-    
+
     // No cache or force refresh - fetch now (only if cache is empty or forced)
     // This should only happen if cache is empty, or when refresh button is clicked
     try {
@@ -162,16 +164,16 @@
         actionText,
         'spinner'
       );
-      
+
       activeCommandId.value = 'forwarding-start';
 
       const cmd = `sh ${FORWARD_NAT_SCRIPT} -i "${iface}" 2>&1`;
-      
+
       setTimeout(async () => {
         try {
           const output = await runCmdSync(cmd);
           ProgressIndicator.remove(progressLine, progressInterval);
-          
+
           if(output) {
             const lines = String(output).split('\n');
             lines.forEach(line => {
@@ -180,7 +182,7 @@
               }
             });
           }
-          
+
           if(output && (output.includes('Localhost routing active') || output.includes('Gateway:'))) {
             appendConsole(`✓ Forwarding started successfully on ${iface}`, 'success');
             forwardingActive.value = true;
@@ -189,12 +191,12 @@
           } else {
             appendConsole(`✗ Failed to start forwarding`, 'err');
           }
-          
+
           // Force scroll to bottom after completion messages
           forceScrollAfterDOMUpdate();
         } catch(error) {
           ProgressIndicator.remove(progressLine, progressInterval);
-          
+
           const errorMsg = String(error.message || error);
           const lines = errorMsg.split('\n');
           lines.forEach(line => {
@@ -202,9 +204,9 @@
               appendConsole(line, 'err');
             }
           });
-          
+
           appendConsole(`✗ Forwarding failed to start`, 'err');
-          
+
           // Force scroll to bottom after error messages
           forceScrollAfterDOMUpdate();
         } finally {

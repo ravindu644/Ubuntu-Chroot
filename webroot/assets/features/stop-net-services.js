@@ -1,5 +1,7 @@
 // Stop Network Services Feature Module
 // Centralized module for stopping hotspot and forward-nat services
+// This entire crap is AI generated, don't blame me for the mess
+
 (function(window) {
   'use strict';
 

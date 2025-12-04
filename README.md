@@ -37,12 +37,12 @@ A comprehensive Android Linux environment featuring **Ubuntu 24.04** with a buil
 <a id="why-this-is-different"></a>
 ## ❔ Why This Is Different
 
-**Advanced Namespace Isolation**  
+**Advanced Namespace Isolation**
 - Utilizes Linux namespaces (mount, PID, UTS, IPC) for true namespace isolation. Unlike basic chroot setups, this creates separate filesystem mounts, process IDs, hostnames, and IPC spaces - preventing interference between the chroot and Android host.<sup>[<a href="#01-core-namespace-support-required-for-isolation">1</a>]</sup>
 
   <details>
   <summary>Process isolation demonstration</summary>
-  
+
   <p align="center">
     <img src="Screenshots/namespace-isolation.png" alt="Namespace isolation diagram" width="650" />
     <br><em>Illustration of isolated namespaces</em>
@@ -57,34 +57,34 @@ A comprehensive Android Linux environment featuring **Ubuntu 24.04** with a buil
 >
 > This allows full Linux services to run without conflicts, security risks, or performance loss.
 
-**Full Hardware Access**  
+**Full Hardware Access**
 - Complete access to all hardware features of your Android device, including WiFi adapters, ADB, Odin, and more.<sup>[<a href="#02-essential-filesystems-for-hardware-access">2</a>]</sup>
 
   <details>
   <summary>Using an external WIFI adapter inside chroot</summary>
-  
+
   <p align="center">
     <img src="Screenshots/hardware-access.png" alt="Hardware access screenshot" width="650" />
     <br><em>Example tools running with full device access</em>
   </p>
   </details>
 
-**x86_64 Emulation**  
+**x86_64 Emulation**
 - Preconfigured x86_64 emulation enables you to run x86_64 applications and binaries directly on your Android device with full hardware access.<sup>[<a href="#03-running-x86_64-binaries-natively">3</a>]</sup>
 
   <details>
   <summary>Odin4 x86_64 running with full hardware access</summary>
-  
+
   <p align="center">
     <img src="Screenshots/x86.png" alt="Odin4 x86_64 binary running" width="650" />
     <br><em>Rebooting a phone in Download Mode using x86_64 Odin4 on an ARM64 device</em>
   </p>
   </details>
 
-**"It Just Works" Philosophy**  
+**"It Just Works" Philosophy**
 - No complex terminal commands required. The desktop environment starts automatically when the chroot launches, and most developer tools are preconfigured and ready to use out of the box.
 
-**Containerization Ready**  
+**Containerization Ready**
 - When you flash the module, it extracts the Ubuntu rootfs to `/data/local/ubuntu-chroot`, which the backend uses as the installed rootfs.
 
 - Under **Experimental Features** in the WebUI, you can migrate your directory-based chroot to an ext4 sparse image, containerizing your environment into a single `.img` file.
@@ -92,7 +92,7 @@ A comprehensive Android Linux environment featuring **Ubuntu 24.04** with a buil
 - You can freely shrink, grow, and FSTRIM your sparse image after migration.
 - A sparse image can be created at any size (even 1TB) but only consumes real storage as data is written - an efficient storage method for your Linux environment.
 
-**Seamless Desktop Experience**  
+**Seamless Desktop Experience**
 
 <details>
 <summary><strong>📸 Desktop Screenshots (click to expand)</strong></summary>
@@ -111,28 +111,28 @@ A comprehensive Android Linux environment featuring **Ubuntu 24.04** with a buil
 
 - A complete Linux desktop experience on Android, capable of running GUI applications smoothly.<sup>[<a href="#04-gui-applications-support">4</a>]</sup>
 
-**Forward Chroot Traffic to Any Network Interface**  
+**Forward Chroot Traffic to Any Network Interface**
 - Native WiFi hotspot functionality supporting both 2.4GHz and 5GHz bands. Automatically configures `hostapd` and DHCP services within the chroot environment for instant `localhost` sharing.
 - If the Native WiFi hotspot didn't work for you, you still have a separated menu to forward all the chroot traffic to any desired network interface. (e.g., USB Tethering/WiFi Hotspot created using Android userspace)
 
 > **💡 Example**:
-> 
+>
 > Use the GUI running on your phone and project it to another large screen with near-zero latency.
 
-**Incremental OTA Updates**  
+**Incremental OTA Updates**
 - Version-tracked incremental updates preserve user data and configurations across upgrades, eliminating the need for full reinstallation.
 
-**Backup and Restore**  
+**Backup and Restore**
 - Back up your chroot environment to a compressed archive and restore it later, or transfer it to another device.
 
-**Post-Exec Scripts and "Run on Boot"**  
+**Post-Exec Scripts and "Run on Boot"**
 - Define scripts to run automatically when the chroot boots.
 
 > **💡 Example**:
-> 
+>
 > Enable "Run on boot" and reboot your phone - the chroot will automatically start (even while locked), executing your post-exec script so you can host bots, SSH, or background services effortlessly.
 
-**Modern WebUI**  
+**Modern WebUI**
 - Access and manage your chroot environment from KernelSU/APatch in-built WebUI.
 
 <details>
@@ -238,9 +238,9 @@ If the built-in hotspot doesn't work, or you need the **lowest latency experienc
 8. Use the IP address and port displayed in the console log along with your login credentials to connect
 
 > [!TIP]
-> 
+>
 > The IP address will be displayed in the WebUI console after starting the hotspot or forwarding.
-> 
+>
 > Look for messages like `Gateway IP` to determine the value for `Host` required for the VNC client. For VNC, the port is always `5901`.
 
 ### Advanced: RDP Access
@@ -257,7 +257,7 @@ For advanced users who prefer RDP over VNC:
 <a id="experimental-features"></a>
 ## 🧪 Experimental Features
 
-**Sparse Image Mode Installation**  
+**Sparse Image Mode Installation**
 - Edit the [experimental.conf](./experimental.conf) file before installation:
     - Set `SPARSE_IMAGE=true`
     - Define the image size in GB using `SPARSE_IMAGE_SIZE`

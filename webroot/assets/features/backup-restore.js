@@ -1,4 +1,6 @@
 // Backup and Restore Feature Module
+// This entire crap is AI generated, don't blame me for the mess
+
 (function(window) {
   'use strict';
 
@@ -60,7 +62,7 @@
 
     // Update status first, then use centralized flow
     updateStatus('backing up');
-    
+
     // Now use centralized flow for backup action
     const { progressLine, interval: progressInterval } = await prepareActionExecution(
       'Starting Chroot Backup',
@@ -70,7 +72,7 @@
 
     // Execute command using helper (handles validation, execution, cleanup, scrolling)
     const cmd = `sh ${PATH_CHROOT_SH} backup --webui "${backupPath}"`;
-    
+
     const commandId = executeCommandWithProgress({
       cmd,
       progress: { progressLine, progressInterval },
@@ -93,7 +95,7 @@
       useValue: true,
       activeCommandIdRef: activeCommandId
     });
-    
+
     if(!commandId) {
       // Validation failed - cleanup already done by helper
       disableAllActions(false);
@@ -159,7 +161,7 @@
 
     // Update status first, then use centralized flow
     updateStatus('restoring');
-    
+
     // Now use centralized flow for restore action
     const { progressLine, interval: progressInterval } = await prepareActionExecution(
       'Starting Chroot Restore',
@@ -169,7 +171,7 @@
 
     // Execute command using helper (handles validation, execution, cleanup, scrolling)
     const cmd = `sh ${PATH_CHROOT_SH} restore --webui "${backupPath}"`;
-    
+
     const commandId = executeCommandWithProgress({
       cmd,
       progress: { progressLine, progressInterval },
@@ -193,7 +195,7 @@
       useValue: true,
       activeCommandIdRef: activeCommandId
     });
-    
+
     if(!commandId) {
       // Validation failed - cleanup already done by helper
       disableAllActions(false);

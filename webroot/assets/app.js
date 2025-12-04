@@ -1,4 +1,7 @@
-// Chroot Control UI - Real-time async execution with non-blocking interface
+// Chroot Control UI
+// Copyright (c) 2025 ravindu644
+// This entire crap is AI generated, don't blame me for the mess
+
 (function(){
   // Use hardcoded paths provided by install.sh
   const CHROOT_DIR = '/data/local/ubuntu-chroot';
@@ -93,13 +96,13 @@
     scrollScheduled: false,
     isUserScrolledUp: false,
     lastScrollTop: 0,
-    
+
     // Constants
     BATCH_SIZE: 50, // Max logs per batch
     FLUSH_INTERVAL: 16, // Flush every 16ms (60fps)
     SCROLL_THRESHOLD: 10, // Pixels from bottom to consider "at bottom"
     USER_SCROLL_DEBOUNCE_MS: 150, // Debounce for detecting user scroll
-    
+
     /**
      * Check if console is at bottom
      */
@@ -110,7 +113,7 @@
       const currentScroll = pre.scrollTop;
       return Math.abs(currentScroll - maxScroll) <= this.SCROLL_THRESHOLD;
     },
-    
+
     /**
      * Add log to buffer (will be flushed in batches)
      */
@@ -119,18 +122,18 @@
       this.buffer.push({ text, cls });
       this.scheduleFlush();
     },
-    
+
     /**
      * Schedule flush (batches multiple logs)
      */
     scheduleFlush() {
       if(this.flushTimer || this.isFlushing) return;
-      
+
       this.flushTimer = requestAnimationFrame(() => {
         this.flush();
       });
     },
-    
+
     /**
      * Flush buffered logs to DOM in a single batch
      */
@@ -139,7 +142,7 @@
         this.flushTimer = null;
         return;
       }
-      
+
       this.isFlushing = true;
       const pre = els.console;
       if(!pre) {
@@ -148,20 +151,20 @@
         this.flushTimer = null;
         return;
       }
-      
+
       const maxLines = APP_CONSTANTS.CONSOLE.MAX_LINES;
       const batch = this.buffer.splice(0, this.BATCH_SIZE);
-      
+
       // Create document fragment for batch DOM update
       const fragment = document.createDocumentFragment();
       const wasAtBottom = this.isAtBottom();
-      
+
       // Count existing lines for trimming
       const allLines = pre.querySelectorAll('div');
       const regularLines = Array.from(allLines).filter(
         line => !line.classList.contains('progress-indicator')
       );
-      
+
       // Trim old lines if needed (before adding new ones)
       const totalAfterAdd = regularLines.length + batch.length;
       if(totalAfterAdd > maxLines) {
@@ -172,16 +175,16 @@
           }
         }
       }
-      
+
       // Create all log elements in fragment with fade-in animation
       batch.forEach(({ text, cls }, index) => {
         const line = document.createElement('div');
         if(cls) line.className = cls;
         line.textContent = text + '\n';
-        
+
         // Determine if this is a progress indicator
         const isProgressIndicator = cls === 'progress-indicator' || text.includes('⏳');
-        
+
         // Apply animation classes
         if(isProgressIndicator) {
           line.classList.add('log-immediate');
@@ -190,41 +193,41 @@
           // Stagger animation for smooth chunk appearance
           line.style.animationDelay = `${index * 20}ms`;
         }
-        
+
         fragment.appendChild(line);
       });
-      
+
       // Single DOM append for entire batch
       pre.appendChild(fragment);
-      
+
       // Single scroll operation per batch (only if user was at bottom or active command)
       if((wasAtBottom || activeCommandId) && !this.isUserScrolledUp) {
         this.scheduleScroll();
       }
-      
+
       // Save logs (debounced)
       saveConsoleLogs();
-      
+
       // Continue flushing if more logs in buffer
       this.isFlushing = false;
       this.flushTimer = null;
-      
+
       if(this.buffer.length > 0) {
         this.scheduleFlush();
       }
     },
-    
+
     /**
      * Schedule scroll (throttled to once per frame)
      */
     scheduleScroll() {
       if(this.scrollScheduled) return;
-      
+
       this.scrollScheduled = true;
       requestAnimationFrame(() => {
         this.scrollScheduled = false;
         if(!els.console) return;
-        
+
         // Smooth scroll to bottom
         els.console.scrollTo({
           top: els.console.scrollHeight,
@@ -232,13 +235,13 @@
         });
       });
     },
-    
+
     /**
      * Handle user scroll event
      */
     handleUserScroll() {
       if(!els.console) return;
-      
+
       // Debounce user scroll detection
       setTimeout(() => {
         if(!this.isAtBottom()) {
@@ -249,14 +252,14 @@
         this.lastScrollTop = els.console.scrollTop;
       }, this.USER_SCROLL_DEBOUNCE_MS);
     },
-    
+
     /**
      * Force scroll to bottom (for action buttons)
      */
     scrollToBottom() {
       if(!els.console) return Promise.resolve();
       this.isUserScrolledUp = false;
-      
+
       return new Promise(resolve => {
         els.console.scrollTo({
           top: els.console.scrollHeight,
@@ -266,7 +269,7 @@
         setTimeout(resolve, 400);
       });
     },
-    
+
     /**
      * Instant scroll (for initial load)
      */
@@ -274,7 +277,7 @@
       if(!els.console) return;
       els.console.scrollTop = els.console.scrollHeight;
     },
-    
+
     /**
      * Wait for all pending logs to be flushed
      * Returns a promise that resolves when buffer is empty and flush is complete
@@ -288,7 +291,7 @@
       await new Promise(resolve => requestAnimationFrame(resolve));
     }
   };
- 
+
   /**
    * Helper: fade console scrollbar out/in via CSS class.
    * We hide it while long-running actions are executing, then show it again
@@ -302,7 +305,7 @@
       els.console.classList.remove('console-scrollbar-hidden');
     }
   }
- 
+
   // Hotspot status loading/saving is now handled by HotspotFeature module
   // These functions are kept for backward compatibility during initialization
   function loadHotspotStatus(){
@@ -355,13 +358,13 @@
     if(saveConsoleLogsTimer) {
       clearTimeout(saveConsoleLogsTimer);
     }
-    
+
     saveConsoleLogsTimer = setTimeout(() => {
       if(!els.console) return;
-      
+
       const lines = els.console.querySelectorAll('div');
       const maxLines = APP_CONSTANTS.CONSOLE.MAX_LINES;
-      
+
       // Trim if exceeding limit
       if(lines.length > maxLines) {
         const toRemove = lines.length - maxLines;
@@ -371,7 +374,7 @@
           }
         }
       }
-      
+
       // Save current state
       try {
         Storage.set('chroot_console_logs', els.console.innerHTML);
@@ -379,7 +382,7 @@
         // Silently fail if storage quota exceeded
         console.warn('Failed to save console logs:', e);
       }
-      
+
       saveConsoleLogsTimer = null;
     }, 500); // Debounce: save 500ms after last log addition
   }
@@ -392,15 +395,15 @@
   function loadConsoleLogs(){
     const logs = Storage.get('chroot_console_logs');
     if(!logs || !els.console) return;
-    
+
     const pre = els.console;
-    
+
     // Disable smooth scrolling for instant initial load
     pre.style.setProperty('scroll-behavior', 'auto', 'important');
-    
+
     // Set content efficiently
     pre.innerHTML = logs;
-    
+
     // Enforce max line limit efficiently
     const lines = pre.querySelectorAll('div');
     const maxLines = APP_CONSTANTS.CONSOLE.MAX_LINES;
@@ -413,12 +416,12 @@
       }
       saveConsoleLogs();
     }
-    
+
     // Apply fade-in animation only for small console (< 15 lines, no scrollbar)
     const finalLines = pre.querySelectorAll('div');
     const hasScrollbar = pre.scrollHeight > pre.clientHeight;
     const shouldAnimate = finalLines.length < 15 && !hasScrollbar;
-    
+
     if(shouldAnimate) {
       requestAnimationFrame(() => {
         finalLines.forEach((line, index) => {
@@ -434,7 +437,7 @@
         });
       });
     }
-    
+
     // Scroll to bottom instantly on load (no animation)
     requestAnimationFrame(() => {
       LogBuffer.scrollInstant();
@@ -452,7 +455,7 @@
     if(!rootAccessConfirmed){
       return; // Don't attempt command - root check already printed error
     }
-    
+
     try{
       // Use the new list-users command that runs inside the chroot
       const cmd = `sh ${PATH_CHROOT_SH} list-users`;
@@ -498,7 +501,7 @@
   function appendConsole(text, cls) {
     LogBuffer.add(text, cls);
   }
-  
+
   /**
    * Append multiple lines at once (for command output batching)
    */
@@ -507,7 +510,7 @@
       LogBuffer.add(lines, cls);
       return;
     }
-    
+
     lines.forEach(line => {
       if(line && line.trim()) {
         LogBuffer.add(line.trim(), cls);
@@ -520,7 +523,7 @@
    */
   function animateButton(btn, actionText = null){
     if(!btn || btn.disabled) return Promise.resolve();
-    
+
     // Remove any existing pressed state first
     btn.classList.remove('btn-pressed', 'btn-released');
     // Clear any inline styles that might interfere
@@ -528,10 +531,10 @@
     btn.style.boxShadow = '';
     // Force a reflow to ensure the class and style are reset
     void btn.offsetWidth;
-    
+
     // Add pressed state (this will apply scale(0.96) and shadow from CSS)
     btn.classList.add('btn-pressed');
-    
+
     // Return a promise that resolves after animation completes
     return new Promise((resolve) => {
       // Show action message in console during animation
@@ -884,7 +887,7 @@
       overlay._keyboardHandler = handleKeyDown;
       return handleKeyDown;
     },
-    
+
     cleanupKeyboard(overlay) {
       if(overlay && overlay._keyboardHandler) {
         document.removeEventListener('keydown', overlay._keyboardHandler);
@@ -908,7 +911,7 @@
         top: els.console.scrollHeight,
         behavior: 'smooth'
       });
-      
+
       let interval = null;
       if(type === 'spinner') {
         let spinIndex = 0;
@@ -929,17 +932,17 @@
           }
         }, ANIMATION_DELAYS.PROGRESS_SPINNER);
       }
-      
+
       return { progressLine, interval };
     },
-    
+
     remove(progressLine, interval) {
       if(interval) clearInterval(interval);
       if(progressLine && progressLine.parentNode) {
         progressLine.remove();
       }
     },
-    
+
     update(progressLine, text) {
       if(progressLine && progressLine.parentNode) {
         progressLine.textContent = '⏳ ' + text;
@@ -969,12 +972,12 @@
         btn.style.boxShadow = '';
       }
     },
-    
+
     setButtonPair(startBtn, stopBtn, isActive) {
       this.setButton(startBtn, !isActive, true, '0.5');
       this.setButton(stopBtn, isActive, true, '0.5');
     },
-    
+
     setButtons(buttons) {
       // buttons: [{ btn, enabled, visible, opacity }, ...]
       buttons.forEach(({ btn, enabled, visible, opacity }) => {
@@ -1120,14 +1123,14 @@
         if(onOpen) onOpen();
       }
     },
-    
+
     close(popup, onClose = null) {
       if(popup) {
         popup.classList.remove('active');
         if(onClose) onClose();
       }
     },
-    
+
     setupClickOutside(popup, closeFn) {
       if(popup && closeFn) {
         popup.addEventListener('click', (e) => {
@@ -1144,7 +1147,7 @@
   function forceScrollToBottom() {
     LogBuffer.scrollToBottom();
   }
- 
+
   /**
    * Helper: Force scroll after DOM updates complete
    * Kept for backward compatibility
@@ -1173,19 +1176,19 @@
       // For app.js: rootAccessConfirmed is a direct boolean
       rootAccess = rootAccessConfirmed;
     }
-    
+
     if(!rootAccess) {
       if(progress) ProgressIndicator.remove(progress.progressLine, progress.progressInterval);
       appendConsole('No root execution method available', 'err');
       return { valid: false, error: 'No root execution method available' };
     }
-    
+
     if(!window.cmdExec || typeof cmdExec.executeAsync !== 'function') {
       if(progress) ProgressIndicator.remove(progress.progressLine, progress.progressInterval);
       appendConsole('Backend not available', 'err');
       return { valid: false, error: 'Backend not available' };
     }
-    
+
     return { valid: true };
   }
 
@@ -1226,7 +1229,7 @@
     const commandId = runCmdAsync(cmd, (result) => {
       // Cleanup progress indicator
       if(progress) ProgressIndicator.remove(progress.progressLine, progress.progressInterval);
-      
+
       // Clear active command ID
       if(activeCommandIdRef && activeCommandIdRef.value !== undefined) {
         if(activeCommandIdRef.value === localCommandId) {
@@ -1235,33 +1238,33 @@
       } else if(!useValue && activeCommandId === localCommandId) {
         activeCommandId = null;
       }
-      
+
       // Handle result (callbacks may add console messages)
       if(result.success && onSuccess) {
         onSuccess(result);
       } else if(!result.success && onError) {
         onError(result);
       }
-      
+
       // Optional completion callback (may also add console messages)
       if(onComplete) onComplete(result);
-      
+
       // Force scroll after ALL DOM updates (callbacks may have added messages)
       // Use setTimeout to ensure all synchronous console appends are complete
       setTimeout(() => {
         forceScrollAfterDOMUpdate();
       }, 50);
     });
-    
+
     localCommandId = commandId;
-    
+
     // Set active command ID
     if(activeCommandIdRef && activeCommandIdRef.value !== undefined) {
       activeCommandIdRef.value = commandId;
     } else if(!useValue) {
       activeCommandId = commandId;
     }
-    
+
     return commandId;
   }
 
@@ -1269,7 +1272,7 @@
    * Centralized function to prepare action execution
    * Handles: scroll to bottom, print header, show animation, ensure DOM updates
    * This is the core logic for handling console log flow
-   * 
+   *
    * @param {string} headerText - The header text to display (e.g., "Starting Chroot Backup")
    * @param {string} progressText - The progress indicator text (e.g., "Backing up chroot")
    * @param {string} progressType - Type of progress indicator ('spinner' or 'dots', default: 'dots')
@@ -1289,10 +1292,10 @@
     // is guaranteed to be visible even when a lot of old logs exist.
     await LogBuffer.waitForFlush();
     await scrollConsoleToBottom({ smooth: true });
-    
+
     // STEP 3: Show animated progress indicator (keep visible during execution)
     const { progressLine, interval: progressInterval } = ProgressIndicator.create(progressText, progressType);
-    
+
     // Ensure DOM updates are painted before command execution starts
     // This prevents UI freeze and ensures header/animation are visible
     await new Promise(resolve => {
@@ -1302,7 +1305,7 @@
         });
       });
     });
-    
+
     return { progressLine, progressInterval };
   }
 
@@ -1326,7 +1329,7 @@
       if(onComplete) onComplete({ success: false, error: errorMsg });
       return null;
     }
-    
+
     if(!window.cmdExec || typeof cmdExec.executeAsync !== 'function'){
       const msg = 'Backend not available (cmdExec missing in page).';
       appendConsole(msg, 'err');
@@ -1339,14 +1342,14 @@
 
     // Store local reference for callback to use (captured in closure)
     let localCommandId = null;
-    
+
     const commandId = cmdExec.executeAsync(finalCmd, true, {
       onOutput: (output) => {
         // Batch output processing - collect all lines and append in one go
         if(output) {
           const lines = output.split('\n')
             .filter(line => line.trim() && !line.trim().startsWith('[Executing:'));
-          
+
           if(lines.length > 0) {
             // Use batch append for better performance
             appendConsoleBatch(lines);
@@ -1368,7 +1371,7 @@
     // Set activeCommandId immediately after getting commandId
     localCommandId = commandId;
     activeCommandId = commandId;
-    
+
     return commandId;
   }
 
@@ -1380,7 +1383,7 @@
     if(!rootAccessConfirmed){
       throw new Error('No root execution method available (KernelSU or libsuperuser not detected).');
     }
-    
+
     if(!window.cmdExec || typeof cmdExec.execute !== 'function'){
       const msg = 'Backend not available (cmdExec missing in page).';
       appendConsole(msg, 'err');
@@ -1411,9 +1414,9 @@
       ButtonState.setButton(els.settingsBtn, !disabled, true);
       ButtonState.setButton(els.forwardNatBtn, !disabled, true);
       ButtonState.setButton(els.hotspotBtn, !disabled, true);
-      
+
       els.userSelect.disabled = disabled;
-      
+
       // Additional UI elements that should be disabled during operations
       // But kept enabled during error conditions (root access failed, chroot not found)
       const shouldDisableAlwaysAvailable = disabled && !isErrorCondition;
@@ -1423,10 +1426,10 @@
       if(els.themeToggle){
         ButtonState.setButton(els.themeToggle, !shouldDisableAlwaysAvailable);
       }
-      
+
       const copyBtn = document.getElementById('copy-login');
       if(copyBtn) ButtonState.setButton(copyBtn, !disabled);
-      
+
       // Disable boot toggle when root not available
       if(els.bootToggle) {
         els.bootToggle.disabled = disabled;
@@ -1490,11 +1493,11 @@
       btn.style.boxShadow = '';
       disableAllActions(true);
       disableSettingsPopup(true);
-      
+
       // Update UI state IMMEDIATELY (before scrolling/preparation)
       const statusState = action === 'start' ? 'starting' : action === 'stop' ? 'stopping' : 'restarting';
       updateStatus(statusState);
-      
+
       // Stop network services on stop/restart BEFORE creating progress indicator
       // This way the chroot action animation shows properly
       if(action === 'stop' || action === 'restart'){
@@ -1506,8 +1509,8 @@
 
       // Use centralized flow: scroll, header, animation (after network services stopped)
       // Fix typo: "stop" -> "stopping" (not "stoping")
-      const actionText = action === 'stop' ? 'Stopping chroot' : 
-                        action === 'start' ? 'Starting chroot' : 
+      const actionText = action === 'stop' ? 'Stopping chroot' :
+                        action === 'start' ? 'Starting chroot' :
                         'Restarting chroot';
       const { progressLine, interval: progressInterval } = await prepareActionExecution(
         actionText,
@@ -1517,7 +1520,7 @@
 
       // STEP 4: Execute command (animation stays visible during execution)
       const cmd = `sh ${PATH_CHROOT_SH} ${action} --no-shell`;
-      
+
       if(!rootAccessConfirmed){
         ProgressIndicator.remove(progressLine, progressInterval);
         appendConsole('No root execution method available', 'err');
@@ -1525,7 +1528,7 @@
         disableSettingsPopup(false, true);
         return;
       }
-      
+
       if(!window.cmdExec || typeof cmdExec.executeAsync !== 'function'){
         ProgressIndicator.remove(progressLine, progressInterval);
         appendConsole('Backend not available', 'err');
@@ -1536,11 +1539,11 @@
 
       const finalCmd = debugModeActive ? `LOGGING_ENABLED=1 ${cmd}` : cmd;
       let localCommandId = null;
-      
+
       const commandId = runCmdAsync(finalCmd, (result) => {
         // STEP 5: Clear animation ONLY when command completes (success or failure)
         ProgressIndicator.remove(progressLine, progressInterval);
-        
+
         if(activeCommandId === localCommandId) {
           activeCommandId = null;
         }
@@ -1559,16 +1562,16 @@
           // Update module status even on failure (to reflect current state)
           updateModuleStatus();
         }
-        
+
         // Force scroll to bottom after completion messages are added
         forceScrollAfterDOMUpdate();
-        
+
         // Cleanup UI
         activeCommandId = null;
         disableAllActions(false);
         disableSettingsPopup(false, true);
         if(els.closePopup) els.closePopup.style.display = '';
-        
+
         [els.startBtn, els.stopBtn, els.restartBtn].forEach(btn => {
           if(btn) {
             btn.classList.remove('btn-pressed', 'btn-released');
@@ -1577,7 +1580,7 @@
           }
         });
       });
-      
+
       localCommandId = commandId;
       activeCommandId = commandId;
     });
@@ -1594,51 +1597,51 @@
     if(!rootAccessConfirmed) {
       return false;
     }
-    
+
     // Check current status
     try {
       const out = await runCmdSync(`sh ${PATH_CHROOT_SH} status`);
       const s = String(out || '');
       const isRunning = /Status:\s*RUNNING/i.test(s);
-      
+
       if(!isRunning) {
         return true; // Already stopped
       }
     } catch(e) {
       // Status check failed, try to stop anyway
     }
-    
+
     // Stop network services first BEFORE creating progress indicator
     // This way the chroot action animation shows properly
     updateStatus('stopping');
-    
+
     if(window.StopNetServices) {
       await StopNetServices.stopNetworkServices({ silent: false });
     }
-    
+
     // Chroot is running, stop it properly using centralized flow (after network services stopped)
     const { progressLine, progressInterval } = await prepareActionExecution(
       'Stopping Chroot',
       'Stopping chroot',
       'dots'
     );
-    
+
     return new Promise((resolve) => {
       const stopCmd = `sh ${PATH_CHROOT_SH} stop --no-shell`;
       let localStopCommandId = null;
-      
+
       const stopCommandId = runCmdAsync(stopCmd, (stopResult) => {
         // Clear progress indicator
         ProgressIndicator.remove(progressLine, progressInterval);
-        
+
         if(activeCommandId === localStopCommandId) {
           activeCommandId = null;
         }
-        
+
         if(stopResult.success) {
           // Update status immediately after stop completes (before verification)
           updateStatus('stopped');
-          
+
           // Wait a bit and verify it's actually stopped
           setTimeout(async () => {
             try {
@@ -1664,7 +1667,7 @@
           resolve(false);
         }
       });
-      
+
       localStopCommandId = stopCommandId;
       activeCommandId = stopCommandId;
     });
@@ -1679,45 +1682,45 @@
     if(!rootAccessConfirmed) {
       return false;
     }
-    
+
     // Check current status
     try {
       const out = await runCmdSync(`sh ${PATH_CHROOT_SH} status`);
       const s = String(out || '');
       const isRunning = /Status:\s*RUNNING/i.test(s);
-      
+
       if(isRunning) {
         return true; // Already running
       }
     } catch(e) {
       // Status check failed, try to start anyway
     }
-    
+
     // Chroot is not running, start it using centralized flow
     const { progressLine, progressInterval } = await prepareActionExecution(
       'Starting Chroot',
       'Starting chroot',
       'dots'
     );
-    
+
     updateStatus('starting');
-    
+
     return new Promise((resolve) => {
       const startCmd = `sh ${PATH_CHROOT_SH} start --no-shell`;
       let localStartCommandId = null;
-      
+
       const startCommandId = runCmdAsync(startCmd, (startResult) => {
         // Clear progress indicator
         ProgressIndicator.remove(progressLine, progressInterval);
-        
+
         if(activeCommandId === localStartCommandId) {
           activeCommandId = null;
         }
-        
+
         if(startResult.success) {
           // Update status immediately after start completes (before verification)
           updateStatus('running');
-          
+
           // Wait a bit and verify it's actually running
           setTimeout(async () => {
             try {
@@ -1743,7 +1746,7 @@
           resolve(false);
         }
       });
-      
+
       localStartCommandId = startCommandId;
       activeCommandId = startCommandId;
     });
@@ -1823,7 +1826,7 @@
       const currentStatus = els.statusText ? els.statusText.textContent.trim() : '';
       const customStatuses = ['backing up', 'restoring', 'migrating', 'uninstalling', 'updating', 'trimming', 'resizing'];
       const isCustomStatus = customStatuses.includes(currentStatus);
-      
+
       // Only preserve custom status if there's an active command AND it's a long-running operation status
       // Allow normal status updates for starting/stopping/restarting (these are quick transitions)
       if(isCustomStatus && activeCommandId) {
@@ -1907,13 +1910,13 @@
       }
       els.settingsBtn.disabled = false;
       els.settingsBtn.style.opacity = '';
-      
+
       // Wait for async operations to complete (fetchUsers generates logs)
       await fetchUsersPromise;
-      
+
       // Wait for log buffer to flush all pending logs
       await LogBuffer.waitForFlush();
-      
+
       // Scroll to bottom to show all logs
       await LogBuffer.scrollToBottom();
 
@@ -2055,7 +2058,7 @@
     if(!rootAccessConfirmed){
       return; // Silently fail - root check already printed error
     }
-    
+
     try{
       // Ensure directory exists and write file
       const cmd = `mkdir -p ${CHROOT_DIR} && echo ${val} > ${BOOT_FILE}`;
@@ -2073,7 +2076,7 @@
       els.bootToggle.checked = false; // Default to disabled
       return; // Don't attempt command - root check already printed error
     }
-    
+
     try{
       if(window.cmdExec && typeof cmdExec.execute === 'function'){
         const out = await cmdExec.execute(`cat ${BOOT_FILE} 2>/dev/null || echo 0`, true);
@@ -2101,7 +2104,7 @@
     if(!rootAccessConfirmed){
       return; // Silently fail - root check already printed error
     }
-    
+
     try{
       // Ensure directory exists and write file
       const cmd = `mkdir -p ${CHROOT_DIR} && echo ${val} > ${DOZE_OFF_FILE}`;
@@ -2120,7 +2123,7 @@
       els.androidOptimizeToggle.checked = true; // Default to enabled
       return; // Don't attempt command - root check already printed error
     }
-    
+
     try{
       if(window.cmdExec && typeof cmdExec.execute === 'function'){
         const out = await cmdExec.execute(`cat ${DOZE_OFF_FILE} 2>/dev/null || echo 1`, true);
@@ -2149,7 +2152,7 @@
     if(!rootAccessConfirmed || !window.cmdExec || typeof window.cmdExec.execute !== 'function'){
       return; // Silently fail if root/backend not available
     }
-    
+
     try{
       // Run update-status.sh silently in background
       await cmdExec.execute(`sh ${UPDATE_STATUS_SCRIPT} 2>/dev/null`, true);
@@ -2266,7 +2269,7 @@
       rootAccessConfirmed = true;
       disableAllActions(false);
       disableSettingsPopup(false, true); // assume chroot exists for now
-      
+
       // Pre-fetch interfaces in background when root access is confirmed
       // This ensures cache is ready when user opens popups
       setTimeout(() => {
@@ -2304,15 +2307,15 @@
   async function openSettingsPopup(){
     // Start scroll in parallel (don't await - let it happen in background)
     scrollConsoleToBottom();
-    
+
     // Open popup immediately (don't wait for scroll or script loading)
     PopupManager.open(els.settingsPopup);
-    
+
     // Load script in background (will update textarea after popup is already open)
     loadPostExecScript().catch(() => {
       // Silently fail - script loading shouldn't block popup
     });
-    
+
     // Set debug toggle state immediately
     if(els.debugToggle) {
       els.debugToggle.checked = debugModeActive;
@@ -2381,7 +2384,7 @@
   async function openHotspotPopup() {
     // Start scroll in parallel (don't await - let it happen in background)
     scrollConsoleToBottom();
-    
+
     if(window.HotspotFeature) {
       await HotspotFeature.openHotspotPopup();
     }
@@ -2426,7 +2429,7 @@
   function openForwardNatPopup() {
     // Start scroll in parallel (don't await - let it happen in background)
     scrollConsoleToBottom();
-    
+
     if(window.ForwardNatFeature) {
       ForwardNatFeature.openForwardNatPopup();
     }
@@ -2565,13 +2568,13 @@
         // Restore updating status after starting
         updateStatus('updating');
       }
-      
+
       // Scroll to bottom BEFORE update header appears to ensure all previous logs are visible
       // This prevents the update header from appearing halfway up the console
       await scrollConsoleToBottom();
       // Small delay to ensure scroll completes and DOM settles
       await new Promise(resolve => setTimeout(resolve, 350));
-      
+
       // Now use centralized flow for update action
       const { progressLine, interval: progressInterval } = await prepareActionExecution(
         'Starting Chroot Update',
@@ -2581,7 +2584,7 @@
 
       // STEP 4: Execute update command (animation stays visible)
       const cmd = `sh ${OTA_UPDATER}`;
-      
+
       if(!window.cmdExec || typeof cmdExec.executeAsync !== 'function'){
         ProgressIndicator.remove(progressLine, progressInterval);
         appendConsole('Backend not available', 'err');
@@ -2594,31 +2597,31 @@
 
       const finalCmd = debugModeActive ? `LOGGING_ENABLED=1 ${cmd}` : cmd;
       let localCommandId = null;
-      
+
       const commandId = runCmdAsync(finalCmd, (result) => {
         // STEP 5: Clear animation ONLY when command completes
         ProgressIndicator.remove(progressLine, progressInterval);
-        
+
         if(activeCommandId === localCommandId) {
           activeCommandId = null;
         }
 
         if(result.success) {
           appendConsole('✓ Chroot update completed successfully', 'success');
-          
+
           // Force scroll to bottom after update completion message
           forceScrollAfterDOMUpdate();
-          
+
           // Restart chroot after update (uses centralized flow)
           // Note: scrollbar will be hidden again by prepareActionExecution for restart
           setTimeout(async () => {
             if(window.StopNetServices) {
               await StopNetServices.stopNetworkServices();
             }
-            
+
             // Update status first, then use centralized flow
             updateStatus('restarting');
-            
+
             // Use centralized flow for restart action
             const { progressLine: restartLine, interval: restartInterval } = await prepareActionExecution(
               'Restarting Chroot',
@@ -2629,11 +2632,11 @@
             let localRestartCommandId = null;
             const restartCommandId = runCmdAsync(`sh ${PATH_CHROOT_SH} restart --no-shell`, (restartResult) => {
               ProgressIndicator.remove(restartLine, restartInterval);
-              
+
               if(activeCommandId === localRestartCommandId) {
                 activeCommandId = null;
               }
-              
+
               if(restartResult.success) {
                 appendConsole('✓ Chroot restarted successfully', 'success');
                 updateModuleStatus();
@@ -2641,17 +2644,17 @@
                 appendConsole('⚠ Chroot restart failed, but update was successful', 'warn');
                 updateModuleStatus();
               }
-              
+
               appendConsole('━━━ Update Complete ━━━', 'success');
-              
+
               // Ensure restart completion messages are visible immediately
               forceScrollAfterDOMUpdate();
-              
+
               activeCommandId = null;
               disableAllActions(false);
               disableSettingsPopup(false, true);
               if(els.closePopup) els.closePopup.style.display = '';
-              
+
               // After "Update Complete" and a status refresh, smoothly scroll console once
               // refreshStatus will handle scrollbar show with proper delay
               setTimeout(async () => {
@@ -2664,16 +2667,16 @@
                 }
               }, ANIMATION_DELAYS.STATUS_REFRESH);
             });
-            
+
             localRestartCommandId = restartCommandId;
             activeCommandId = restartCommandId;
           }, ANIMATION_DELAYS.POPUP_CLOSE_LONG);
           } else {
             appendConsole('✗ Chroot update failed', 'err');
-            
+
             // Force scroll to bottom after failure message
             forceScrollAfterDOMUpdate();
-            
+
             activeCommandId = null;
             disableAllActions(false);
             disableSettingsPopup(false, true);
@@ -2682,7 +2685,7 @@
             setTimeout(() => refreshStatus(), ANIMATION_DELAYS.STATUS_REFRESH);
           }
       });
-      
+
       localCommandId = commandId;
       activeCommandId = commandId;
     });
@@ -2740,7 +2743,7 @@
         { btn: els.trimSparseBtn, disabled: disabled || !chrootExists || !sparseMigrated },
         { btn: els.resizeSparseBtn, disabled: disabled || !chrootExists || !sparseMigrated }
       ];
-      
+
       buttonsToDisable.forEach(({ btn, disabled: btnDisabled }) => {
         if(btn) {
           btn.disabled = btnDisabled;
@@ -2749,7 +2752,7 @@
           btn.style.pointerEvents = btnDisabled ? 'none' : '';
       }
       });
-      
+
       // Experimental features - migrate sparse button
       const migrateSparseBtn = document.getElementById('migrate-sparse-btn');
       if(migrateSparseBtn) {
@@ -3413,14 +3416,14 @@
       copyLoginCommand();
     });
   }
-  els.clearConsole.addEventListener('click', (e) => { 
+  els.clearConsole.addEventListener('click', (e) => {
     // Start animation (don't await - let it run in background)
     animateButton(e.target);
     // Clear console immediately (don't wait for animation)
-    els.console.textContent = ''; // Use textContent for clearing (safer than innerHTML) 
+    els.console.textContent = ''; // Use textContent for clearing (safer than innerHTML)
     // Clear saved logs
     Storage.remove('chroot_console_logs');
-    
+
     // If debug mode is enabled, also clear the logs folder
     if(debugModeActive){
       appendConsole('Console and logs are cleared', 'info');
@@ -3444,7 +3447,7 @@
     const btn = e.target;
     btn.disabled = true;
     btn.style.opacity = '0.5';
-    
+
     try {
       // Do a comprehensive refresh: re-check root access, then refresh status
       // No console messages, no scrolling - just quiet refresh
@@ -3453,7 +3456,7 @@
       await readBootFile(true); // Also refresh boot toggle status (silent mode)
       await readDozeOffFile(true); // Also refresh Android optimizations toggle status (silent mode)
       updateModuleStatus(); // Update module status in module.prop
-      
+
       // Pre-fetch interfaces in background (non-blocking) to update cache
       // This prevents lag when opening popups later
       // Use setTimeout to ensure it's truly non-blocking
@@ -3591,11 +3594,11 @@
   if(togglePasswordBtn){
     const passwordInput = document.getElementById('hotspot-password');
     const iconEye = togglePasswordBtn.querySelector('svg');
-    
+
     // Store original SVG content
     const eyeOpenSvg = `<path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12C23 12 19 20 12 20C5 20 1 12 1 12Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5"/>`;
     const eyeClosedSvg = `<path d="M2.99902 3L20.999 21M9.8433 9.91364C9.32066 10.4536 8.99902 11.1892 8.99902 12C8.99902 13.6569 10.3422 15 12 15C12.8215 15 13.5667 14.669 14.1086 14.133M6.49902 6.64715C4.59972 7.90034 3.15305 9.78394 2.45703 12C3.73128 16.0571 7.52159 19 11.9992 19C13.9881 19 15.8414 18.4194 17.3988 17.4184M10.999 5.04939C11.328 5.01673 11.6617 5 11.9992 5C16.4769 5 20.2672 7.94291 21.5414 12C21.2607 12.894 20.8577 13.7338 20.3522 14.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`;
-    
+
     togglePasswordBtn.addEventListener('click', () => {
       if(passwordInput.type === 'password'){
         passwordInput.type = 'text';
@@ -3616,7 +3619,7 @@
     hotspotBandEl.addEventListener('change', function() {
       const channelSelect = document.getElementById('hotspot-channel');
       const newBand = this.value;
-      
+
       // Update channel options based on new band (wait for completion)
       updateChannelLimits(newBand).then(() => {
         // Save settings when band changes (after channel options are updated)
@@ -3641,7 +3644,7 @@
   const hotspotSsidEl = document.getElementById('hotspot-ssid');
   const hotspotPasswordEl = document.getElementById('hotspot-password');
   const hotspotIfaceEl = document.getElementById('hotspot-iface');
-  
+
   if(hotspotSsidEl) {
     hotspotSsidEl.addEventListener('input', function() {
       if(window.HotspotFeature && window.HotspotFeature.saveHotspotSettings) {
@@ -3649,7 +3652,7 @@
       }
     });
   }
-  
+
   if(hotspotPasswordEl) {
     hotspotPasswordEl.addEventListener('input', function() {
       if(window.HotspotFeature && window.HotspotFeature.saveHotspotSettings) {
@@ -3657,7 +3660,7 @@
       }
     });
   }
-  
+
   if(hotspotIfaceEl) {
     hotspotIfaceEl.addEventListener('change', function() {
       if(window.HotspotFeature && window.HotspotFeature.saveHotspotSettings) {
@@ -3673,23 +3676,23 @@
     return new Promise((resolve) => {
       const bandSelect = document.getElementById('hotspot-band');
       const channelSelect = document.getElementById('hotspot-channel');
-      
+
       if(!bandSelect || !channelSelect) {
         resolve();
         return;
       }
-      
+
       // Use provided band value, or read from dropdown
       const band = bandValue !== null ? bandValue : bandSelect.value;
-      
+
       // Clear existing options
       channelSelect.innerHTML = '';
-      
+
       // Get channels from constants
-      const channels = band === '5' 
-        ? APP_CONSTANTS.HOTSPOT.CHANNELS_5GHZ 
+      const channels = band === '5'
+        ? APP_CONSTANTS.HOTSPOT.CHANNELS_5GHZ
         : APP_CONSTANTS.HOTSPOT.CHANNELS_2_4GHZ;
-      
+
       // Add options
       channels.forEach(ch => {
         const option = document.createElement('option');
@@ -3697,13 +3700,13 @@
         option.textContent = String(ch);
         channelSelect.appendChild(option);
       });
-      
+
       // Set default value (will be overridden if saved channel exists)
-      const defaultChannel = band === '5' 
-        ? APP_CONSTANTS.HOTSPOT.DEFAULT_CHANNEL_5GHZ 
+      const defaultChannel = band === '5'
+        ? APP_CONSTANTS.HOTSPOT.DEFAULT_CHANNEL_5GHZ
         : APP_CONSTANTS.HOTSPOT.DEFAULT_CHANNEL_2_4GHZ;
       channelSelect.value = defaultChannel;
-      
+
       // Use requestAnimationFrame to ensure DOM is updated before resolving
       requestAnimationFrame(() => {
         setTimeout(resolve, ANIMATION_DELAYS.CHANNEL_UPDATE_DELAY);
@@ -3719,23 +3722,23 @@
   // ============================================================================
   function initFeatureModules() {
     // Create dependency objects for mutable values (using refs to sync)
-    activeCommandIdRef = { 
+    activeCommandIdRef = {
       get value() { return activeCommandId; },
       set value(v) { activeCommandId = v; }
     };
-    rootAccessConfirmedRef = { 
+    rootAccessConfirmedRef = {
       get value() { return rootAccessConfirmed; },
       set value(v) { rootAccessConfirmed = v; }
     };
-    hotspotActiveRef = { 
+    hotspotActiveRef = {
       get value() { return hotspotActive; },
       set value(v) { hotspotActive = v; }
     };
-    forwardingActiveRef = { 
+    forwardingActiveRef = {
       get value() { return forwardingActive; },
       set value(v) { forwardingActive = v; }
     };
-    sparseMigratedRef = { 
+    sparseMigratedRef = {
       get value() { return sparseMigrated; },
       set value(v) { sparseMigrated = v; }
     };
@@ -3748,14 +3751,14 @@
       hotspotActive: hotspotActiveRef,
       forwardingActive: forwardingActiveRef,
       sparseMigrated: sparseMigratedRef,
-      
+
       // Constants
       CHROOT_DIR,
       PATH_CHROOT_SH,
       HOTSPOT_SCRIPT,
       FORWARD_NAT_SCRIPT,
       OTA_UPDATER,
-      
+
       // Utilities
       Storage,
       StateManager,
@@ -3764,7 +3767,7 @@
       PopupManager,
       DialogManager,
       ANIMATION_DELAYS,
-      
+
       // Functions
       appendConsole,
       runCmdSync,
@@ -3869,24 +3872,24 @@
   loadForwardingStatus(); // Load forwarding status (will be synced with actual state in refreshStatus)
   loadDebugMode(); // Load debug mode status
   readDozeOffFile(true).catch(() => {}); // Load Android optimizations setting (silent mode)
-  
+
   // Initialize channel options on page load based on saved settings
   function initializeChannelOptions() {
     const bandSelect = document.getElementById('hotspot-band');
     const channelSelect = document.getElementById('hotspot-channel');
-    
+
     if(!bandSelect || !channelSelect) return;
-    
+
     // Get saved settings to determine which band to use
     const savedSettings = Storage.getJSON('chroot_hotspot_settings');
     const defaultBand = APP_CONSTANTS.HOTSPOT.DEFAULT_BAND;
     const defaultChannel2_4 = APP_CONSTANTS.HOTSPOT.DEFAULT_CHANNEL_2_4GHZ;
     const defaultChannel5 = APP_CONSTANTS.HOTSPOT.DEFAULT_CHANNEL_5GHZ;
     const band = savedSettings && savedSettings.band ? savedSettings.band : defaultBand;
-    
+
     // Set band value first
     bandSelect.value = band;
-    
+
     // Populate channel options based on saved band (use promise to prevent race condition)
     updateChannelLimits(band).then(() => {
       // Set channel value if saved (after options are populated)
@@ -3905,10 +3908,10 @@
       }
     });
   }
-  
+
   // Initialize channel options on page load
   initializeChannelOptions();
-  
+
   // Simple fix for stuck buttons on touch devices: blur on touchend
   // Store handler reference for cleanup to prevent memory leaks
   const touchEndHandler = (e) => {
@@ -3918,14 +3921,14 @@
     }
   };
   document.addEventListener('touchend', touchEndHandler, { passive: true });
-  
+
   // Initialize console scroll listener
   if(els.console) {
     els.console.addEventListener('scroll', () => {
       LogBuffer.handleUserScroll();
     }, { passive: true });
   }
-  
+
   // Store cleanup function for potential future use (e.g., page unload)
   window._chrootUICleanup = () => {
     document.removeEventListener('touchend', touchEndHandler);
@@ -3933,7 +3936,7 @@
 
   initExperimentalFeatures(); // Initialize experimental features
   initFeatureModules(); // Initialize feature modules
-  
+
   /**
    * Hide loading screen with fade-out animation
    */
@@ -3959,7 +3962,7 @@
       readBootFile(false).catch(() => {});
       readDozeOffFile(false).catch(() => {});
       updateModuleStatus(); // Update module status in module.prop on initial load
-      
+
       if(isFirstLoad) {
         hideLoadingScreen();
         sessionStorage.setItem('chroot_ui_loaded', 'true');

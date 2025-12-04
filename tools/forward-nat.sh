@@ -2,6 +2,8 @@
 # Android Localhost Router - Routes localhost services to network interface
 # Usage: sh localhost_router.sh [-i interface] [-k] [list-iface]
 
+# Copyright (c) 2025 ravindu644
+
 # --- Logging and Utility Functions ---
 log() { echo "[INFO] $1"; }
 warn() { echo "[WARN] $1"; }
@@ -40,34 +42,34 @@ list_all_interfaces() {
     # This matches what ifconfig shows - only active interfaces with IPs
     # Excludes only loopback and non-routable virtual interfaces
     # This is useful for hotspot upstream interface selection
-    
+
     local all_ifaces
     all_ifaces=$(ip link show | grep -E '^[0-9]+:' | awk -F': ' '{print $2}' | sed 's/@.*//' | grep -vE '^(lo|tunl|gre|erspan|ip_vti|ip6|sit|ifb|dummy|epdg|p2p)')
-    
+
     local active_ifaces=""
     for iface in $all_ifaces; do
         # Check if interface exists and is UP (state UP or UNKNOWN with IP)
         local link_state
         link_state=$(ip link show "$iface" 2>/dev/null | grep -oE "state (UP|UNKNOWN|DOWN)" | awk '{print $2}')
-        
+
         if [ "$link_state" = "UP" ] || [ "$link_state" = "UNKNOWN" ]; then
             # Check if interface has an IP address (IPv4 or IPv6)
             # Use ip addr show output directly - it's more reliable
             local addr_output
             addr_output=$(ip addr show "$iface" 2>/dev/null)
-            
+
             local has_ipv4 has_ipv6
             has_ipv4=$(echo "$addr_output" | grep -E "inet [0-9]" | head -n1)
             # Check for IPv6 Global scope (case-insensitive, flexible pattern)
             has_ipv6=$(echo "$addr_output" | grep -iE "inet6.*scope.*global" | head -n1)
-            
+
             # For rmnet* interfaces, require IPv4 address (filter out IPv6-only rmnet)
             if echo "$iface" | grep -qE "^rmnet"; then
                 if [ -z "$has_ipv4" ]; then
                     continue  # Skip rmnet interfaces without IPv4
                 fi
             fi
-            
+
             if [ -n "$has_ipv4" ] || [ -n "$has_ipv6" ]; then
                 # Get IP address for display (prefer IPv4, fallback to IPv6)
                 local ip_addr
@@ -98,7 +100,7 @@ list_all_interfaces() {
             fi
         fi
     done
-    
+
     [ -z "$active_ifaces" ] && error "No active interfaces found" && exit 1
     echo "$active_ifaces"
 }
@@ -197,7 +199,7 @@ check_routing_active() {
     # Must have ALL 4 rules to be considered active
     local iface=""
     [ -f "$STATE_FILE" ] && . "$STATE_FILE" 2>/dev/null && iface="$TARGET_IFACE"
-    
+
     # Check state file interface first - require ALL rules
     [ -n "$iface" ] && {
         iptables -C INPUT -i "$iface" -j ACCEPT 2>/dev/null && \
@@ -208,7 +210,7 @@ check_routing_active() {
             return 0
         }
     }
-    
+
     # Fallback: check all interfaces - require ALL rules
     for check_iface in $(ip link show | grep -E '^[0-9]+:' | awk -F': ' '{print $2}' | sed 's/@.*//' | grep -vE '^(lo|tunl|gre|erspan|ip_vti|ip6|sit|ifb|dummy|epdg|p2p)'); do
         iptables -C INPUT -i "$check_iface" -j ACCEPT 2>/dev/null && \
@@ -219,7 +221,7 @@ check_routing_active() {
             return 0
         }
     done
-    
+
     echo "inactive"
     return 1
 }

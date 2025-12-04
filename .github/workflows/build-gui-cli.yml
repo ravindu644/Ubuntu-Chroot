@@ -51,29 +51,29 @@ jobs:
         id: extract
         run: |
           TAG="${{ github.event.inputs.version || github.ref_name }}"
-          
+
           # Extract changelog content for this version
           CHANGELOG_CONTENT=$(awk '
             /^## '"$TAG"' / { found=1; next }
             found && /^## / { exit }
             found { print }
           ' CHANGELOG.md)
-          
+
           # Fallback extraction
           if [ -z "$CHANGELOG_CONTENT" ]; then
             CHANGELOG_CONTENT=$(sed -n '/^## '"$TAG"' /,/^## /{ /^## '"$TAG"' /d; /^## /d; p; }' CHANGELOG.md)
           fi
-          
+
           # Clean content - remove empty lines and filter out metadata update commits
           CHANGELOG_CONTENT=$(echo "$CHANGELOG_CONTENT" | sed '/^$/d' | grep -v "Update metadata for" | head -n 200)
-          
+
           if [ -z "$CHANGELOG_CONTENT" ]; then
             CHANGELOG_CONTENT="No changelog entries for this version."
           fi
-          
+
           # Build release body with header and version info
           RELEASE_BODY="## Changelog
-          
+
           $CHANGELOG_CONTENT
 
           ---
@@ -81,7 +81,7 @@ jobs:
           **Version Information:**
           - **GUI**: Have XFCE Desktop environment pre-installed
           - **CLI**: Command line only - no desktop environment"
-          
+
           # Output raw body (GitHub Actions handles multiline strings)
           {
             echo 'body<<EOF'
@@ -190,7 +190,7 @@ jobs:
       - name: Update JSONs
         run: |
           VERSION="${{ github.event.inputs.version || github.ref_name }}"
-          
+
           # Validate version format
           if [[ "$VERSION" == "dev" ]]; then
             VERSION_CODE=0
@@ -201,27 +201,27 @@ jobs:
             echo "ERROR: Invalid version format: $VERSION"
             exit 1
           fi
-          
+
           # Update JSON files only (changelog already generated)
           python3 -c "
           import json
           import sys
           import re
-          
+
           for suffix in ['-GUI', '-CLI']:
               filename = f'update{suffix}.json'
               try:
                   with open(filename) as f:
                       data = json.load(f)
-                  
+
                   data['version'] = '$VERSION'
                   data['versionCode'] = $VERSION_CODE
                   data['zipUrl'] = re.sub(r'/download/[^/]+/', f'/download/$VERSION/', data['zipUrl'])
-                  
+
                   with open(filename, 'w') as f:
                       json.dump(data, f, indent=2)
                       f.write('\n')
-                  
+
                   print(f'Updated {filename}')
               except FileNotFoundError:
                   print(f'Warning: {filename} not found', file=sys.stderr)

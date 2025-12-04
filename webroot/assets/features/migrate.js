@@ -1,4 +1,6 @@
 // Migrate to Sparse Image Feature Module
+// This entire crap is AI generated, don't blame me for the mess
+
 (function(window) {
   'use strict';
 
@@ -49,23 +51,23 @@
 
     // Update status first, then use centralized flow
     updateStatus('migrating');
-    
+
     // Now use centralized flow for migration action
     const { progressLine, interval: progressInterval } = await prepareActionExecution(
       'Starting Sparse Image Migration',
       'Migrating',
       'dots'
     );
-    
+
     appendConsole(`Target size: ${sizeGb}GB sparse ext4 image`, 'info');
     appendConsole('DO NOT CLOSE THIS WINDOW!', 'warn');
-    
+
     proceedToMigration();
 
     function proceedToMigration() {
       // Execute command using helper (handles validation, execution, cleanup, scrolling)
       const cmd = `sh ${CHROOT_DIR}/sparsemgr.sh migrate ${sizeGb}`;
-      
+
       const commandId = executeCommandWithProgress({
         cmd,
         progress: { progressLine, progressInterval },
@@ -90,7 +92,7 @@
         useValue: true,
         activeCommandIdRef: activeCommandId
       });
-      
+
       if(!commandId) {
         // Validation failed - cleanup already done by helper
         disableAllActions(false);

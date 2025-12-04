@@ -1,6 +1,6 @@
 #!/system/bin/sh
 
-# Ubuntu Chroot Updater - Rewritten
+# Ubuntu Chroot Updater
 # Copyright (c) 2025 ravindu644
 
 # --- Configuration ---
