@@ -48,7 +48,7 @@ textarea {
 }
 
 .app{max-width:1200px;width:100%;box-sizing:border-box;margin:0 auto;padding:12px;display:flex;flex-direction:column;min-height:calc(100vh - var(--top-inset) - var(--bottom-inset))}
- 
+
 .top{display:flex;justify-content:space-between;align-items:center;position:fixed;top:0;left:50%;transform:translateX(-50%);padding:calc(var(--top-inset) + 8px) 12px 8px;background:var(--bg);z-index:10;width:100%;max-width:1200px;box-sizing:border-box;border-bottom:1px solid rgba(0,0,0,0.05)}
 .panel{display:flex;flex-direction:column;gap:14px;min-width:0;margin-top:calc(44px + var(--top-inset));flex:1 1 auto}
 .card{background:var(--card);border-radius:var(--surface-radius);padding:16px;box-shadow:0 6px 20px rgba(6,8,14,0.06);box-sizing:border-box;min-width:0;border:1px solid rgba(0,0,0,0.12)}

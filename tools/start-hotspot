@@ -1,20 +1,17 @@
 #!/system/bin/sh
-# THIS SCRIPT MUST BE RUN FROM A ROOT ANDROID SHELL
-#
-# Version 30: The Dual-Band Release
-# - Allows the user to select between a 2.4GHz and a 5GHz hotspot.
-# - Automatically enables 802.11ac (Wi-Fi 5) for 5GHz mode.
-# - The definitive, feature-complete, polished script.
+
+# Copyright (c) 2025 ravindu644
 
 # --- Global Variables ---
 DNS_SERVER1=$(getprop net.dns1)
 [ -z "$DNS_SERVER1" ] && DNS_SERVER1=8.8.8.8
 PHY_IFACE="wlan0"
 AP_IFACE="ap0"
-CHROOT_PATH="/data/local/ubuntu-chroot/rootfs"
-HOLDER_PID_FILE="/data/local/ubuntu-chroot/holder.pid"
+BASE_CHROOT_DIR="/data/local/ubuntu-chroot"
+CHROOT_PATH="${BASE_CHROOT_DIR}/rootfs"
+HOLDER_PID_FILE="${BASE_CHROOT_DIR}/holder.pid"
 
-# Hotspot configuration variables (set via arguments or defaults)
+# Hotspot configuration variables
 UPSTREAM_IFACE=""
 SSID=""
 PASSWORD=""

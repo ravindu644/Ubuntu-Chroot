@@ -1,9 +1,12 @@
 #!/system/bin/sh
+
 # Ubuntu Chroot Update Definitions
-# Each function defines an update that runs INSIDE the chroot with bash
+# Copyright (c) 2025 ravindu644
+
+# Each function defines an update that runs inside the chroot with bash
 # Function name format: update_v{versionCode}
 # These functions are sourced by the updater script
-# Must use "[UPDATER]" prefix for all echo statements
+# Must use "[UPDATER]" prefix for all echo statements to be logged by the updater script
 
 # Version 2000: Wireless networking packages
 update_v2000() {

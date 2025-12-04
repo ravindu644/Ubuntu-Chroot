@@ -85,16 +85,16 @@ while IFS= read -r -d '' zst_file; do
     if [ -L "$zst_file" ]; then
         continue
     fi
-    
+
     # Get the target filename without .zst extension
     target_file="${zst_file%.zst}"
-    
+
     # Skip if target already exists
     if [ -e "$target_file" ]; then
         echo -e "${YELLOW}  Skipping $zst_file (target already exists)${NC}"
         continue
     fi
-    
+
     # Decompress the file
     if zstd -d "$zst_file" -o "$target_file" 2>/dev/null; then
         # Verify decompression was successful
@@ -125,22 +125,22 @@ find "$FIRMWARE_DIR" -type l -name "*.zst" -print0 2>/dev/null > "$TEMP_FILE2" |
 while IFS= read -r -d '' symlink_path; do
     # Get the target of the symlink
     target_path=$(readlink "$symlink_path")
-    
+
     # Handle relative symlinks
     if [[ "$target_path" != /* ]]; then
         symlink_dir=$(dirname "$symlink_path")
         target_path=$(realpath -m "$symlink_dir/$target_path")
     fi
-    
+
     # Try to find the actual file - check multiple locations
     original_target="$target_path"
     found_target=""
-    
+
     # Check original path
     if [ -e "$target_path" ]; then
         found_target="$target_path"
     fi
-    
+
     # If pointing to /usr/lib/firmware/, try /lib/firmware/ version
     if [ -z "$found_target" ] && [[ "$target_path" == /usr/lib/firmware/* ]]; then
         alt_path="/lib/firmware/${target_path#/usr/lib/firmware/}"
@@ -148,7 +148,7 @@ while IFS= read -r -d '' symlink_path; do
             found_target="$alt_path"
         fi
     fi
-    
+
     # If still not found and it's a .zst path, check if decompressed version exists
     if [ -z "$found_target" ] && [[ "$target_path" == *.zst ]]; then
         # Check decompressed version in original location
@@ -156,7 +156,7 @@ while IFS= read -r -d '' symlink_path; do
         if [ -e "$decompressed_path" ]; then
             found_target="$decompressed_path"
         fi
-        
+
         # Check decompressed version in /lib/firmware/
         if [ -z "$found_target" ] && [[ "$target_path" == /usr/lib/firmware/* ]]; then
             alt_decompressed="/lib/firmware/${decompressed_path#/usr/lib/firmware/}"
@@ -165,7 +165,7 @@ while IFS= read -r -d '' symlink_path; do
             fi
         fi
     fi
-    
+
     # If still not found, try /lib/firmware/ version even if original wasn't /usr/lib/firmware/
     if [ -z "$found_target" ] && [[ "$target_path" != /lib/firmware/* ]]; then
         # Extract relative path and try /lib/firmware/
@@ -177,15 +177,15 @@ while IFS= read -r -d '' symlink_path; do
             fi
         fi
     fi
-    
+
     # If still not found, give up
     if [ -z "$found_target" ]; then
         echo -e "${YELLOW}  Warning: Symlink $symlink_path points to non-existent target $original_target${NC}"
         continue
     fi
-    
+
     target_path="$found_target"
-    
+
     # If target is a symlink itself, resolve it
     while [ -L "$target_path" ]; do
         link_target=$(readlink "$target_path")
@@ -193,16 +193,16 @@ while IFS= read -r -d '' symlink_path; do
             link_dir=$(dirname "$target_path")
             link_target=$(realpath -m "$link_dir/$link_target")
         fi
-        
+
         # Try to find the actual file - check multiple locations
         original_link="$link_target"
         found_link=""
-        
+
         # Check original path
         if [ -e "$link_target" ]; then
             found_link="$link_target"
         fi
-        
+
         # If pointing to /usr/lib/firmware/, try /lib/firmware/ version
         if [ -z "$found_link" ] && [[ "$link_target" == /usr/lib/firmware/* ]]; then
             alt_path="/lib/firmware/${link_target#/usr/lib/firmware/}"
@@ -210,14 +210,14 @@ while IFS= read -r -d '' symlink_path; do
                 found_link="$alt_path"
             fi
         fi
-        
+
         # If still not found and it's a .zst path, check if decompressed version exists
         if [ -z "$found_link" ] && [[ "$link_target" == *.zst ]]; then
             decompressed_path="${link_target%.zst}"
             if [ -e "$decompressed_path" ]; then
                 found_link="$decompressed_path"
             fi
-            
+
             if [ -z "$found_link" ] && [[ "$link_target" == /usr/lib/firmware/* ]]; then
                 alt_decompressed="/lib/firmware/${decompressed_path#/usr/lib/firmware/}"
                 if [ -e "$alt_decompressed" ]; then
@@ -225,21 +225,21 @@ while IFS= read -r -d '' symlink_path; do
                 fi
             fi
         fi
-        
+
         if [ -z "$found_link" ]; then
             # If we can't resolve it, break and use what we have
             break
         fi
-        
+
         target_path="$found_link"
     done
-    
+
     # Check if target is a .zst file that needs decompression
     # Ensure it's not a symlink (should already be resolved, but double-check)
     if [[ "$target_path" == *.zst ]] && [ -f "$target_path" ] && [ ! -L "$target_path" ]; then
         # Decompress the target file
         decompressed_target="${target_path%.zst}"
-        
+
         if [ -e "$decompressed_target" ]; then
             echo -e "${YELLOW}  Target already decompressed: $decompressed_target${NC}"
             target_path="$decompressed_target"
@@ -256,30 +256,30 @@ while IFS= read -r -d '' symlink_path; do
             fi
         fi
     fi
-    
+
     # Calculate the new symlink path (remove .zst extension)
     new_symlink_path="${symlink_path%.zst}"
-    
+
     # Skip if new symlink path already exists and is not a symlink
     if [ -e "$new_symlink_path" ] && [ ! -L "$new_symlink_path" ]; then
         echo -e "${YELLOW}  Skipping $symlink_path (target file already exists)${NC}"
         continue
     fi
-    
+
     # Calculate the relative path from new symlink location to target
     new_symlink_dir=$(dirname "$new_symlink_path")
     relative_target=$(realpath --relative-to="$new_symlink_dir" "$target_path" 2>/dev/null || echo "$target_path")
-    
+
     # Remove old symlink
     rm -f "$symlink_path"
-    
+
     # Create new symlink without .zst extension pointing to decompressed file
     if ln -sf "$relative_target" "$new_symlink_path"; then
         symlink_count=$((symlink_count + 1))
     else
         error_exit "Failed to create symlink $new_symlink_path -> $relative_target"
     fi
-    
+
 done < "$TEMP_FILE2"
 
 echo ""
