@@ -25,7 +25,7 @@ class CommandExecutor {
     executeAsync(command, asRoot = true, callbacks = {}) {
         const commandId = `cmd_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         const fullCommand = asRoot ? `su -c "${command}"` : command;
-        
+
         const { onOutput, onError, onComplete } = callbacks;
 
         this.runningCommands.set(commandId, { command: fullCommand, startTime: Date.now() });
@@ -35,7 +35,7 @@ class CommandExecutor {
             window[callback] = (exitCode, stdout, stderr) => {
                 delete window[callback];
                 this.runningCommands.delete(commandId);
-                
+
                 if (exitCode === 0) {
                     if (stdout && onOutput) onOutput(stdout);
                     if (onComplete) onComplete({ success: true, exitCode, output: stdout });
@@ -45,12 +45,12 @@ class CommandExecutor {
                     // as many scripts write errors to stdout before exiting.
                     const combinedOutput = [stdout, stderr].filter(Boolean).join('\n');
                     const errorMessage = combinedOutput.trim() || `exit:${exitCode}`;
-                    
+
                     if (errorMessage && onError) onError(errorMessage);
                     if (onComplete) onComplete({ success: false, exitCode, error: errorMessage });
                 }
             };
-            
+
             try {
                 ksu.exec(fullCommand, '{}', callback);
                 if (onOutput) onOutput(`[Executing: ${command}]\n`);
@@ -64,10 +64,10 @@ class CommandExecutor {
         } else if (this.execMethod === 'sulib') {
             try {
                 if (onOutput) onOutput(`[Executing: ${command}]\n`);
-                
+
                 window.SULib.exec(fullCommand, (result) => {
                     this.runningCommands.delete(commandId);
-                    
+
                     if (result.success) {
                         if (result.output && onOutput) onOutput(result.output);
                         if (onComplete) onComplete({ success: true, output: result.output });
@@ -76,7 +76,7 @@ class CommandExecutor {
                         // Combine output and error for a more informative message on failure.
                         const combinedOutput = [result.output, result.error].filter(Boolean).join('\n');
                         const errorMessage = combinedOutput.trim() || `Command failed with exit code ${result.exitCode || 'unknown'}`;
-                        
+
                         if (errorMessage && onError) onError(errorMessage);
                         if (onComplete) onComplete({ success: false, error: errorMessage });
                     }

@@ -84,7 +84,7 @@ stop_chroot_if_running() {
             exit 1
         fi
         log "Chroot stopped successfully"
-        
+
         # Give a moment for processes to fully stop
         busybox sleep 2
     else
@@ -95,19 +95,19 @@ stop_chroot_if_running() {
 # Check for required tools
 check_requirements() {
     log "Checking for required tools..."
-    
+
     # Check for busybox
     if ! command -v busybox >/dev/null 2>&1; then
         error "busybox not found. This script requires busybox."
         exit 1
     fi
-    
+
     # Check for mkfs.ext4 or mke2fs
     if ! command -v mkfs.ext4 >/dev/null 2>&1 && ! command -v mke2fs >/dev/null 2>&1; then
         error "mkfs.ext4 or mke2fs not found. Cannot format ext4 filesystem."
         exit 1
     fi
-    
+
     log "All required tools found"
     return 0
 }
@@ -115,16 +115,16 @@ check_requirements() {
 # Cleanup function for error recovery
 cleanup_on_error() {
     log "Error occurred, cleaning up..."
-    
+
     # Unmount sparse directory if mounted
     if busybox mountpoint -q "$ROOTFS_SPARSE" 2>/dev/null; then
         busybox umount "$ROOTFS_SPARSE" 2>/dev/null || busybox umount -f "$ROOTFS_SPARSE" 2>/dev/null
     fi
-    
+
     # Remove sparse directory and image
     busybox rm -rf "$ROOTFS_SPARSE" 2>/dev/null
     busybox rm -f "${ROOTFS_IMG}.tmp" 2>/dev/null
-    
+
     log "Cleanup completed. Original rootfs preserved."
     exit 1
 }
@@ -133,9 +133,9 @@ cleanup_on_error() {
 create_sparse_image() {
     local size_gb="$1"
     local img_path="$2"
-    
+
     log "Creating sparse image: ${size_gb}GB"
-    
+
     # Try Android's built-in truncate first, fallback to busybox
     log "Using truncate to create ${size_gb}GB sparse file..."
     if ! truncate -s "${size_gb}G" "$img_path" 2>/dev/null; then
@@ -145,30 +145,30 @@ create_sparse_image() {
             return 1
         fi
     fi
-    
+
     # Force filesystem sync - CRITICAL for Android
     busybox sync
     busybox sleep 2
-    
+
     # Verify file exists
     if [ ! -f "$img_path" ]; then
         error "Sparse image file was not created"
         return 1
     fi
-    
+
     local actual_size=$(busybox stat -c%s "$img_path" 2>/dev/null || echo "0")
     log "File created with size: $actual_size bytes"
-    
+
     if [ "$actual_size" = "0" ]; then
         error "File size is zero - creation failed"
         busybox rm -f "$img_path"
         return 1
     fi
-    
+
     # Another sync before formatting
     busybox sync
     busybox sleep 1
-    
+
     log "Formatting sparse image with ext4..."
     # Try mkfs.ext4 first, fallback to mke2fs
     if command -v mkfs.ext4 >/dev/null 2>&1; then
@@ -188,7 +188,7 @@ create_sparse_image() {
         busybox rm -f "$img_path"
         return 1
     fi
-    
+
     log "Sparse image created and formatted successfully"
     return 0
 }
@@ -197,10 +197,10 @@ create_sparse_image() {
 mount_sparse_image() {
     local img_path="$1"
     local mount_path="$2"
-    
+
     log "Mounting sparse image to $mount_path"
     busybox mkdir -p "$mount_path"
-    
+
     # Use busybox mount
     if ! busybox mount -t ext4 -o loop,rw,noatime,nodiratime,data=ordered,commit=30 "$img_path" "$mount_path" 2>/dev/null; then
         # Fallback to system mount if busybox mount fails
@@ -209,7 +209,7 @@ mount_sparse_image() {
             return 1
         fi
     fi
-    
+
     log "Sparse image mounted successfully"
     return 0
 }
@@ -218,20 +218,20 @@ mount_sparse_image() {
 migrate_rootfs() {
     local source_dir="$1"
     local dest_dir="$2"
-    
+
     log "Starting rootfs migration using tar pipe..."
     log "Source: $source_dir"
     log "Destination: $dest_dir"
-    
+
     # Create destination directory
     busybox mkdir -p "$dest_dir"
-    
+
     # Use busybox tar to copy everything while preserving permissions and ownership
     if ! (cd "$source_dir" && busybox tar -cf - . | (cd "$dest_dir" && busybox tar -xf -)); then
         error "Failed to migrate rootfs data"
         return 1
     fi
-    
+
     log "Rootfs migration completed successfully"
     return 0
 }
@@ -239,84 +239,84 @@ migrate_rootfs() {
 # Main migration function
 migrate_to_sparse() {
     local size_input="$1"
-    
+
     # Remove 'GB' suffix if present and extract numeric value
     local size_gb=$(echo "$size_input" | busybox sed 's/[^0-9]//g')
-    
+
     if [ -z "$size_gb" ]; then
         error "Invalid size specified: $size_input"
         echo "Usage: $0 migrate <size_in_gb>"
         echo "Example: $0 migrate 8"
         exit 1
     fi
-    
+
     if [ "$size_gb" -lt 4 ] || [ "$size_gb" -gt 512 ]; then
         error "Size must be between 4GB and 512GB"
         exit 1
     fi
-    
+
     # Check if rootfs directory exists and is not empty
     if [ ! -d "$ROOTFS_DIR" ] || [ -z "$(busybox ls -A "$ROOTFS_DIR" 2>/dev/null)" ]; then
         error "Rootfs directory not found or is empty"
         exit 1
     fi
-    
+
     # Check if sparse image already exists
     if [ -f "$ROOTFS_IMG" ]; then
         error "Sparse image already exists. Please remove it first."
         exit 1
     fi
-    
+
     # Check if sparse directory already exists
     if [ -d "$ROOTFS_SPARSE" ]; then
         error "Migration directory already exists. Please clean up first."
         exit 1
     fi
-    
+
     log "Starting migration to sparse image (${size_gb}GB)"
     log "Source: $ROOTFS_DIR"
-    
+
     # Stop chroot if it's running (CRITICAL for data integrity)
     stop_chroot_if_running
-    
+
     # Set up error trap for cleanup
     trap cleanup_on_error ERR
-    
+
     # Create temporary sparse image
     local tmp_img="${ROOTFS_IMG}.tmp"
     if ! create_sparse_image "$size_gb" "$tmp_img"; then
         cleanup_on_error
     fi
-    
+
     # Mount sparse image to temporary directory
     if ! mount_sparse_image "$tmp_img" "$ROOTFS_SPARSE"; then
         cleanup_on_error
     fi
-    
+
     # Migrate data using tar pipe
     if ! migrate_rootfs "$ROOTFS_DIR" "$ROOTFS_SPARSE"; then
         cleanup_on_error
     fi
-    
+
     # Unmount sparse image
     log "Unmounting sparse image..."
     if ! busybox umount "$ROOTFS_SPARSE" 2>/dev/null && ! umount "$ROOTFS_SPARSE" 2>/dev/null; then
         error "Failed to unmount sparse image"
         cleanup_on_error
     fi
-    
+
     # Finalize migration
     log "Finalizing migration..."
-    
+
     # Backup original rootfs directory name
     local backup_dir="${ROOTFS_DIR}.backup"
-    
+
     # Rename original rootfs to backup
     if ! busybox mv "$ROOTFS_DIR" "$backup_dir"; then
         error "Failed to backup original rootfs directory"
         cleanup_on_error
     fi
-    
+
     # Rename sparse directory to rootfs
     if ! busybox mv "$ROOTFS_SPARSE" "$ROOTFS_DIR"; then
         error "Failed to rename sparse directory"
@@ -324,7 +324,7 @@ migrate_to_sparse() {
         busybox mv "$backup_dir" "$ROOTFS_DIR" 2>/dev/null || true
         cleanup_on_error
     fi
-    
+
     # Move image to final location
     if ! busybox mv "$tmp_img" "$ROOTFS_IMG"; then
         error "Failed to move sparse image to final location"
@@ -333,20 +333,20 @@ migrate_to_sparse() {
         busybox mv "$backup_dir" "$ROOTFS_DIR" 2>/dev/null || true
         cleanup_on_error
     fi
-    
+
     # Remove backup directory after successful migration
     busybox rm -rf "$backup_dir"
-    
+
     # Clear error trap
     trap - ERR
-    
+
     log "Migration completed successfully!"
     log "Sparse image: $ROOTFS_IMG (${size_gb}GB)"
     log "Rootfs directory: $ROOTFS_DIR"
     log ""
     log "IMPORTANT: Your chroot is now using a sparse image."
     log "To mount it, use: mount -t ext4 -o loop,rw,noatime,nodiratime,barrier=0 $ROOTFS_IMG $ROOTFS_DIR"
-    
+
     return 0
 }
 

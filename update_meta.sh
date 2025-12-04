@@ -36,15 +36,15 @@ for suffix in ['-GUI', '-CLI']:
     try:
         with open(filename) as f:
             data = json.load(f)
-        
+
         data['version'] = '$VERSION'
         data['versionCode'] = $VERSION_CODE
         data['zipUrl'] = re.sub(r'/download/[^/]+/', f'/download/$VERSION/', data['zipUrl'])
-        
+
         with open(filename, 'w') as f:
             json.dump(data, f, indent=2)
             f.write('\n')  # Add newline at end
-        
+
         print(f'Updated {filename}')
     except FileNotFoundError:
         print(f'Warning: {filename} not found', file=sys.stderr)

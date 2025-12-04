@@ -115,10 +115,10 @@ UDEV_EOF
 
     # Configure VNC for the new user
     echo "--- Configuring VNC for user $username ---"
-    
+
     # Create the legacy .vnc directory for the password and xstartup files
     mkdir -p /home/$username/.vnc
-    
+
     # Set the user's VNC password
     echo "$password" | vncpasswd -f > /home/$username/.vnc/passwd
     chmod 600 /home/$username/.vnc/passwd

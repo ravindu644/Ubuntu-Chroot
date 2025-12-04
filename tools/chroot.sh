@@ -80,10 +80,10 @@ _get_ns_flags() {
         warn "Namespace flags file not found, using fallback"
         echo "-m"; return # Fallback to mount only
     fi
-    
+
     local long_flags short_flags
     long_flags=$(cat "$flags_file")
-    
+
     if [ -z "$long_flags" ]; then
         warn "Empty namespace flags file, using fallback"
         echo "-m"; return
@@ -115,7 +115,7 @@ _execute_in_ns() {
         holder_pid=$(cat "$HOLDER_PID_FILE")
         local ns_flags
         ns_flags=$(_get_ns_flags)
-        
+
         busybox nsenter --target "$holder_pid" $ns_flags -- "$@"
     else
         # If no namespace holder is running, execute command directly.
@@ -186,7 +186,7 @@ check_sysv_ipc() {
 
 advanced_mount() {
     local src="$1" tgt="$2" type="$3" opts="$4"
-    
+
     # Always create the target directory silently if it doesn't exist
     [ ! -d "$tgt" ] && run_in_ns mkdir -p "$tgt" 2>/dev/null
 
@@ -196,7 +196,7 @@ advanced_mount() {
     else
         run_in_ns mount -t "$type" $opts "$type" "$tgt"
     fi
-    
+
     if [ $? -eq 0 ]; then
         log "Mounted $src -> $tgt ($type)"
         echo "$tgt" >> "$MOUNTED_FILE"
@@ -208,7 +208,7 @@ advanced_mount() {
 setup_storage() {
     local storage_path="/storage/emulated/0"
     local chroot_storage="$CHROOT_PATH/storage/emulated/0"
-    
+
     if [ -d "$storage_path" ] && [ -r "$storage_path" ]; then
         log "Setting up storage access: $storage_path"
         run_in_ns mkdir -p "$chroot_storage"
@@ -264,7 +264,7 @@ android_optimizations() {
 
         # Set max phantom processes to maximum value to prevent killing
         su -c "/system/bin/device_config put activity_manager max_phantom_processes 2147483647" >/dev/null 2>&1
-        
+
         log "Optimized Android to keep chroot alive"
 
     elif [ "$mode" = "--disable" ]; then
@@ -364,11 +364,11 @@ EOF
 
 kill_chroot_processes() {
     log "Killing all running chroot services and processes..."
-    
+
     # Use lsof to find all PIDs with open files in chroot, then kill them.
     local pids
     pids=$(lsof 2>/dev/null | grep "$CHROOT_PATH" | awk '{print $2}' | uniq)
-    
+
     if [ -n "$pids" ]; then
         kill -9 $pids 2>/dev/null
         log "Killed chroot processes."
@@ -417,7 +417,7 @@ create_namespace() {
     fi
 
     log "using flags: $unshare_flags"
-    
+
     # Save the long-form flags. _get_ns_flags will translate them later.
     echo "$nsenter_flags" > "${pid_file}.flags"
 
@@ -443,9 +443,9 @@ create_namespace() {
 
 start_chroot() {
     log "Setting up advanced chroot environment..."
-    
+
     (setenforce 0 && log "SELinux set to permissive mode") || warn "Failed to set SELinux to permissive mode"
-    
+
     # Set flag to prevent recursion
     CHROOT_SETUP_IN_PROGRESS=1
 
@@ -466,7 +466,7 @@ start_chroot() {
         sleep 0.5
         log "Running in isolated namespace (PID: $(cat "$HOLDER_PID_FILE"))"
     fi
-    
+
     [ -d "$CHROOT_PATH" ] || { error "Chroot directory not found at $CHROOT_PATH"; CHROOT_SETUP_IN_PROGRESS=0; exit 1; }
 
     if [ -f "$ROOTFS_IMG" ]; then
@@ -491,7 +491,7 @@ start_chroot() {
         log "Checking filesystem integrity..."
         local fsck_output=$(e2fsck -f -y "$ROOTFS_IMG" 2>&1)
         local fsck_exit=$?
-        
+
         # Exit codes: 0=no errors, 1=corrected, 2=corrected/reboot, 4+=failed
         if [ $fsck_exit -ge 4 ]; then
             error "Filesystem check failed (exit: $fsck_exit)"
@@ -504,10 +504,10 @@ start_chroot() {
         else
             log "Filesystem integrity verified"
         fi
-        
+
         # Small delay to ensure filesystem operations complete
         sleep 1
-        
+
         log "Mounting sparse image to rootfs..."
         if ! run_in_ns mount -t ext4 -o loop,rw,noatime,nodiratime,errors=remount-ro "$ROOTFS_IMG" "$CHROOT_PATH"; then
             error "Failed to mount sparse image"
@@ -628,7 +628,7 @@ start_chroot() {
 
 stop_chroot() {
     log "Stopping chroot environment..."
-    
+
     # Run fstrim on sparse image before stopping if using sparse method
     if [ -f "$ROOTFS_IMG" ]; then
         log "Running fstrim on sparse image before stopping..."
@@ -638,10 +638,10 @@ stop_chroot() {
     # Stop binfmt_misc service if running
     # this is kinda an ugly hack but it works
     run_in_chroot "systemctl stop binfmt-support" >/dev/null 2>&1 || true
-    
+
     kill_chroot_processes
     umount_chroot
-    
+
     # Kill namespace holder process
     if [ -f "$HOLDER_PID_FILE" ]; then
         local holder_pid
@@ -651,7 +651,7 @@ stop_chroot() {
         fi
         rm -f "$HOLDER_PID_FILE" "$HOLDER_PID_FILE.flags"
     fi
-    
+
     android_optimizations --disable
 
     log "Chroot stopped successfully."
@@ -682,7 +682,7 @@ umount_chroot() {
             [ $i -lt 3 ] && sleep 1
         done
     fi
-    
+
     if [ -f "$MOUNTED_FILE" ]; then
         log "Unmounting filesystems..."
         sort -r "$MOUNTED_FILE" | while read -r mount_point; do
@@ -726,7 +726,7 @@ enter_chroot() {
         export TMPDIR='/tmp';
         export TERM='xterm';
     "
-    
+
     local shell_command
     if [ "$user" = "root" ]; then
         shell_command="
@@ -772,12 +772,12 @@ run_command() {
 
 backup_chroot() {
     local backup_path="$1"
-    
+
     if [ -z "$backup_path" ]; then
         error "Backup path not specified"
         exit 1
     fi
-    
+
     local backup_dir
     backup_dir="$(dirname "$backup_path")"
     # Use a direct command, not run_in_ns, as namespaces might not exist yet.
@@ -785,13 +785,13 @@ backup_chroot() {
         error "Failed to create backup directory: $backup_dir"
         exit 1
     fi
-    
+
     log "Preparing for backup: Stopping and unmounting chroot environment..."
     stop_chroot
     sync && sleep 1
 
     log "Creating backup archive: $backup_path"
-    
+
     local tar_exit_code=1 # Default to failure
 
     if [ -f "$ROOTFS_IMG" ]; then
@@ -805,7 +805,7 @@ backup_chroot() {
         log "Checking filesystem integrity before backup..."
         local fsck_output=$(e2fsck -f -y "$ROOTFS_IMG" 2>&1)
         local fsck_exit=$?
-        
+
         # Exit codes: 0=no errors, 1=corrected, 2=corrected/reboot, 4+=failed
         if [ $fsck_exit -ge 4 ]; then
             error "Filesystem check failed (exit: $fsck_exit)"
@@ -819,18 +819,18 @@ backup_chroot() {
             else
                 log "Filesystem integrity verified"
             fi
-            
+
             # Small delay to ensure filesystem operations complete
             sleep 1
-            
+
             # Mount the image read-only for safety.
             if mount -t ext4 -o loop,ro "$ROOTFS_IMG" "$temp_mount_point"; then
                 log "Sparse image mounted cleanly for backup."
-                
+
                 # Run tar on the clean, temporary mount without any namespace.
                 busybox tar -czf "$backup_path" -C "$temp_mount_point" .
                 tar_exit_code=$?
-                
+
                 # Clean up immediately.
                 sync
                 umount "$temp_mount_point"
@@ -848,7 +848,7 @@ backup_chroot() {
         busybox tar -czf "$backup_path" -C "$CHROOT_PATH" .
         tar_exit_code=$?
     fi
-    
+
     # --- Check result and provide feedback ---
     if [ "$tar_exit_code" -eq 0 ]; then
         local size=$(du -h "$backup_path" 2>/dev/null | cut -f1)
@@ -862,42 +862,42 @@ backup_chroot() {
 
 resize_sparse() {
     local new_size_gb="$1"
-    
+
     # Validate input
     if [ -z "$new_size_gb" ]; then
         error "New size not specified. Usage: $SCRIPT_NAME resize <size_in_gb>"
         echo "Example: $SCRIPT_NAME resize 16"
         exit 1
     fi
-    
+
     if ! [ "$new_size_gb" -eq "$new_size_gb" ] 2>/dev/null || [ "$new_size_gb" -le 0 ]; then
         error "Invalid size: $new_size_gb. Must be a positive integer."
         exit 1
     fi
-    
+
     if [ "$new_size_gb" -lt 4 ] || [ "$new_size_gb" -gt 512 ]; then
         error "Size must be between 4GB and 512GB"
         exit 1
     fi
-    
+
     if [ ! -f "$ROOTFS_IMG" ]; then
         error "Sparse image not found at $ROOTFS_IMG"
         exit 1
     fi
-    
+
     # Get current sizes
     local actual_size=$(du -h "$ROOTFS_IMG" 2>/dev/null | cut -f1)
     local sparse_size=$(ls -lh "$ROOTFS_IMG" 2>/dev/null | tr -s ' ' | cut -d' ' -f5)
-    
+
     if [ -z "$actual_size" ]; then
         error "Failed to determine current size"
         exit 1
     fi
-    
+
     # Calculate minimum safe size (actual content + 15% overhead)
     local actual_value=$(echo "$actual_size" | sed 's/[^0-9.]//g')
     local min_safe_gb
-    
+
     if command -v awk >/dev/null 2>&1; then
         min_safe_gb=$(awk "BEGIN { printf \"%.0f\", ($actual_value * 1.15) + 0.5 }")
     else
@@ -905,30 +905,30 @@ resize_sparse() {
         local int_part="${actual_value%.*}"
         min_safe_gb=$(( (int_part * 115 + 99) / 100 ))
     fi
-    
+
     # Ensure minimum is at least current + 1GB
     local actual_int=$(echo "$actual_value" | cut -d. -f1)
     [ "$min_safe_gb" -le "$actual_int" ] && min_safe_gb=$((actual_int + 1))
-    
+
     # Display current info
     log "Current sparse image info:"
     echo -e "  - Sparse size (Android shows): ${sparse_size}"
     echo -e "  - Actual content size: ${actual_size}"
     echo -e "  - Safe minimum size (+15%): ${min_safe_gb}G"
     echo -e "  - Requested new size: ${new_size_gb}G"
-    
+
     # Validate minimum size
     if [ "$new_size_gb" -lt "$min_safe_gb" ]; then
         error "Cannot resize below minimum safe size of ${min_safe_gb}G"
         error "Current content: ${actual_size} + 15% overhead = ${min_safe_gb}G minimum"
         exit 1
     fi
-    
+
     # Determine operation
     local sparse_int=$(echo "$sparse_size" | sed 's/[^0-9].*//g')
     local operation="GROWING"
     [ "$new_size_gb" -lt "$sparse_int" ] && operation="SHRINKING"
-    
+
     # Show warnings (skip in webui mode)
     if [ "${WEBUI_MODE:-0}" -eq 0 ]; then
         warn "EXTREME WARNING: RESIZING SPARSE IMAGE"
@@ -937,17 +937,17 @@ resize_sparse() {
         warn "- DO NOT interrupt the process"
         warn ""
         warn "Operation: $operation (${actual_size} → ${new_size_gb}G)"
-        
+
         echo -n "Type 'YES' to confirm: "
         read -r confirm
         [ "$confirm" != "YES" ] && { log "Resize cancelled"; exit 0; }
     fi
-    
+
     log "Starting resize operation..."
-    
+
     # Stop and unmount
     is_chroot_running && { warn "Stopping chroot..."; stop_chroot; sleep 2; }
-    
+
     if mountpoint -q "$CHROOT_PATH" 2>/dev/null; then
         log "Unmounting filesystem..."
         umount -f "$CHROOT_PATH" 2>/dev/null || umount -l "$CHROOT_PATH" 2>/dev/null || {
@@ -956,12 +956,12 @@ resize_sparse() {
         }
         sleep 1
     fi
-    
+
     # Filesystem check
     log "Checking filesystem integrity..."
     local fsck_output=$(e2fsck -f -y "$ROOTFS_IMG" 2>&1)
     local fsck_exit=$?
-    
+
     # Exit codes: 0=no errors, 1=corrected, 2=corrected/reboot, 4+=failed
     if [ $fsck_exit -ge 4 ]; then
         error "Filesystem check failed (exit: $fsck_exit)"
@@ -969,12 +969,12 @@ resize_sparse() {
         exit 1
     fi
     [ $fsck_exit -ne 0 ] && log "Filesystem check corrected issues (exit: $fsck_exit)"
-    
+
     # Resize filesystem
     log "Resizing filesystem to ${new_size_gb}G..."
     local resize_output=$(resize2fs "$ROOTFS_IMG" "${new_size_gb}G" 2>&1)
     local resize_exit=$?
-    
+
     if [ $resize_exit -ne 0 ] && ! echo "$resize_output" | grep -q "is now.*blocks long"; then
         error "Filesystem resize failed (exit: $resize_exit)"
         error "Output: $resize_output"
@@ -982,7 +982,7 @@ resize_sparse() {
         exit 1
     fi
     [ $resize_exit -ne 0 ] && log "Resize completed with warnings"
-    
+
     # Truncate for shrinking
     if [ "$operation" = "SHRINKING" ]; then
         log "Truncating sparse file to ${new_size_gb}G..."
@@ -1005,17 +1005,17 @@ resize_sparse() {
         error "Restore from backup immediately"
         exit 1
     fi
-    
+
     sleep 1
     local new_sparse=$(ls -lh "$ROOTFS_IMG" 2>/dev/null | tr -s ' ' | cut -d' ' -f5)
-    
-    log "   ${sparse_size} → ${new_sparse} ($operation)"    
+
+    log "   ${sparse_size} → ${new_sparse} ($operation)"
     log "✅ Resize operation completed!"
 }
 
 restore_chroot() {
     local backup_path="$1"
-    
+
     if [ -z "$backup_path" ]; then
         error "Backup path not specified"; exit 1;
     fi
@@ -1026,9 +1026,9 @@ restore_chroot() {
         *.tar.gz) ;;
         *) error "Backup file must have .tar.gz extension"; exit 1 ;;
     esac
-    
+
     log "Extracting backup archive from: $backup_path"
-    
+
     if is_chroot_running; then
         log "Stopping running chroot..."; stop_chroot;
     fi
@@ -1045,7 +1045,7 @@ restore_chroot() {
         log "Removing existing chroot directory...";
         if ! run_in_ns rm -rf "$CHROOT_PATH"; then error "Failed to remove existing chroot directory"; exit 1; fi
     fi
-    
+
     if ! run_in_ns mkdir -p "$CHROOT_PATH"; then
         error "Failed to create rootfs directory: $CHROOT_PATH"; exit 1;
     fi
@@ -1112,15 +1112,15 @@ uninstall_chroot() {
         log "Removing sparse image file: $ROOTFS_IMG"
         rm -f "$ROOTFS_IMG" || { error "Failed to remove sparse image file."; exit 1; }
     fi
-    
+
     if [ -d "$CHROOT_PATH" ]; then
         log "Removing chroot directory: $CHROOT_PATH"
         rm -rf "$CHROOT_PATH" || { error "Failed to remove chroot directory."; exit 1; }
     fi
-    
+
     # Remove configuration and state files silently
     rm -f "$SCRIPT_DIR/boot-service" "$SCRIPT_DIR/.doze_off" "$HOLDER_PID_FILE" "${HOLDER_PID_FILE}.flags" "$MOUNTED_FILE" 2>/dev/null
-    
+
     log "Chroot environment uninstalled successfully."
 }
 
@@ -1182,15 +1182,15 @@ case "$COMMAND" in
     status) show_status ;;
     umount)
         log "Umounting chroot filesystems..."; umount_chroot; log "Chroot filesystems unmounted successfully." ;;
-    fstrim) 
+    fstrim)
         # Check if chroot was running before fstrim
         local chroot_was_running=0
         if is_chroot_running; then
             chroot_was_running=1
         fi
-        
+
         run_fstrim
-        
+
         # Only stop chroot if it was not running before fstrim
         if [ "$chroot_was_running" -eq 0 ]; then
             stop_chroot > /dev/null 2>&1
@@ -1202,8 +1202,8 @@ case "$COMMAND" in
         run_command "$RUN_COMMAND" ;;
     backup) backup_chroot "$BACKUP_PATH" ;;
     restore) restore_chroot "$BACKUP_PATH" ;;
-    uninstall) uninstall_chroot ;; 
-    resize) 
+    uninstall) uninstall_chroot ;;
+    resize)
         if [ -z "$RESIZE_SIZE" ]; then
             error "New size not specified. Usage: chroot.sh resize <size_in_gb>"
             error "Example: chroot.sh resize 16"

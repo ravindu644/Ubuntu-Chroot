@@ -54,7 +54,7 @@
         return;
       }
     }
-    
+
     // Now use centralized flow for uninstall action
     const { progressLine, interval: progressInterval } = await prepareActionExecution(
       'Starting Uninstallation',
@@ -64,7 +64,7 @@
 
     // Execute command using helper (handles validation, execution, cleanup, scrolling)
     const cmd = `sh ${PATH_CHROOT_SH} uninstall --webui`;
-    
+
     const commandId = executeCommandWithProgress({
       cmd,
       progress: { progressLine, progressInterval },
@@ -93,7 +93,7 @@
       useValue: true,
       activeCommandIdRef: activeCommandId
     });
-    
+
     if(!commandId) {
       // Validation failed - cleanup already done by helper
       disableAllActions(false);

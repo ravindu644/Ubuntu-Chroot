@@ -54,7 +54,7 @@
 
     // Update status first, then use centralized flow
     updateStatus('trimming');
-    
+
     // Use centralized flow for trim action
     const { progressLine, interval: progressInterval } = await prepareActionExecution(
       'Trimming Sparse Image',
@@ -64,7 +64,7 @@
 
     // Execute command using helper (handles validation, execution, cleanup, scrolling)
     const cmd = `sh ${PATH_CHROOT_SH} fstrim`;
-    
+
     const commandId = executeCommandWithProgress({
       cmd,
       progress: { progressLine, progressInterval },
@@ -90,7 +90,7 @@
       useValue: true,
       activeCommandIdRef: activeCommandId
     });
-    
+
     if(!commandId) {
       // Validation failed - cleanup already done by helper
       disableAllActions(false);
@@ -154,7 +154,7 @@
 
     // Update status first, then use centralized flow
     updateStatus('resizing');
-    
+
     // Use centralized flow for resize action
     const { progressLine, interval: progressInterval } = await prepareActionExecution(
       `Resizing Sparse Image to ${newSizeGb}GB`,
@@ -164,7 +164,7 @@
 
     // Execute command using helper (handles validation, execution, cleanup, scrolling)
     const cmd = `sh ${PATH_CHROOT_SH} resize --webui ${newSizeGb}`;
-    
+
     const commandId = executeCommandWithProgress({
       cmd,
       progress: { progressLine, progressInterval },
@@ -191,7 +191,7 @@
       useValue: true,
       activeCommandIdRef: activeCommandId
     });
-    
+
     if(!commandId) {
       // Validation failed - cleanup already done by helper
       disableAllActions(false);

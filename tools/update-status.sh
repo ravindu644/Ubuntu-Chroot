@@ -14,12 +14,12 @@ check_status() {
     if [ ! -f "$CHROOT_SH" ]; then
         return 2  # Script not found
     fi
-    
+
     # Check if chroot exists (either directory or sparse image)
     if [ ! -d "$CHROOT_PATH" ] && [ ! -f "$ROOTFS_IMG" ]; then
         return 3  # Chroot not found
     fi
-    
+
     # Use chroot.sh to check status
     if sh "$CHROOT_SH" status 2>/dev/null | grep -q "Status: RUNNING"; then
         return 0  # Running
@@ -32,7 +32,7 @@ check_status() {
 update_description() {
     local status="$1"
     local new_desc
-    
+
     if [ "$status" = "running" ]; then
         new_desc="Status: 🟢 Running"
     elif [ "$status" = "stopped" ]; then
@@ -42,12 +42,12 @@ update_description() {
     else
         new_desc="$DEFAULT_DESC"
     fi
-    
+
     # Check if module.prop exists
     if [ ! -f "$MODULE_PROP" ]; then
         return 1
     fi
-    
+
     # Update description line (line 4)
     if grep -q "^description=" "$MODULE_PROP"; then
         # Replace existing description
@@ -69,7 +69,7 @@ update_description() {
 main() {
     check_status
     local status_code=$?
-    
+
     case $status_code in
         0)
             update_description "running"
