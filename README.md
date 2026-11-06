@@ -1,3 +1,14 @@
+> [!WARNING]
+> ## ⚠️ This project is deprecated
+>
+> **ubuntu-chroot is no longer maintained** and has been replaced by its successor, **[Droidspaces](https://github.com/ravindu644/Droidspaces-OSS)**.
+>
+> Droidspaces runs **real Linux containers on Android** instead of a plain chroot, and it's under active development. **Please switch to it** for a better and supported experience.
+>
+> **[Get Droidspaces →](https://github.com/ravindu644/Droidspaces-OSS)**
+>
+> *Using this repo is still possible, but entirely at your own risk.*
+
 <img src="Screenshots/banner.png" alt="Ubuntu Chroot banner" width="900" />
 
 [![Latest release](https://img.shields.io/github/v/release/ravindu644/ubuntu-chroot?label=Latest%20Release&style=for-the-badge)](https://github.com/ravindu644/ubuntu-chroot/releases/latest)
